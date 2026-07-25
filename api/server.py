@@ -28,7 +28,7 @@ async def history():
 @app.get("/status")
 async def status():
     response = {"status": "running", "version": "0.1"}
-    return JSONResponse(content=response, media type="application/json")
+    return JSONResponse(content=response, media_type="application/json")  # Correction de l'erreur de syntaxe
 
 if __name__ == "__main__":
     run("api.server:app", host="0.0.0.0", port=8000)
