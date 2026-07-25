@@ -1,6 +1,6 @@
 import sys
-from PyQt5.QtWidgets import QLabel, QWidget
-from PyQt5.QtGui import QColor
+from PySide6.QtWidgets import QLabel, QWidget
+from PySide6.QtGui import QColor
 
 class AvatarWidget:
     def __init__(self, parent=None):
