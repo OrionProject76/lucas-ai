@@ -1,0 +1,11 @@
+date,libelle,montant,categorie
+2022-01-01,Paiement de loyer,1000,Logement
+2022-01-05,Achat de nourriture,50,Alimentation
+2022-01-10,Paiement d'électricité,150,Logement
+2022-01-15,Achat de carburant,20,Transport
+2022-01-20,Paiement de loyer,1000,Logement
+2022-01-25,Achat de nourriture,50,Alimentation
+2022-01-30,Paiement d'électricité,150,Logement
+2022-02-01,Achat de carburant,20,Transport
+2022-02-05,Paiement de loyer,1000,Logement
+2022-02-10,Achat de nourriture,50,Alimentation
