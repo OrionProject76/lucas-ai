@@ -20,3 +20,29 @@ class ChatWidget:
 
     def show(self):
         self.parent.addWidget(self.chat_area)
+
+    def add_orion_button(self, text):
+        """Ajoute un bouton '🔊 Lire' à côté de chaque message d'Orion"""
+        button = QPushButton("🔊", self.chat_area)
+        button.setStyleSheet("""
+            background-color: transparent;
+            border: none;
+            padding: 5px;
+            font-size: 12px;
+            color: white;
+        """)
+        button.clicked.connect(lambda: self.play_orion_audio(text))
+        return button
+
+    def play_orion_audio(self, text):
+        """Lecture du message d'Orion"""
+        vm = VoiceManager()
+        audio_path = vm.synthesize(text)
+        if audio_path:
+            vm.play_audio(audio_path)
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    chat_widget = ChatWidget()
+    chat_widget.show()
+    sys.exit(app.exec_())
