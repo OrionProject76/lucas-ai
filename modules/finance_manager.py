@@ -48,3 +48,23 @@ class FinanceManager:
                 depenses += transaction['montant']
         solde = revenus - depenses
         return f"Revenus : {revenus}\nDépenses : {depenses}\nSolde : {solde}"
+
+    def get_total_expenses_by_category(self, transactions):
+        categories = {}
+        for transaction in transactions:
+            categorie = transaction['categorie']
+            if categorie not in categories:
+                categories[categorie] = 0
+            categories[categorie] += transaction['montant']
+        return categories
+
+    def save_transactions_to_csv(self, filepath, transactions):
+        with open(filepath, 'w') as file:
+            writer = csv.writer(file)
+            for transaction in transactions:
+                writer.writerow([
+                    transaction['date'].strftime('%Y-%m-%d'),
+                    transaction['libelle'],
+                    transaction['montant'],
+                    transaction['categorie']
+                ])
