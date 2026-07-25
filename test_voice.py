@@ -7,4 +7,7 @@ def test_synthesis():
     voice_manager.play_audio("data/output.mp3")
 
 if __name__ == "__main__":
-    test_synthesis()
+    try:
+        test_synthesis()
+    except Exception as e:
+        print(f"Erreur de synthèse vocale : {e}")
