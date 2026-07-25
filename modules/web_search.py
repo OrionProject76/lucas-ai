@@ -1,9 +1,10 @@
 import requests
 from bs4 import BeautifulSoup
+import logging
 
 class WebSearch:
     def __init__(self):
-        pass
+        self.logger = logging.getLogger(__name__)
 
     def search(self, query, max_results=5):
         try:
@@ -14,7 +15,7 @@ class WebSearch:
                 results.append(result.text)
             return results[:max_results]
         except requests.exceptions.RequestException as e:
-            print(f"Erreur réseau : {e}")
+            self.logger.error(f"Erreur réseau : {e}")
             return []
 
     def get_summary(self, query):
@@ -24,7 +25,7 @@ class WebSearch:
             summary = soup.find('div', class_='result__summary').text
             return summary
         except requests.exceptions.RequestException as e:
-            print(f"Erreur réseau : {e}")
+            self.logger.error(f"Erreur réseau : {e}")
             return None
 
 # Test du module
