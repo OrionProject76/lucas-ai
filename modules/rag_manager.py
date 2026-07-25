@@ -52,3 +52,9 @@ class RAGManager:
         documents = os.listdir('data')
         matching_documents = [document for document in documents if query.lower() in document.lower()]
         return matching_documents
+
+    def handle_errors(self, exception):
+        if isinstance(exception, FileNotFoundError):
+            print("Fichier introuvable")
+        elif isinstance(exception, Exception):
+            print(f"Erreur inconnue : {exception}")
