@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QTextEdit, QWidget
+from PySide6.QtWidgets import QTextEdit, QWidget
 
 class ChatWidget:
     def __init__(self, parent=None):
