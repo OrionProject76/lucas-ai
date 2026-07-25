@@ -4,6 +4,9 @@ from PySide6.QtGui import QPainter, QColor, QPen, QBrush
 from PySide6.QtCore import Qt, QTimer, QPoint
 import math
 
+# Importer QLinearGradient depuis PyQt6
+from PySide6.QtGui import QLinearGradient
+
 
 class AvatarWidget(QWidget):
     def __init__(self, parent=None):
