@@ -5,6 +5,7 @@ from PySide6.QtCore import QApplication  # Ajout de QApplication
 class ChatWidget:
     def __init__(self, parent=None):
         self.parent = parent
+        from modules.voice_manager import VoiceManager  # Importation de VoiceManager
         self.chat_area = self.create_chat_area()
 
     def create_chat_area(self):
