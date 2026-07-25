@@ -1,5 +1,6 @@
 import sys
-from PySide6.QtWidgets import QTextEdit, QWidget
+from PySide6.QtWidgets import QTextEdit, QWidget, QPushButton  # Ajout de QPushButton
+from PySide6.QtCore import QApplication  # Ajout de QApplication
 
 class ChatWidget:
     def __init__(self, parent=None):
@@ -42,7 +43,7 @@ class ChatWidget:
             vm.play_audio(audio_path)
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
+    app = QApplication(sys.argv)  # Correction de l'appel à QApplication
     chat_widget = ChatWidget()
     chat_widget.show()
     sys.exit(app.exec_())
