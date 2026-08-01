@@ -179,16 +179,59 @@ def test_scan_line_loops_and_stays_bounded(avatar) -> None:
         assert 0 <= avatar.scan_offset < 90
 
 
-def test_gaze_is_fixed_while_watching(avatar) -> None:
+def test_gaze_ignores_the_cursor_while_watching(avatar) -> None:
     """
-    Les yeux ne suivent plus la souris pendant l'analyse : Luca's regarde
-    l'écran, pas le curseur.
+    Les yeux ne suivent plus la souris pendant l'analyse : Luca's lit
+    l'écran, pas la main de Cyril.
     """
     from PySide6.QtCore import QPointF
 
     avatar.mouse_pos = QPointF(140, 140)
     avatar.set_state(WATCHING)
-    avatar.repaint()  # le rendu doit passer par la branche à regard fixe
+    avatar.repaint()  # le rendu doit passer par la branche de balayage
+
+
+def test_gaze_sweeps_instead_of_staring(avatar) -> None:
+    """
+    Un regard parfaitement immobile donnait un air absent. Le balayage
+    lent se lit comme de la curiosité — retour de Cyril après essai.
+    """
+    avatar.set_state(WATCHING)
+    phases = set()
+    for _ in range(10):
+        avatar.update_animation()
+        phases.add(round(avatar.gaze_phase, 4))
+    assert len(phases) == 10, "le regard doit se déplacer à chaque frame"
+
+
+def test_gaze_does_not_move_outside_watching(avatar) -> None:
+    """Le balayage est propre à l'analyse : ailleurs, il reste au repos."""
+    avatar.set_state(THINKING)
+    before = avatar.gaze_phase
+    for _ in range(10):
+        avatar.update_animation()
+    assert avatar.gaze_phase == before
+
+
+def test_watching_has_a_blinking_indicator(avatar) -> None:
+    """
+    Le halo ambre seul ne se remarquait pas assez quand l'avatar est en
+    périphérie du champ de vision. Un point qui clignote, si.
+    """
+    avatar.set_state(WATCHING)
+    pulses = set()
+    for _ in range(10):
+        avatar.update_animation()
+        pulses.add(round(avatar.watch_pulse, 4))
+    assert len(pulses) == 10, "le témoin doit clignoter"
+
+
+def test_indicator_pulse_stays_bounded(avatar) -> None:
+    """Sans repli, la phase croîtrait indéfiniment."""
+    avatar.set_state(WATCHING)
+    for _ in range(400):
+        avatar.update_animation()
+        assert 0 <= avatar.watch_pulse < 2 * 3.14159265 + 0.2
 
 
 def test_thinking_particles_do_not_leak_into_watching(avatar) -> None:
@@ -357,6 +400,19 @@ def test_transition_completes_and_stops(avatar) -> None:
         avatar.update_animation()
 
     assert avatar.transition == 1.0, "le fondu doit se terminer"
+
+
+def test_transition_is_short_enough_to_feel_immediate() -> None:
+    """
+    400 ms traînaient à l'usage (retour de Cyril). Le fondu doit rester
+    sous 300 ms : le témoin de capture doit s'allumer franchement, pas
+    apparaître en fondu enchaîné.
+    """
+    from ui.avatar_widget import TRANSITION_FRAMES
+
+    duration_ms = TRANSITION_FRAMES * 50  # le timer tourne à 20 fps
+    assert duration_ms <= 300, f"fondu trop long : {duration_ms} ms"
+    assert duration_ms >= 150, "en dessous, le fondu ne se voit plus"
 
 
 def test_palette_is_between_the_two_states_mid_transition(avatar) -> None:

@@ -70,10 +70,11 @@ HALO_PALETTES = {
 BREATH_AMPLITUDE = 2.2
 
 # Durée d'un fondu entre deux modes, en frames à 20 fps.
-# 8 frames ≈ 400 ms : assez lent pour se voir, assez court pour que le
-# témoin WATCHING soit franc. Un basculement instantané de couleur donne
-# l'impression d'un défaut d'affichage plutôt que d'un changement d'état.
-TRANSITION_FRAMES = 8
+# Ramené de 8 à 5 frames (400 → 250 ms) après essai de Cyril : 400 ms
+# traînaient. Assez pour adoucir l'amorce, assez court pour que le
+# témoin WATCHING reste franc. Un basculement instantané, à l'inverse,
+# passe pour un défaut d'affichage.
+TRANSITION_FRAMES = 5
 
 # Ce que Luca's affiche sous son visage. Les noms d'état sont techniques ;
 # Cyril doit lire ce qu'elle fait, pas une constante.
@@ -106,6 +107,11 @@ class AvatarWidget(QWidget):
         # Position de la ligne de balayage du mode WATCHING, en pixels
         # depuis le haut du visage.
         self.scan_offset = 0.0
+        # Point témoin clignotant et balayage du regard, tous deux propres
+        # au mode WATCHING. Le halo ambre seul ne se remarquait pas assez
+        # quand l'avatar est en périphérie du champ de vision.
+        self.watch_pulse = 0.0
+        self.gaze_phase = 0.0
         # Phase de respiration : avance en continu, quel que soit l'état.
         # Rien ne doit jamais être parfaitement immobile (inspiration
         # Astra) — un avatar figé donne l'impression d'un programme planté.
@@ -259,6 +265,12 @@ class AvatarWidget(QWidget):
             # Balayage descendant qui reboucle — le signe visible que la
             # capture est en cours.
             self.scan_offset = (self.scan_offset + 2.5) % 90
+            # Point témoin : clignotement franc, comme une LED
+            # d'enregistrement. C'est lui qu'on repère du coin de l'œil.
+            self.watch_pulse = (self.watch_pulse + 0.16) % (2 * math.pi)
+            # Le regard balaie au lieu de fixer : une pupille immobile
+            # donne un air absent, pas curieux.
+            self.gaze_phase = (self.gaze_phase + 0.09) % (2 * math.pi)
 
         self.update()
 
@@ -298,13 +310,26 @@ class AvatarWidget(QWidget):
         painter.setPen(QPen(self.border_color(), 2))
         painter.drawEllipse(center, radius, radius)
 
+        # Point témoin de capture — la LED d'enregistrement. Le halo ambre
+        # seul ne se remarquait pas assez quand l'avatar est en périphérie
+        # du champ de vision ; un point qui clignote, si.
+        if self.state == WATCHING:
+            pulse = (math.sin(self.watch_pulse) + 1.0) / 2.0
+            dot_alpha = int(90 + 165 * pulse)
+            dot_radius = 4.0 + 1.5 * pulse
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QBrush(QColor(255, 90, 0, dot_alpha)))
+            painter.drawEllipse(QPointF(107, 36), dot_radius, dot_radius)
+
         # Yeux
         if not self.eye_blink:
             if self.state == WATCHING:
-                # Regard fixe droit devant : elle regarde l'écran, pas la
-                # souris. Suivre le curseur donnerait l'impression qu'elle
-                # cherche, alors qu'elle est en train d'analyser.
-                dx = dy = 0.0
+                # Le regard balaie l'écran au lieu de suivre la souris.
+                # Un regard fixe donnait un air absent ; ce parcours
+                # lent, plus large que haut, se lit comme de la curiosité.
+                # Le curseur reste ignoré : elle lit l'écran, pas la main.
+                dx = math.sin(self.gaze_phase) * 7.0
+                dy = math.sin(self.gaze_phase * 0.4) * 2.5
                 dist = 0.0
             else:
                 # Calcul direction yeux (suivent la souris)
