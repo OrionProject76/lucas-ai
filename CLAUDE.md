@@ -63,6 +63,8 @@ non négociable : c'est elle qui rend l'assouplissement acceptable.
 
 **Ce qui est joint à une requête cloud** est volontairement réduit :
 - pas de contexte RAG (extraits de documents personnels)
+- pas d'événements système : la table `system_events` contient des extraits
+  de contenu sensible (voir `voice_manager._log`), elle ne sort jamais
 - historique tronqué à `CLOUD_HISTORY_MESSAGES` (6) au lieu de 100 en local
 
 **Implémentation de référence** : `core/router.py` — `route()`, `is_sensitive()`,

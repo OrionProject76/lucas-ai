@@ -72,11 +72,16 @@ class _FakeMemory:
     def load_history(self) -> list[tuple[str, str]]:
         return self._history
 
+    def load_recent_events(self, limit: int = 5) -> list[tuple[str, str, str]]:
+        """Mémoire enrichie : pas d'événement ici, ces tests portent sur le RAG
+        et l'historique. Voir test_memory_context.py pour les événements."""
+        return []
+
 
 @pytest.fixture
-def core_with_history(monkeypatch) -> "OrionCore":
+def core_with_history(monkeypatch) -> OrionCore:
     """OrionCore sans base ni World Model, avec 40 messages d'historique."""
-    monkeypatch.setattr(orion_core, "get_snapshot", lambda: {})
+    monkeypatch.setattr(orion_core, "get_snapshot", dict)
     monkeypatch.setattr(orion_core, "format_for_prompt", lambda snapshot: "[système]")
     monkeypatch.setattr(
         orion_core, "RAGManager", lambda: _FakeRag()

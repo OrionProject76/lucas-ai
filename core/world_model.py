@@ -37,8 +37,39 @@ def _get_active_window_title() -> str:
         return win32gui.GetWindowText(hwnd) or "Inconnu"
     except ImportError:
         return "pywin32 non installé"
-    except Exception:
+    except Exception:  # noqa: BLE001 — le World Model ne doit jamais faire
+        # tomber l'appelant : une info moins précise vaut mieux qu'un crash.
         return "Inconnu"
+
+
+# Événements internes à Orion : ils décrivent sa propre plomberie, pas
+# l'environnement de Cyril. Les injecter dans le prompt n'apporte rien au
+# LLM et réinjecterait des extraits sensibles (voir voice_manager._log)
+# dans des conversations qui n'ont rien à voir.
+INTERNAL_EVENT_PREFIXES = ("tts_",)
+
+
+def format_events_for_prompt(events: list[tuple[str, str, str]]) -> str:
+    """
+    Formate les événements système récents pour le prompt.
+
+    `events` vient de MemoryManager.load_recent_events() :
+    (event_type, details, created_at), du plus récent au plus ancien.
+
+    Retourne une chaîne vide s'il n'y a rien de pertinent à dire — dans ce
+    cas l'appelant n'ajoute aucun message système, plutôt qu'un bloc vide
+    qui consomme du contexte pour rien.
+    """
+    relevant = [
+        (event_type, details)
+        for event_type, details, _created_at in events
+        if not event_type.startswith(INTERNAL_EVENT_PREFIXES)
+    ]
+    if not relevant:
+        return ""
+
+    lines = [f"- {event_type}{f' : {details}' if details else ''}" for event_type, details in relevant]
+    return "[Événements système récents, du plus récent au plus ancien :\n" + "\n".join(lines) + "]"
 
 
 def format_for_prompt(snapshot: dict) -> str:

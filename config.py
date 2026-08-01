@@ -55,6 +55,12 @@ MAX_HISTORY_MESSAGES = 100      # garde les 100 derniers messages max
 # fil de la conversation. Voir CLAUDE.md règle 3.
 CLOUD_HISTORY_MESSAGES: int = 6
 
+# Nombre d'événements système récents injectés dans le prompt (mémoire
+# enrichie, ROADMAP Phase 2). Volontairement bas : il s'agit de donner du
+# contexte au LLM, pas de lui déverser un journal. Jamais joint à une
+# requête cloud — voir OrionCore._build_messages().
+RECENT_EVENTS_IN_PROMPT: int = 5
+
 # --- Identité d'Orion ---
 SYSTEM_PROMPT = (
     "Tu es Orion, l'assistant personnel de Cyril. "

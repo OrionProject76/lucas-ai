@@ -1,10 +1,14 @@
 # core/orion_core.py — le chef d'orchestre
 
-from config import SYSTEM_PROMPT, CLOUD_HISTORY_MESSAGES
+from config import SYSTEM_PROMPT, CLOUD_HISTORY_MESSAGES, RECENT_EVENTS_IN_PROMPT
 from core.router import route, should_use_rag
 from core.local_llm import ask_local
 from core.cloud_llm import ask_cloud
-from core.world_model import get_snapshot, format_for_prompt
+from core.world_model import (
+    format_events_for_prompt,
+    format_for_prompt,
+    get_snapshot,
+)
 from memory.memory_manager import MemoryManager
 from modules.rag_manager import RAGManager
 
@@ -17,10 +21,12 @@ class OrionCore:
         """
         Construit la liste de messages envoyée au LLM.
         Ordre : prompt système → contexte système (World Model) →
-        contexte documents (RAG, si pertinent) → historique de conversation.
+        événements récents → contexte documents (RAG, si pertinent) →
+        historique de conversation.
 
         `destination` ("local" ou "cloud") restreint ce qui est joint quand la
-        requête sort de la machine : pas de contexte RAG, historique tronqué.
+        requête sort de la machine : pas de contexte RAG, pas d'événements
+        système, historique tronqué.
         """
         is_cloud = destination == "cloud"
 
@@ -31,6 +37,16 @@ class OrionCore:
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "system", "content": system_context},
         ]
+
+        # Événements système récents : ce qui s'est passé sur la machine
+        # depuis le début de la session. Jamais vers le cloud — la table
+        # system_events contient des extraits de contenu sensible (voir
+        # voice_manager._log), qui n'ont aucune raison de sortir.
+        if not is_cloud:
+            events = self.memory.load_recent_events(limit=RECENT_EVENTS_IN_PROMPT)
+            events_context = format_events_for_prompt(events)
+            if events_context:
+                messages.append({"role": "system", "content": events_context})
 
         # RAG : uniquement si le routeur juge la question pertinente pour
         # les documents personnels. Évite de noyer le contexte du LLM
