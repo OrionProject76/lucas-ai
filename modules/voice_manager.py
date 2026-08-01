@@ -89,11 +89,24 @@ class VoiceManager:
         return self._synthesize_edge(text, output_path)
 
     def play_audio(self, audio_path: str) -> bool:
-        """Joue le fichier audio avec pygame."""
+        """
+        Joue le fichier audio, puis le libère.
+
+        ⚠️ Le `unload()` final n'est pas une politesse : sans lui, pygame
+        garde le fichier ouvert après lecture, et la synthèse suivante
+        échoue sur « [Errno 13] Permission denied » en tentant de
+        réécrire data/output.mp3. Le bug frappait dès le second message,
+        donc à chaque usage réel.
+
+        Le mixer n'est initialisé qu'une fois : le réinitialiser à chaque
+        lecture coupe le son en cours.
+        """
         try:
             import pygame
 
-            pygame.mixer.init()
+            if not pygame.mixer.get_init():
+                pygame.mixer.init()
+
             pygame.mixer.music.load(audio_path)
             pygame.mixer.music.play()
             while pygame.mixer.music.get_busy():
@@ -103,6 +116,23 @@ class VoiceManager:
             # jamais faire tomber le thread TTS ni l'UI.
             print(f"Erreur lecture audio: {e}")
             return False
+        finally:
+            self._release_audio()
+
+    @staticmethod
+    def _release_audio() -> None:
+        """Rend la main sur le fichier audio, quoi qu'il se soit passé."""
+        try:
+            import pygame
+
+            if pygame.mixer.get_init():
+                pygame.mixer.music.stop()
+                pygame.mixer.music.unload()
+        except Exception as e:  # noqa: BLE001 — libérer au mieux
+            # Pas de silence complet : si la libération échoue, la
+            # synthèse suivante butera sur un fichier verrouillé et il
+            # faut pouvoir relier les deux.
+            print(f"[Voix] Libération du fichier audio impossible : {e}")
 
     def speak(
         self,

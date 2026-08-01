@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from core.router import route_voice
@@ -179,6 +181,99 @@ def test_speak_returns_none_when_nothing_spoken(spy_manager, monkeypatch) -> Non
     monkeypatch.setattr(manager, "play_audio", lambda path: True)
 
     assert manager.speak("mon budget est serré", "") is None
+
+
+# ── Libération du fichier audio ───────────────────────────────────────
+
+def test_audio_file_is_released_after_playback(monkeypatch) -> None:
+    """
+    Sans unload(), pygame garde le fichier ouvert et la synthèse suivante
+    échoue sur « [Errno 13] Permission denied ». Le bug frappait dès le
+    second message — donc à chaque usage réel.
+    """
+    calls: list[str] = []
+
+    class _FakeMusic:
+        @staticmethod
+        def load(path):
+            calls.append("load")
+
+        @staticmethod
+        def play():
+            calls.append("play")
+
+        @staticmethod
+        def get_busy():
+            return False
+
+        @staticmethod
+        def stop():
+            calls.append("stop")
+
+        @staticmethod
+        def unload():
+            calls.append("unload")
+
+    class _FakeMixer:
+        music = _FakeMusic
+
+        @staticmethod
+        def get_init():
+            return True
+
+    fake_pygame = SimpleNamespace(mixer=_FakeMixer, time=SimpleNamespace(Clock=lambda: None))
+    monkeypatch.setitem(__import__("sys").modules, "pygame", fake_pygame)
+
+    VoiceManager().play_audio("data/output.mp3")
+    assert "unload" in calls, "le fichier doit être libéré après lecture"
+
+
+def test_audio_is_released_even_when_playback_fails(monkeypatch) -> None:
+    """Une lecture qui échoue ne doit pas laisser le fichier verrouillé."""
+    calls: list[str] = []
+
+    class _BrokenMusic:
+        @staticmethod
+        def load(path):
+            raise RuntimeError("format illisible")
+
+        @staticmethod
+        def stop():
+            calls.append("stop")
+
+        @staticmethod
+        def unload():
+            calls.append("unload")
+
+    fake_pygame = SimpleNamespace(
+        mixer=SimpleNamespace(music=_BrokenMusic, get_init=lambda: True),
+        time=SimpleNamespace(Clock=lambda: None),
+    )
+    monkeypatch.setitem(__import__("sys").modules, "pygame", fake_pygame)
+
+    assert VoiceManager().play_audio("x.mp3") is False
+    assert "unload" in calls
+
+
+def test_mixer_is_not_reinitialised_while_playing(monkeypatch) -> None:
+    """Réinitialiser le mixer à chaque lecture coupe le son en cours."""
+    inits: list[str] = []
+
+    fake_pygame = SimpleNamespace(
+        mixer=SimpleNamespace(
+            music=SimpleNamespace(
+                load=lambda p: None, play=lambda: None, get_busy=lambda: False,
+                stop=lambda: None, unload=lambda: None,
+            ),
+            get_init=lambda: True,
+            init=lambda: inits.append("init"),
+        ),
+        time=SimpleNamespace(Clock=lambda: None),
+    )
+    monkeypatch.setitem(__import__("sys").modules, "pygame", fake_pygame)
+
+    VoiceManager().play_audio("x.mp3")
+    assert inits == [], "le mixer déjà initialisé ne doit pas être relancé"
 
 
 # ── Chaîne complète jusqu'à la base ───────────────────────────────────

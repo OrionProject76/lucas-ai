@@ -242,6 +242,57 @@ def app_window():
     del app
 
 
+def test_tts_worker_gets_a_thread_safe_logger() -> None:
+    """
+    L'UI passait self.orion.log_event au TTSWorker. Ce worker tourne dans
+    un autre thread, et SQLite refuse une connexion ouverte ailleurs :
+    chaque lecture vocale levait « SQLite objects created in a thread can
+    only be used in that same thread ».
+    """
+    import inspect
+
+    from ui import main_window
+
+    source = inspect.getsource(main_window.MainWindow._speak)
+    # Les commentaires sont retirés : la docstring explique justement
+    # pourquoi self.orion.log_event est proscrit, et une recherche
+    # textuelle brute se déclencherait dessus.
+    code_only = "\n".join(
+        line.split("#", 1)[0] for line in source.splitlines()
+    )
+    assert "self.orion.log_event" not in code_only
+    assert "save_event_from_any_thread" in code_only
+
+
+def test_thread_safe_logger_works_from_a_worker(tmp_path, monkeypatch) -> None:
+    """La fonction doit réellement écrire depuis un autre thread."""
+    import threading
+
+    from memory import memory_manager as mm
+
+    monkeypatch.setattr(mm, "DB_PATH", tmp_path / "thread.db")
+
+    results: list[bool] = []
+    thread = threading.Thread(
+        target=lambda: results.append(mm.save_event_from_any_thread("test", "détail"))
+    )
+    thread.start()
+    thread.join()
+
+    assert results == [True]
+
+
+def test_thread_safe_logger_never_raises(monkeypatch) -> None:
+    """Un événement perdu dégrade la trace ; une exception tue le thread."""
+    from memory import memory_manager as mm
+
+    monkeypatch.setattr(
+        mm, "MemoryManager",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("base inaccessible")),
+    )
+    assert mm.save_event_from_any_thread("test") is False
+
+
 def test_no_composite_object_name_remains() -> None:
     """Garde anti-régression sur le piège Qt."""
     import inspect

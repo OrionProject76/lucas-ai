@@ -8,6 +8,39 @@ from config import MAX_HISTORY_MESSAGES
 DB_PATH = Path(__file__).parent / "orion_memory.db"
 
 
+def save_event_from_any_thread(event_type: str, details: str = "") -> bool:
+    """
+    Enregistre un événement depuis n'importe quel thread.
+
+    SQLite refuse d'être utilisé depuis un autre thread que celui qui a
+    ouvert la connexion. Partager une instance de MemoryManager entre le
+    thread principal et un worker lève « SQLite objects created in a
+    thread can only be used in that same thread » — c'est ce qui se
+    produisait quand l'UI passait son OrionCore.log_event au TTSWorker.
+
+    Cette fonction ouvre sa propre connexion, écrit, referme. Le coût est
+    négligeable et tout l'état vit dans le fichier, pas en mémoire Python
+    — même raisonnement que dans api/server.py.
+
+    Retourne False plutôt que de propager : un événement perdu dégrade la
+    trace, une exception dans un thread de fond fait tomber l'appelant.
+    """
+    memory = None
+    try:
+        memory = MemoryManager()
+        memory.save_event(event_type, details)
+        return True
+    except Exception:  # noqa: BLE001 — voir docstring
+        return False
+    finally:
+        if memory is not None:
+            try:
+                memory.close()
+            except Exception as e:  # noqa: BLE001 — une connexion non
+                # refermée fuit une ressource : à voir, pas à taire.
+                print(f"[Mémoire] Fermeture de connexion impossible : {e}")
+
+
 class MemoryManager:
     def __init__(self, db_path: Path = DB_PATH):
         self.conn = sqlite3.connect(db_path)

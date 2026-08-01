@@ -16,6 +16,7 @@ from config import WINDOW_HEIGHT, WINDOW_TITLE, WINDOW_WIDTH
 from core.llm_worker import LLMWorker
 from core.orion_core import OrionCore
 from core.router import should_use_vision
+from memory.memory_manager import save_event_from_any_thread
 
 # ── Imports optionnels — fallback gracieux ──
 try:
@@ -511,10 +512,14 @@ class MainWindow(QWidget):
         silence — l'avatar mentirait sur son état.
         """
         self._set_status("🔊 Synthèse de la voix...", "connecting")
+        # ⚠️ PAS self.orion.log_event : le worker tourne dans un autre
+        # thread, et SQLite refuse une connexion ouverte ailleurs. C'est
+        # ce qui levait « SQLite objects created in a thread can only be
+        # used in that same thread » à chaque lecture vocale.
         self.tts_worker = TTSWorker(
             text,
             getattr(self, "last_user_message", ""),
-            self.orion.log_event,
+            save_event_from_any_thread,
         )
         self.tts_worker.playback_started.connect(self._on_playback_started)
         self.tts_worker.finished.connect(self._on_tts_finished)
