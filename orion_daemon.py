@@ -337,15 +337,16 @@ class OrionDaemon:
         Les signaux vont dans memory/orion_memory.db, pas dans la base du
         daemon : c'est cette table que Luca's injecte dans son contexte.
         Un capteur dont personne ne lit les résultats ne sert à rien.
-        """
-        try:
-            from memory.memory_manager import MemoryManager
 
-            memory = MemoryManager()
-            memory.save_event(event_type, details)
-            memory.close()
-        except Exception as e:
-            log(f"⚠️ Événement sécurité non enregistré : {e}", "WARN")
+        Délègue à la fonction partagée, qui ouvre sa propre connexion
+        SQLite. Le daemon en avait sa copie ; l'UI a fini par en avoir
+        besoin aussi, et deux implémentations du même geste finissent
+        toujours par diverger.
+        """
+        from memory.memory_manager import save_event_from_any_thread
+
+        if not save_event_from_any_thread(event_type, details):
+            log(f"⚠️ Événement sécurité non enregistré : {event_type}", "WARN")
 
     def _run_security_scan(self, task_name: str, scan):
         """Tronc commun des deux balayages : journalisation et garde-fous."""

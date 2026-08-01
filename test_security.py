@@ -695,6 +695,22 @@ def test_history_survives_a_restart(tmp_path, monkeypatch) -> None:
     assert not BehaviourHistory(path).is_new("net|a.exe|1.1.1.1")
 
 
+def test_state_paths_are_anchored_to_the_project() -> None:
+    """
+    Le daemon est prévu en service Windows via NSSM, donc lancé depuis un
+    CWD quelconque. Un chemin relatif faisait atterrir l'état ailleurs à
+    chaque lancement : la période d'apprentissage repartait de zéro et la
+    déduplication aussi — la mémoire devenait inopérante précisément dans
+    son déploiement cible.
+    """
+    from security.history import DEFAULT_HISTORY_PATH
+    from security.monitor import DEFAULT_STATE_PATH
+
+    for path in (DEFAULT_HISTORY_PATH, DEFAULT_STATE_PATH):
+        assert path.is_absolute(), f"{path} doit être un chemin absolu"
+        assert path.parent.name == "data"
+
+
 def test_corrupted_history_starts_empty(tmp_path) -> None:
     """Perdre la mémoire dégrade la détection ; planter la supprime."""
     from security.history import BehaviourHistory

@@ -110,7 +110,13 @@ La détection de rançongiciel repose sur les **métadonnées seules** (extensio
 
 ⚠️ **Sur les hooks clavier** : `ROADMAP` annonçait « suivi des hooks clavier (keylogger) ». Ce n'est **pas observable depuis Python de façon portable** — énumérer les hooks `SetWindowsHookEx` demande des appels natifs Win32 que `psutil` n'expose pas. Un module nommé « détecteur de keylogger » qui ne détecte rien donnerait une fausse assurance, exactement ce que §4.1 cherche à éviter. La détection de persistance vise le même adversaire par un angle réellement observable : un keylogger doit survivre au redémarrage.
 
-Prochains niveaux envisageables : analyse d'entropie du contenu des fichiers (nécessite l'accord de Cyril — le capteur ouvrirait ses documents), détection native des hooks clavier (nécessite une dépendance Win32).
+**Niveau 1 clos le 01/08/2026.** Cinq capteurs (`guardian`, `privacy_shield`, `ransomware_watch`, `persistence_watch`, `monitor`), une mémoire partagée (`history`), 94 tests. Les chemins d'état sont ancrés sur la racine du projet — le daemon étant prévu en service Windows via NSSM, un chemin relatif faisait repartir l'apprentissage de zéro à chaque lancement.
+
+**Les deux paliers suivants demandent une décision de Cyril, pas du code :**
+- **Analyse d'entropie** des fichiers pour la détection de chiffrement : plus fiable que les métadonnées, mais le capteur ouvrirait les documents personnels.
+- **Détection native des hooks clavier** : impose une dépendance Win32, `psutil` ne les expose pas.
+
+Tant que ces deux points ne sont pas tranchés, `security/` reste au niveau 1 — ce qui suffit au principe §4.1 pour les extensions d'autonomie envisagées à court terme, mais pas pour un pouvoir d'action défensif.
 
 **Nouveau principe acté le 01/08/2026 — la liberté est conditionnée à la protection.** Guardian et Privacy Shield (`security/`) deviennent une dépendance directe de toute extension future des libertés d'action de Luca's : plus ils sont matures et testés, plus le périmètre d'autonomie peut s'élargir. Concrètement pour le séquencement de ce fichier, aucune phase n'ouvre de nouveaux droits d'action (OS Controller, automation, exécution autonome) tant que ces deux modules ne sont pas au moins ébauchés et testés. Ils n'appartiennent donc plus au « polish » de la Phase 5 — ce sont des prérequis. Doctrine : `VISION_LONG_TERME.md` §4.1, résumé opposable : `CLAUDE.md`.
 

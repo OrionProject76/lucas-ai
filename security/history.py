@@ -18,7 +18,14 @@ from pathlib import Path
 
 from config import SECURITY_HISTORY_RETENTION_DAYS, SECURITY_LEARNING_HOURS
 
-DEFAULT_HISTORY_PATH = Path("data/security_history.json")
+# Chemins ancrés sur la racine du projet et non sur le répertoire
+# courant. Le daemon est prévu pour tourner en service Windows via NSSM,
+# depuis un CWD quelconque : un chemin relatif faisait atterrir l'état
+# ailleurs à chaque lancement. Conséquence, la période d'apprentissage
+# repartait de zéro et la déduplication aussi — la mémoire du niveau 1
+# devenait inopérante précisément dans son déploiement cible.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_HISTORY_PATH = PROJECT_ROOT / "data" / "security_history.json"
 
 
 class BehaviourHistory:
