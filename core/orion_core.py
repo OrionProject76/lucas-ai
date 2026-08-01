@@ -75,9 +75,15 @@ class OrionCore:
         # Jamais vers le cloud : les documents personnels restent locaux.
         # route() force déjà le local dans ce cas — garde redondante assumée,
         # deux verrous valent mieux qu'un sur un chemin qui sort de la machine.
+        # get_context() rend une chaîne VIDE quand aucun extrait n'est
+        # assez proche : on n'injecte alors rien du tout. Auparavant il
+        # rendait « Aucun document pertinent trouvé. », qui partait dans le
+        # prompt pour ne rien dire — ou pire, un extrait hors sujet annoncé
+        # comme pertinent, qui noyait le bloc vision juste au-dessus.
         if not is_cloud and should_use_rag(user_message):
             rag_context = RAGManager().get_context(user_message)
-            messages.append({"role": "system", "content": rag_context})
+            if rag_context:
+                messages.append({"role": "system", "content": rag_context})
 
         history = self.memory.load_history()
         if is_cloud:

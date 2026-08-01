@@ -14,7 +14,16 @@ except ImportError:
     pass
 
 # --- IA locale (Ollama) ---
-OLLAMA_URL = "http://localhost:11434/api/chat"
+# ⚠️ 127.0.0.1 et JAMAIS « localhost ». Mesuré sur cette machine :
+#     localhost  → 2,26 s / 2,39 s / 2,19 s
+#     127.0.0.1  → 0,14 s / 0,14 s / 0,14 s
+# Le modèle ne travaille que ~130 ms (load 96 + prompt 12 + génération 25,
+# d'après les compteurs d'Ollama). Les 2,05 s restantes sont un timeout de
+# résolution : Windows résout « localhost » en IPv6 (::1) d'abord, Ollama
+# n'écoute qu'en IPv4, et chaque appel attend l'échec avant de basculer.
+# Ce surcoût était payé par CHAQUE requête — chat, vision, embeddings.
+OLLAMA_HOST = "http://127.0.0.1:11434"
+OLLAMA_URL = f"{OLLAMA_HOST}/api/chat"
 # ⚠️ Tag explicite obligatoire. « qwen2.5 » sans tag ne correspond à
 # aucun modèle exactement : Ollama devine « qwen2.5:latest », et cette
 # résolution échoue tant que son registre n'est pas chargé — c'était la
@@ -125,6 +134,43 @@ RANSOMWARE_BURST_WINDOW_MINUTES: int = 5
 # rapport signale explicitement qu'il est incomplet.
 # Mesuré sur cette machine : ~9 200 fichiers parcourus en 1,4 s.
 RANSOMWARE_MAX_FILES_SCANNED: int = 30000
+
+# --- RAG : seuil de pertinence ---
+# ⚠️ Une recherche vectorielle ne renvoie JAMAIS « rien » : ChromaDB rend
+# toujours ses n plus proches voisins, même si le plus proche parle d'autre
+# chose. Sans ce seuil, le RAG injectait un extrait hors sujet en
+# l'annonçant comme « contexte trouvé dans les documents » — le LLM le
+# croyait et ignorait ce qui avait été lu à l'écran.
+#
+# Distance COSINUS, pas L2. La collection était en L2 par défaut, dont les
+# distances mesurées allaient de 150 à 700 et dépendaient de la longueur
+# des textes — un seuil absolu y aurait été un nombre magique intenable.
+# Le cosinus est borné [0, 2] et indépendant de la longueur.
+#
+# Calibré sur la base réelle :
+#     pertinent   0,174  0,290  0,416
+#     hors sujet  0,449  0,458  0,479  0,487
+# ⚠️ Marge étroite, mesurée sur 2 chunks d'un document d'exemple. À
+# recalibrer quand de vrais documents seront indexés. Ce seuil est le
+# SECOND verrou : le premier est core/intent.py, qui empêche la plupart
+# des questions hors sujet d'atteindre le RAG.
+RAG_MAX_DISTANCE: float = 0.45
+
+# --- Intention : écran, documents, ou ni l'un ni l'autre ---
+# Les listes de mots-clés couvraient 50 % des formulations réelles et ne
+# pouvaient pas faire mieux : « c'est écrit quoi ? » ne contient aucun mot
+# désignant l'écran. Un classifieur local tranche à 0,14 s par message
+# (voir OLLAMA_HOST). Voir core/intent.py.
+#
+# ⚠️ Ce classifieur ne décide QUE d'une capacité (quelle source consulter).
+# La décision de sécurité — donnée sensible, donc local forcé — reste aux
+# mots-clés déterministes de router.is_sensitive(). Voir CLAUDE.md règle 3.
+INTENT_CLASSIFIER_ENABLED: bool = True
+INTENT_MODEL = "qwen2.5:7b"
+
+# Court volontairement : au-delà, le repli sur les mots-clés est préférable
+# à faire attendre Cyril. Le classifieur ne doit jamais bloquer une réponse.
+INTENT_TIMEOUT_SECONDS: float = 5.0
 
 # --- Mémoire ---
 DB_PATH = "memory/orion_memory.db"

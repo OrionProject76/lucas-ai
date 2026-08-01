@@ -25,8 +25,12 @@ KEYWORDS_SENSITIVE = [
 
 # Mots-clés qui signalent que la question porte probablement sur des
 # documents personnels de Cyril plutôt que sur une connaissance générale.
-# Volontairement simple (mots-clés, pas de classification LLM) — cohérent
-# avec le principe "pas de sur-ingénierie avant que les bases soient stables".
+#
+# ⚠️ Cette liste n'est plus le mécanisme principal de déclenchement du RAG.
+# Elle sert de REPLI quand core/intent.py est indisponible, et de test
+# déterministe pour la décision de sécurité du TTS (route_voice). Mesurée
+# sur les formulations réelles de Cyril : 50 % de couverture, et un plafond
+# structurel — voir l'en-tête de core/intent.py.
 KEYWORDS_RAG = [
     "document", "fichier", "mes notes", "mes docs",
     "dans le pdf", "résume le", "résume mon",
@@ -38,8 +42,19 @@ KEYWORDS_RAG = [
 def is_sensitive(text: str) -> bool:
     """
     Décide si la question porte sur des données ultra-sensibles (finance
-    personnelle, documents privés, identité). Même approche volontairement
-    simple que should_use_rag() : mots-clés, pas de classification LLM.
+    personnelle, documents privés, identité).
+
+    ⚠️ Mots-clés, JAMAIS de classification LLM — contrairement à
+    should_use_rag() et should_use_vision(), qui ont basculé sur
+    core/intent.py. La distinction est le cœur de la conception :
+
+      • se tromper sur « faut-il regarder l'écran ? » coûte une réponse
+        un peu moins bonne. Un modèle est le bon outil.
+      • se tromper ici envoie un relevé bancaire chez OpenAI. Ça exige un
+        test déterministe, reproductible, volontairement trop large, et
+        qui fonctionne même Ollama à l'arrêt.
+
+    Voir CLAUDE.md règle 3.
     """
     return contains_any(text, KEYWORDS_SENSITIVE)
 
@@ -73,9 +88,12 @@ def route(text: str) -> str:
 
 
 # Mots-clés qui signalent que la question porte sur ce qui est affiché à
-# l'écran. Volontairement spécifiques : « regarde » seul déclencherait sur
-# « regarde si tu peux m'aider », et capturer l'écran à chaque message
-# coûterait plusieurs secondes de VLM pour rien.
+# l'écran.
+#
+# ⚠️ Repli uniquement, comme KEYWORDS_RAG : le déclenchement passe
+# désormais par core/intent.py. Cette liste ne peut structurellement pas
+# attraper « c'est écrit quoi ? » ni « montre-moi ce qu'il y a marqué là »,
+# qui ne nomment l'écran nulle part.
 KEYWORDS_VISION = [
     "à l'écran", "a l'écran", "sur mon écran", "mon écran",
     "que vois-tu", "qu'est-ce que tu vois", "tu vois quoi",
@@ -89,11 +107,14 @@ def should_use_vision(text: str) -> bool:
     """
     Décide si Luca's doit regarder l'écran avant de répondre.
 
-    Même approche que should_use_rag() : mots-clés, pas de classification
-    LLM. Une capture + analyse VLM coûte plusieurs secondes, on ne la
-    déclenche donc que sur une demande explicite.
+    Délègue à core.intent.classify(). Les mots-clés ci-dessus ne servent
+    plus que de repli quand le classifieur est indisponible : ils ne
+    couvraient que la moitié des formulations réelles, et rataient
+    entièrement celles qui ne nomment pas l'écran (« c'est écrit quoi ? »).
     """
-    return contains_any(text, KEYWORDS_VISION)
+    from core.intent import classify
+
+    return classify(text).needs_screen
 
 
 def route_voice(answer: str, question: str = "") -> str:
@@ -111,10 +132,17 @@ def route_voice(answer: str, question: str = "") -> str:
     sensible dans la réponse seule, mais reste une donnée à ne pas
     envoyer chez Microsoft.
 
+    ⚠️ Cette fonction n'utilise PAS le classifieur d'intention, alors que
+    should_use_rag() le fait désormais. C'est délibéré : décider si un
+    texte part chez Microsoft est une décision de sécurité. Elle doit
+    rester déterministe, reproductible, et fonctionner même si Ollama est
+    à l'arrêt — un classifieur indisponible ne doit jamais avoir pour
+    effet d'autoriser une sortie. D'où matches_rag_keywords().
+
     Voir CLAUDE.md règle 3, section TTS.
     """
     combined = f"{question} {answer}"
-    if is_sensitive(combined) or should_use_rag(combined):
+    if is_sensitive(combined) or matches_rag_keywords(combined):
         return "local"
     return "cloud"
 
@@ -124,5 +152,24 @@ def should_use_rag(text: str) -> bool:
     Décide si on va chercher dans les documents personnels (RAG) avant
     de répondre. Axe de décision indépendant de route() — une question
     peut être locale ET utiliser le RAG, ou cloud sans RAG, etc.
+
+    Délègue à core.intent.classify(), qui rend un label unique : cette
+    fonction et should_use_vision() ne peuvent donc plus répondre True
+    toutes les deux sur le même message. C'était la cause du bug où le
+    bloc RAG, injecté en dernier, noyait ce qui avait été lu à l'écran.
+    """
+    from core.intent import classify
+
+    return classify(text).needs_documents
+
+
+def matches_rag_keywords(text: str) -> bool:
+    """
+    Test mots-clés pur, sans appel au classifieur.
+
+    Réservé aux décisions de SÉCURITÉ, qui doivent rester déterministes
+    et ne jamais dépendre de la disponibilité d'un modèle — voir
+    route_voice(). Pour décider s'il faut consulter les documents,
+    utiliser should_use_rag().
     """
     return contains_any(text, KEYWORDS_RAG)

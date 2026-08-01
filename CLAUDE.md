@@ -74,6 +74,32 @@ non négociable : c'est elle qui rend l'assouplissement acceptable.
 `should_use_rag()`. Toute évolution du routage passe par ce fichier, jamais par
 un appel cloud direct ailleurs dans le code. Tests : `test_router.py`.
 
+#### Deux natures de décision, deux mécanismes (précisé le 01/08/2026)
+
+La règle ci-dessus ne change pas. Ce qui est précisé, c'est **quel mécanisme
+sert à quoi** — les mots-clés couvraient 50 % des formulations réelles, et
+`« c'est écrit quoi ? »` ne contient aucun mot désignant l'écran.
+
+| Décision | Mécanisme | Pourquoi |
+|---|---|---|
+| **Sécurité** — donnée sensible ? | **Mots-clés déterministes** (`is_sensitive`, `route_voice`) | Se tromper envoie un relevé bancaire hors de la machine. Exige un test reproductible, volontairement trop large, qui fonctionne **Ollama à l'arrêt** |
+| **Capacité** — écran ou documents ? | **Classifieur LLM local** (`core/intent.py`) | Se tromper coûte une réponse un peu moins bonne, jamais une fuite |
+
+⚠️ **`is_sensitive()` ne consultera jamais le classifieur.** Un modèle
+indisponible ne doit pas pouvoir avoir pour effet d'*autoriser* une sortie.
+Deux tests l'imposent structurellement (`test_intent.py`).
+
+`intent.classify()` rend **un seul label** — `ECRAN`, `DOCUMENTS` ou `AUCUN`.
+La collision qui faisait déclencher RAG et vision sur le même message devient
+donc impossible par construction, au lieu d'être arbitrée après coup. En cas
+d'égalité, **l'écran gagne** : ce qu'il montre est vérifiable (l'OCR a trouvé
+du texte ou non, et le bloc le dit), alors qu'un RAG qui se trompe empoisonne
+silencieusement la réponse avec du contenu plausible mais hors sujet.
+
+Le corpus de formulations vit dans `test_intent.py`. **Toute formulation qui
+échoue en usage réel s'y ajoute** — c'est le score global qui est mesuré, pas
+le cas isolé. C'est ce qui remplace la correction au cas par cas.
+
 Cohérent avec `VISION_LONG_TERME.md` §4 : « la sécurité vient du contrôle de
 *ce qui* est envoyé et *quand*, pas du canal utilisé ».
 
