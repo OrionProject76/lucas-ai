@@ -223,34 +223,37 @@ DOCUMENTS_DIR = "data/documents"
 # des textes — un seuil absolu y aurait été un nombre magique intenable.
 # Le cosinus est borné [0, 2] et indépendant de la longueur.
 #
-# Recalibré le 01/08/2026 par demos/calibrate_rag.py, sur 40 extraits de
-# la documentation du projet (CLAUDE.md, ROADMAP.md, VISION_LONG_TERME.md,
-# IDEAS.md) — 76 Ko de prose française hétérogène.
+# Calibré le 01/08/2026 sur les VRAIS documents de Cyril — 265 extraits,
+# 36 documents de C:/Users/PC/Documents (bulletins de paie, déclaration
+# de revenus, relevé de carrière, factures, CV, offres d'emploi).
 #
 #     seuil   extraits utiles gardés   hors-sujet bloqués
-#     0,34            90 %                  100 %      <- retenu
-#     0,35            95 %                   75 %
-#     0,37           100 %                   25 %
+#     0,31            80 %                  100 %      <- retenu
+#     0,33            85 %                   75 %
+#     0,36            92 %                   62 %
+#     0,38           100 %                   25 %
+#
+# ⚠️ 20 % des extraits utiles sont écartés : sur certaines questions
+# légitimes, Luca's répondra qu'elle ne trouve rien. C'est le prix pour
+# ne JAMAIS injecter un extrait hors sujet — et ce sens-là a été choisi
+# en connaissance de cause, parce que c'est un extrait hors sujet
+# (sample_document.txt sur l'intelligence artificielle) qui a noyé le
+# bloc vision et fait répondre à côté pendant quatre campagnes de tests.
+# Pour privilégier la couverture plutôt que la précision : 0,33.
 #
 # L'ancienne valeur de 0,45 venait de DEUX extraits d'un document
-# d'exemple. Elle ne bloquait plus rien : à ce niveau les huit questions
-# témoins passaient toutes. C'est ce qui a permis à un extrait sur
-# l'intelligence artificielle d'être injecté à la place de l'écran.
-#
-# ⚠️ VALEUR PROVISOIRE — mesurée sur la documentation du PROJET, faute de
-# documents personnels indexés. À refaire sur les vrais :
-#     1. les déposer dans data/documents/
-#     2. venv\Scripts\python.exe -m memory.index_documents
-#     3. venv\Scripts\python.exe demos\calibrate_rag.py
+# d'exemple. Elle ne bloquait plus rien : à ce niveau, les huit questions
+# témoins passaient toutes.
 #
 # ⚠️ La mesure bouge un peu d'une exécution à l'autre : les questions de
 # contrôle sont rédigées par le LLM local, qui n'est pas à température 0.
 # Lire la table de compromis, pas seulement le nombre proposé.
+# À refaire après tout ajout important de documents.
 #
 # Ce seuil reste le SECOND verrou : le premier est core/intent.py, qui
 # empêche la plupart des questions hors sujet d'atteindre le RAG — c'est
 # pourquoi une valeur imparfaite dégrade sans casser.
-RAG_MAX_DISTANCE: float = 0.34
+RAG_MAX_DISTANCE: float = 0.31
 
 # --- Intention : écran, documents, ou ni l'un ni l'autre ---
 # Les listes de mots-clés couvraient 50 % des formulations réelles et ne

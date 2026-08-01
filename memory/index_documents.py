@@ -66,6 +66,53 @@ PDF_MIN_CHARS = 80
 # polluerait les recherches comme le faisait sample_document.txt.
 EXCLUDED_NAMES = {"readme.md", "readme.txt", "lisezmoi.txt"}
 
+# ⚠️⚠️ REFUS DE SÉCURITÉ — fichiers de secrets ⚠️⚠️
+#
+# Le 01/08/2026, une indexation de C:/Users/PC/Documents a fait entrer en
+# base « Mots de passe Microsoft Edge.csv » et « proton-recovery-kit.pdf ».
+# Des identifiants en clair dans une base vectorielle deviennent
+# RÉCUPÉRABLES par n'importe quelle question qui s'en approche
+# sémantiquement — et le LLM les recopiera dans sa réponse sans état
+# d'âme, puisqu'on les lui aura fournis comme contexte.
+#
+# Ce n'est pas du même ordre qu'un document personnel. Un bulletin de
+# paie révèle un salaire ; un export de mots de passe donne l'accès aux
+# comptes. D'où un REFUS, et non un simple avertissement.
+#
+# La liste porte sur le NOM du fichier, jamais sur son contenu : il
+# faudrait l'ouvrir pour l'inspecter, ce qui est exactement ce qu'on
+# cherche à éviter. Elle rate donc un fichier mal nommé — c'est un filet,
+# pas une garantie. La garantie, c'est de ne pas ranger ses secrets dans
+# un dossier qu'on indexe.
+#
+# Contournable avec --autoriser-secrets, jamais en silence.
+# ⚠️ Cette liste a DÉJÀ raté un cas, le jour même où elle a été écrite :
+# « Bitdefender SecurePass Recovery Key.pdf » n'a échappé à l'indexation
+# que parce que c'était un scan sans couche texte. « recovery-kit » y
+# était, « recovery key » non. C'est la démonstration que le filtre par
+# nom est un filet avec des trous, et qu'il ne remplace pas de ranger
+# ses secrets ailleurs que dans un dossier indexé.
+SECRET_PATTERNS = (
+    # mots de passe
+    "mot de passe", "mots de passe", "motdepasse", "password", "passwd",
+    "master password", "securepass", "keepass", "bitwarden", "lastpass",
+    "1password", "dashlane", "nordpass", "vault", "coffre-fort",
+    # récupération de compte
+    "recovery", "recuperation", "récupération", "restauration",
+    "codes de secours", "backup codes", "authenticator", "2fa", "otp",
+    # clés et identifiants
+    "identifiants", "credentials", "secret", "api-key", "api_key",
+    "private-key", "private_key", "cle privee", "clé privée",
+    "id_rsa", "id_ed25519", ".pem", "seed-phrase", "seed_phrase",
+    "phrase de recuperation", "mnemonic", "wallet",
+)
+
+# Un fichier qui produit plus que cette part de la base l'écrase : la
+# recherche ne remonterait pratiquement que lui. Mesuré : un log.txt de
+# 0,7 Mo a produit 818 morceaux sur 1086, soit 75 % du total, noyant
+# 38 vrais documents.
+DOMINANCE_RATIO = 0.4
+
 # Signalés explicitement plutôt qu'ignorés en silence : un document
 # déposé qui n'apparaît jamais dans les réponses est un bug
 # incompréhensible du point de vue de Cyril.
@@ -155,23 +202,50 @@ def _read(path: Path) -> tuple[str | None, str]:
     return (texte, "") if texte is not None else (None, "encodage illisible")
 
 
-def _collect(directory: Path) -> tuple[list[Path], dict[str, list[str]]]:
-    """Fichiers indexables, et fichiers reconnus mais non gérés."""
+def looks_like_secrets(name: str) -> bool:
+    """
+    Ce nom de fichier annonce-t-il des identifiants ?
+
+    Sur le NOM seul — inspecter le contenu supposerait de l'ouvrir et de
+    le lire, ce qu'on cherche précisément à éviter pour ce genre de
+    fichier.
+    """
+    normalise = name.lower().replace("_", " ").replace("-", " ")
+    return any(
+        motif.replace("_", " ").replace("-", " ") in normalise
+        for motif in SECRET_PATTERNS
+    )
+
+
+def _collect(
+    directory: Path, allow_secrets: bool = False
+) -> tuple[list[Path], dict[str, list[str]], list[str]]:
+    """Fichiers indexables, formats non gérés, et secrets refusés."""
     indexable: list[Path] = []
     unsupported: dict[str, list[str]] = {}
+    secrets: list[str] = []
 
     for path in sorted(directory.rglob("*")):
         if not path.is_file() or path.name.startswith("."):
             continue
         if path.name.lower() in EXCLUDED_NAMES:
             continue
-        suffix = path.suffix.lower()
-        if suffix in TEXT_SUFFIXES or suffix in PDF_SUFFIXES:
-            indexable.append(path)
-        elif suffix in KNOWN_UNSUPPORTED:
-            unsupported.setdefault(suffix, []).append(path.name)
 
-    return indexable, unsupported
+        suffix = path.suffix.lower()
+        if suffix not in TEXT_SUFFIXES and suffix not in PDF_SUFFIXES:
+            if suffix in KNOWN_UNSUPPORTED:
+                unsupported.setdefault(suffix, []).append(path.name)
+            continue
+
+        # ⚠️ Le refus passe AVANT tout le reste : un fichier de secrets ne
+        # doit pas être lu, même pour vérifier qu'il est lisible.
+        if not allow_secrets and looks_like_secrets(path.name):
+            secrets.append(path.name)
+            continue
+
+        indexable.append(path)
+
+    return indexable, unsupported, secrets
 
 
 def _explain_unsupported(unsupported: dict[str, list[str]]) -> None:
@@ -184,7 +258,11 @@ def _explain_unsupported(unsupported: dict[str, list[str]]) -> None:
         print(f"          {apercu}")
 
 
-def index_directory(directory: str | Path = DOCUMENTS_DIR, reset: bool = False) -> int:
+def index_directory(
+    directory: str | Path = DOCUMENTS_DIR,
+    reset: bool = False,
+    allow_secrets: bool = False,
+) -> int:
     """
     Met la base à jour depuis un dossier. Retourne le code de sortie.
     """
@@ -206,7 +284,21 @@ def index_directory(directory: str | Path = DOCUMENTS_DIR, reset: bool = False) 
             rag.remove_document(doc_id)
         print(f"Base vidée : {len(connus)} document(s) retiré(s).\n")
 
-    fichiers, non_geres = _collect(directory)
+    fichiers, non_geres, secrets = _collect(directory, allow_secrets=allow_secrets)
+
+    # ⚠️ Affiché AVANT l'indexation, et en tête : c'est ce que Cyril doit
+    # voir même s'il ne lit que les premières lignes.
+    if secrets:
+        print("⚠️  REFUSÉ — fichiers de secrets, jamais indexés :")
+        for nom in secrets:
+            print(f"      {nom}")
+        print(
+            "    Des identifiants en base vectorielle deviennent récupérables\n"
+            "    par une simple question, et le LLM les recopierait dans sa\n"
+            "    réponse. Déplacer ces fichiers hors du dossier indexé.\n"
+            "    Passer outre (à vos risques) : --autoriser-secrets\n"
+        )
+
     if not fichiers:
         print(f"Aucun fichier indexable dans {directory}")
         print(f"Formats lus : {', '.join(sorted(TEXT_SUFFIXES | PDF_SUFFIXES))}")
@@ -217,6 +309,7 @@ def index_directory(directory: str | Path = DOCUMENTS_DIR, reset: bool = False) 
 
     ajoutes = inchanges = illisibles = 0
     vus: set[str] = set()
+    morceaux_par_doc: dict[str, int] = {}
 
     for path in fichiers:
         doc_id = path.name
@@ -235,6 +328,7 @@ def index_directory(directory: str | Path = DOCUMENTS_DIR, reset: bool = False) 
         else:
             print(f"  inchangé   {doc_id}")
             inchanges += 1
+        morceaux_par_doc[doc_id] = len(rag._chunk_text(texte))
 
     # Un fichier retiré du disque resterait consultable indéfiniment : la
     # base n'a aucun moyen de l'apprendre autrement qu'ici.
@@ -244,6 +338,22 @@ def index_directory(directory: str | Path = DOCUMENTS_DIR, reset: bool = False) 
         print(f"  retiré     {doc_id} ({morceaux} morceaux — absent du dossier)")
 
     total = len(rag.collection.get(include=[])["ids"])
+
+    # Un fichier qui écrase la base rend tous les autres introuvables. Un
+    # log.txt de 0,7 Mo a produit 818 morceaux sur 1086 — 75 % du total,
+    # noyant 38 vrais documents. Signalé, pas retiré d'office : c'est
+    # peut-être un document légitimement volumineux.
+    for doc_id, morceaux in sorted(morceaux_par_doc.items(), key=lambda x: -x[1]):
+        if total and morceaux / total > DOMINANCE_RATIO:
+            print(
+                f"\n⚠️  {doc_id} pèse {morceaux} morceaux sur {total} "
+                f"({morceaux / total:.0%} de la base).\n"
+                "    Il écrase les autres documents : la recherche ne remontera\n"
+                "    pratiquement que lui. Le retirer du dossier indexé, ou :\n"
+                f"    RAGManager().remove_document({doc_id!r})"
+            )
+        break
+
     print(
         f"\n{ajoutes} indexé(s), {inchanges} inchangé(s), "
         f"{len(orphelins)} retiré(s), {illisibles} illisible(s)"
@@ -274,8 +384,15 @@ def main(argv: list[str] | None = None) -> int:
         "--reset", action="store_true",
         help="vide la base avant d'indexer (utile pour retirer les documents d'exemple)",
     )
+    parser.add_argument(
+        "--autoriser-secrets", dest="allow_secrets", action="store_true",
+        help="indexe AUSSI les fichiers qui ressemblent à des mots de passe "
+             "ou des clés de récupération (fortement déconseillé)",
+    )
     args = parser.parse_args(argv)
-    return index_directory(args.directory, reset=args.reset)
+    return index_directory(
+        args.directory, reset=args.reset, allow_secrets=args.allow_secrets
+    )
 
 
 if __name__ == "__main__":

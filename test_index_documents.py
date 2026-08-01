@@ -290,6 +290,119 @@ def test_le_recouvrement_relie_les_morceaux():
     assert sum(len(m) for m in avec) > sum(len(m) for m in sans)
 
 
+# ── Refus des fichiers de secrets ─────────────────────────────────────
+#
+# Le 01/08/2026, indexer C:/Users/PC/Documents a fait entrer en base
+# « Mots de passe Microsoft Edge.csv » et « proton-recovery-kit.pdf ».
+# Des identifiants dans une base vectorielle deviennent RÉCUPÉRABLES par
+# une question qui s'en approche, et le LLM les recopie dans sa réponse
+# puisqu'on les lui a fournis comme contexte.
+
+@pytest.mark.parametrize(
+    "nom",
+    [
+        "Mots de passe Microsoft Edge.csv",
+        "proton-recovery-kit.pdf",
+        "passwords_backup.txt",
+        "mes identifiants bancaires.txt",
+        "codes de secours google.txt",
+        "keepass-export.csv",
+        "seed_phrase.txt",
+        # Ce cas précis a échappé à la première version du filtre, et n'a
+        # été épargné que parce que c'était un scan sans couche texte.
+        "Bitdefender SecurePass Recovery Key.pdf.txt",
+        "cle privee serveur.txt",
+        "backup codes github.txt",
+    ],
+)
+def test_les_fichiers_de_secrets_sont_refuses(rag, dossier, nom):
+    (dossier / nom).write_text("utilisateur;motdepasse123", encoding="utf-8")
+    index_directory(dossier)
+
+    assert nom not in rag.indexed_documents(), f"{nom} a été indexé"
+
+
+@pytest.mark.parametrize(
+    "nom",
+    [
+        "bulletin-de-paie-du-010425.pdf.txt",
+        "Releve_de_Carriere2026.txt",
+        "contrat assurance habitation.txt",
+        "Facture_Free_202605.txt",
+    ],
+)
+def test_les_documents_personnels_ordinaires_passent(rag, dossier, nom):
+    """
+    Le filtre doit rester étroit. Un bulletin de paie révèle un salaire,
+    un export de mots de passe donne l'accès aux comptes : ce n'est pas
+    le même risque, et tout refuser rendrait le RAG inutile.
+    """
+    (dossier / nom).write_text("Contenu du document personnel.", encoding="utf-8")
+    index_directory(dossier)
+
+    assert nom in rag.indexed_documents()
+
+
+def test_le_refus_est_annonce_avant_l_indexation(rag, dossier, capsys):
+    (dossier / "Mots de passe.csv").write_text("a;b", encoding="utf-8")
+    index_directory(dossier)
+
+    sortie = capsys.readouterr().out
+    assert "REFUSÉ" in sortie
+    assert "Mots de passe.csv" in sortie
+    # Doit apparaître avant la liste des documents traités : c'est ce que
+    # Cyril doit voir même s'il ne lit que les premières lignes.
+    assert sortie.index("REFUSÉ") < sortie.index("fichier(s) à examiner")
+
+
+def test_le_contenu_d_un_fichier_de_secrets_n_est_jamais_lu(rag, dossier, monkeypatch):
+    """
+    Le refus porte sur le NOM. Ouvrir le fichier pour vérifier son
+    contenu serait exactement ce qu'on cherche à éviter.
+    """
+    (dossier / "mots de passe.txt").write_text("secret", encoding="utf-8")
+
+    from memory import index_documents as mod
+
+    original = mod._read
+
+    def _read_espion(path):
+        assert "mots de passe" not in path.name.lower(), "le fichier a été ouvert"
+        return original(path)
+
+    monkeypatch.setattr(mod, "_read", _read_espion)
+    index_directory(dossier)
+
+
+def test_l_option_autoriser_secrets_existe_et_passe_outre(rag, dossier):
+    """
+    Explicite, jamais implicite : Cyril peut décider, mais il doit le
+    taper.
+    """
+    (dossier / "Mots de passe.csv").write_text("a;b", encoding="utf-8")
+
+    index_directory(dossier)
+    assert "Mots de passe.csv" not in rag.indexed_documents()
+
+    index_directory(dossier, allow_secrets=True)
+    assert "Mots de passe.csv" in rag.indexed_documents()
+
+
+def test_un_document_qui_ecrase_la_base_est_signale(rag, dossier, capsys):
+    """
+    Un log.txt de 0,7 Mo a produit 818 morceaux sur 1086 — 75 % du total,
+    noyant 38 vrais documents. Signalé, pas retiré d'office : c'est
+    peut-être un document légitimement volumineux.
+    """
+    gros = "\n\n".join(f"Paragraphe de journal numero {i}." for i in range(300))
+    (dossier / "journal.log").write_text(gros, encoding="utf-8")
+    index_directory(dossier)
+
+    sortie = capsys.readouterr().out
+    assert "journal.log" in sortie
+    assert "% de la base" in sortie
+
+
 # ── Sécurité ──────────────────────────────────────────────────────────
 
 def test_aucun_appel_sortant(rag):
