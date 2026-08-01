@@ -165,6 +165,68 @@ def test_watching_indicator_is_turned_off_after_capture() -> None:
     assert '"THINKING"' in source
 
 
+# ── Esthétique Astra ──────────────────────────────────────────────────
+
+def test_every_state_has_a_halo_palette() -> None:
+    """
+    Sans arrêt de couleur, Qt dessine un halo transparent et l'avatar
+    paraît amputé. Chaque mode doit avoir sa palette.
+    """
+    from ui.avatar_widget import HALO_PALETTES
+
+    assert set(HALO_PALETTES) == set(PRESENCE_STATES)
+
+
+def test_palettes_blend_through_at_least_three_stops() -> None:
+    """
+    Deux arrêts donnent un dégradé qui tranche. Astra se reconnaît à des
+    teintes qui se fondent — d'où trois arrêts au minimum.
+    """
+    from ui.avatar_widget import HALO_PALETTES
+
+    for state, stops in HALO_PALETTES.items():
+        assert len(stops) >= 3, f"{state} : dégradé trop abrupt"
+        assert stops[-1][-1] == 0, f"{state} : le halo doit s'éteindre en transparence"
+
+
+def test_watching_palette_stays_amber() -> None:
+    """Le témoin de capture ne doit pas se fondre dans le cyan ambiant."""
+    from ui.avatar_widget import HALO_PALETTES
+
+    for _position, red, _green, blue, _alpha in HALO_PALETTES[WATCHING]:
+        assert red > blue, "la palette WATCHING doit rester chaude"
+
+
+def test_breathing_never_stops(avatar) -> None:
+    """
+    Un avatar parfaitement immobile donne l'impression d'un programme
+    planté. La respiration avance dans tous les modes.
+    """
+    for state in PRESENCE_STATES:
+        avatar.set_state(state)
+        before = avatar.breath_phase
+        avatar.update_animation()
+        assert avatar.breath_phase != before, f"{state} : respiration figée"
+
+
+def test_body_radius_oscillates_within_bounds(avatar) -> None:
+    """La respiration doit rester subtile, pas déformer le visage."""
+    radii = []
+    for _ in range(120):
+        avatar.update_animation()
+        radii.append(avatar.body_radius())
+
+    assert max(radii) - min(radii) > 1.0, "la respiration doit être perceptible"
+    assert all(42 <= r <= 48 for r in radii), "amplitude trop forte"
+
+
+def test_breath_phase_stays_bounded(avatar) -> None:
+    """Sans repli modulo, la phase croîtrait indéfiniment."""
+    for _ in range(500):
+        avatar.update_animation()
+        assert 0 <= avatar.breath_phase < 2 * 3.14159265 + 0.1
+
+
 # ── Animation ─────────────────────────────────────────────────────────
 
 def test_idle_glow_breathes_within_bounds(avatar) -> None:

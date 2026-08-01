@@ -1,3 +1,4 @@
+import math
 import random
 import sys
 
@@ -40,6 +41,34 @@ INACTIVE_STATES = (LISTENING,)
 # dans l'ambiance habituelle de l'interface.
 WATCHING_COLOR = QColor(255, 170, 0)
 
+# ── Esthétique : inspiration DeepMind Project Astra ───────────────────
+#
+# Ajoutée le 01/08/2026 (VISION_LONG_TERME.md, Pilier 1 + addendum).
+# Ce qu'on en retient concrètement, par opposition au rendu précédent :
+#
+#   • halo en couches douces plutôt qu'un seul dégradé plat
+#   • dégradés à plusieurs teintes qui se fondent, pas deux arrêts secs
+#   • respiration permanente — la forme n'est jamais parfaitement figée
+#   • mouvement présent même au repos, jamais totalement immobile
+#
+# Le visage est conservé : HER et Desktop Pal restent des inspirations
+# documentées, et des yeux qui suivent le curseur donnent une présence
+# qu'une sphère abstraite n'a pas. Astra apporte la matière, pas le
+# remplacement du personnage.
+
+# Palette par état : arrêts (position, R, G, B, alpha) du halo.
+# Trois teintes minimum, pour que le dégradé respire au lieu de trancher.
+HALO_PALETTES = {
+    IDLE: [(0.0, 0, 212, 255, 70), (0.55, 90, 120, 240, 30), (1.0, 124, 58, 237, 0)],
+    THINKING: [(0.0, 160, 90, 255, 140), (0.5, 124, 58, 237, 70), (1.0, 70, 20, 160, 0)],
+    SPEAKING: [(0.0, 0, 230, 255, 110), (0.5, 60, 160, 255, 60), (1.0, 124, 58, 237, 0)],
+    WATCHING: [(0.0, 255, 200, 60, 170), (0.45, 255, 150, 0, 90), (1.0, 200, 90, 0, 0)],
+    LISTENING: [(0.0, 0, 255, 220, 130), (0.5, 0, 200, 255, 60), (1.0, 0, 120, 200, 0)],
+}
+
+# Amplitude de la respiration, en pixels de rayon.
+BREATH_AMPLITUDE = 2.2
+
 
 class AvatarWidget(QWidget):
     def __init__(self, parent=None):
@@ -61,6 +90,10 @@ class AvatarWidget(QWidget):
         # Position de la ligne de balayage du mode WATCHING, en pixels
         # depuis le haut du visage.
         self.scan_offset = 0.0
+        # Phase de respiration : avance en continu, quel que soit l'état.
+        # Rien ne doit jamais être parfaitement immobile (inspiration
+        # Astra) — un avatar figé donne l'impression d'un programme planté.
+        self.breath_phase = 0.0
 
         # Timer animation globale (60fps)
         self.anim_timer = QTimer(self)
@@ -101,7 +134,28 @@ class AvatarWidget(QWidget):
         self.eye_blink = False
         self.update()
 
+    def body_radius(self) -> float:
+        """Rayon du visage, respiration comprise."""
+        return 45.0 + math.sin(self.breath_phase) * BREATH_AMPLITUDE
+
+    def _halo_gradient(self, center: QPointF, radius: float) -> QRadialGradient:
+        """
+        Dégradé du halo pour l'état courant.
+
+        Un état inconnu retombe sur la palette IDLE : sans arrêt de
+        couleur, Qt dessinait un halo transparent et l'avatar semblait
+        amputé.
+        """
+        gradient = QRadialGradient(center, radius)
+        for position, r, g, b, alpha in HALO_PALETTES.get(self.state, HALO_PALETTES[IDLE]):
+            gradient.setColorAt(position, QColor(r, g, b, alpha))
+        return gradient
+
     def update_animation(self):
+        # La respiration avance toujours, y compris dans les états qui ne
+        # touchent pas au reste.
+        self.breath_phase = (self.breath_phase + 0.08) % (2 * math.pi)
+
         # Glow pulsation
         if self.state == "IDLE":
             self.glow_intensity += 0.02 * self.glow_direction
@@ -148,40 +202,21 @@ class AvatarWidget(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
 
         center = QPointF(70, 70)
+        radius = self.body_radius()
 
-        # Glow externe
-        glow_radius = 55 + self.glow_intensity * 10
-        gradient = QRadialGradient(center, glow_radius)
-
-        if self.state == "IDLE":
-            alpha = int(self.glow_intensity * 60)
-            gradient.setColorAt(0, QColor(0, 212, 255, alpha))
-            gradient.setColorAt(1, QColor(124, 58, 237, 0))
-        elif self.state == "LISTENING":
-            gradient.setColorAt(0, QColor(0, 212, 255, 100))
-            gradient.setColorAt(1, QColor(0, 212, 255, 0))
-        elif self.state == "THINKING":
-            gradient.setColorAt(0, QColor(124, 58, 237, 120))
-            gradient.setColorAt(1, QColor(124, 58, 237, 0))
-        elif self.state == "SPEAKING":
-            gradient.setColorAt(0, QColor(0, 212, 255, 80))
-            gradient.setColorAt(1, QColor(124, 58, 237, 40))
-        elif self.state == WATCHING:
-            gradient.setColorAt(0, QColor(WATCHING_COLOR.red(), WATCHING_COLOR.green(), 0, 150))
-            gradient.setColorAt(1, QColor(WATCHING_COLOR.red(), WATCHING_COLOR.green(), 0, 0))
-        else:
-            # Filet de sécurité : un dégradé sans couleur ferait
-            # disparaître le halo. set_state() garantit déjà l'état, mais
-            # paintEvent peut être appelé après une écriture directe.
-            gradient.setColorAt(0, QColor(0, 212, 255, 40))
-            gradient.setColorAt(1, QColor(124, 58, 237, 0))
-
-        painter.setBrush(QBrush(gradient))
+        # Halo en trois couches concentriques plutôt qu'un dégradé unique :
+        # la lumière se diffuse au lieu de s'arrêter net (esthétique Astra).
         painter.setPen(Qt.NoPen)
-        painter.drawEllipse(center, glow_radius, glow_radius)
+        base_glow = 55 + self.glow_intensity * 10
+        for scale, opacity in ((1.25, 0.35), (1.10, 0.6), (1.0, 1.0)):
+            layer_radius = base_glow * scale
+            painter.setOpacity(opacity)
+            painter.setBrush(QBrush(self._halo_gradient(center, layer_radius)))
+            painter.drawEllipse(center, layer_radius, layer_radius)
+        painter.setOpacity(1.0)
 
-        # Corps principal (cercle)
-        body_gradient = QRadialGradient(center, 45)
+        # Corps principal
+        body_gradient = QRadialGradient(center, radius)
         body_gradient.setColorAt(0, QColor(20, 20, 40))
         body_gradient.setColorAt(0.7, QColor(10, 10, 25))
         body_gradient.setColorAt(1, QColor(0, 212, 255, 100))
@@ -191,7 +226,7 @@ class AvatarWidget(QWidget):
         # couleur, on ne peut pas le manquer du coin de l'œil.
         border = WATCHING_COLOR if self.state == WATCHING else QColor(0, 212, 255)
         painter.setPen(QPen(QColor(border.red(), border.green(), border.blue(), 150), 2))
-        painter.drawEllipse(center, 45, 45)
+        painter.drawEllipse(center, radius, radius)
 
         # Yeux
         if not self.eye_blink:
