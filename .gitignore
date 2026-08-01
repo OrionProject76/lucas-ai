@@ -1,0 +1,40 @@
+# .gitignore — Luca's AI (ex-OrionAI)
+
+# --- Environnement Python ---
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Outils IA / éditeurs ---
+.aider*
+.vscode/
+.idea/
+
+# --- Godot : sources suivies, artefacts d'export ignorés ---
+Orion3D.exe
+Orion3D.console.exe
+Orion3D/.godot/
+*.pck
+export_presets.cfg
+
+# --- Données générées (jamais de données perso dans le dépôt) ---
+data/chromadb/
+data/logs/
+data/screenshots/
+data/screenshot.png
+data/output.mp3
+
+# --- Sorties d'inspection ponctuelles ---
+tree_output.txt
+tree_clean.txt
+
+# --- OS ---
+Thumbs.db
+desktop.ini
+.DS_Store
