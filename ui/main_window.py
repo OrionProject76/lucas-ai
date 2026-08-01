@@ -106,11 +106,19 @@ QLabel#status {
     background-color: #1A1A24;
     border-radius: 6px;
 }
-QLabel#status_connecting {
+/* Variantes par propriété dynamique et non par objectName : Qt ne
+   connaît pas les listes de classes CSS. « status status_connecting »
+   ne correspondait à AUCUNE règle, et le libellé perdait fond, marges
+   et couleur dès le premier message. Le sélecteur d'attribut, lui,
+   s'ajoute à QLabel#status au lieu de le remplacer. */
+QLabel#status[variant="connecting"] {
     color: #FFB300;
 }
-QLabel#status_thinking {
+QLabel#status[variant="thinking"] {
     color: #00D4FF;
+}
+QLabel#status[variant="watching"] {
+    color: #FFAA00;
 }
 """
 
@@ -302,6 +310,22 @@ class MainWindow(QWidget):
         self._set_avatar_state("IDLE")
 
     # ── Avatar states ──
+    def _set_status(self, text: str, variant: str = "connecting"):
+        """
+        Affiche un message de statut dans la bonne couleur.
+
+        Passe par une propriété dynamique et non par objectName : Qt ne
+        connaît pas les listes de classes CSS, et un changement de style
+        n'est pris en compte qu'après unpolish/polish. Sans ces deux
+        précautions, le libellé perdait fond et couleur dès le premier
+        message envoyé.
+        """
+        self.status_label.setText(text)
+        self.status_label.setProperty("variant", variant)
+        self.status_label.style().unpolish(self.status_label)
+        self.status_label.style().polish(self.status_label)
+        self.status_label.setVisible(True)
+
     def _set_avatar_state(self, state: str):
         """Met à jour l'état visuel de l'avatar + le label de statut."""
         if self.avatar:
@@ -365,13 +389,11 @@ class MainWindow(QWidget):
         # pas cosmétique : c'est le témoin que l'écran est en train d'être
         # capturé, comme la LED d'une webcam.
         if should_use_vision(text):
-            self.status_label.setText("👁️ Luca's regarde ton écran...")
+            self._set_status("👁️ Luca's regarde ton écran...", "watching")
             self._set_avatar_state("WATCHING")
         else:
-            self.status_label.setText("⏳ Préparation du contexte...")
+            self._set_status("⏳ Préparation du contexte...", "connecting")
             self._set_avatar_state("THINKING")
-        self.status_label.setObjectName("status status_connecting")
-        self.status_label.setVisible(True)
 
         # Le contexte est construit dans un thread : capture d'écran,
         # analyse VLM et requête RAG bloqueraient sinon toute l'interface.
@@ -382,7 +404,7 @@ class MainWindow(QWidget):
 
     def _on_context_ready(self, messages: list):
         """Le contexte est prêt : on peut lancer la génération."""
-        self.status_label.setText("⏳ Connexion à Ollama...")
+        self._set_status("⏳ Connexion à Ollama...", "connecting")
         # La capture est terminée : le témoin ambre doit s'éteindre au
         # moment exact où Luca's cesse de regarder.
         self._set_avatar_state("THINKING")
@@ -400,8 +422,7 @@ class MainWindow(QWidget):
         self.worker.start()
 
     def _on_started(self):
-        self.status_label.setText("💭 Luca's réfléchit...")
-        self.status_label.setObjectName("status status_thinking")
+        self._set_status("💭 Luca's réfléchit...", "thinking")
 
     def _on_token(self, token: str):
         if self.status_label.isVisible():

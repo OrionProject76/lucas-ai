@@ -104,6 +104,43 @@ def test_vision_status_message_is_used_for_screen_questions() -> None:
     assert "regarde ton écran" in source
 
 
+def test_status_variants_keep_the_base_style() -> None:
+    """
+    Le style passait par objectName = « status status_connecting », qui ne
+    correspond à AUCUNE règle : Qt ne connaît pas les listes de classes
+    CSS. Le libellé perdait fond, marges et couleur dès le premier
+    message envoyé.
+    """
+    from PySide6.QtWidgets import QApplication
+
+    from ui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+
+    seen: list[str] = []
+    for variant in ("connecting", "thinking", "watching"):
+        window._set_status("test", variant)
+        label = window.status_label
+        assert label.objectName() == "status", "la règle de base doit rester applicable"
+        assert label.palette().color(label.backgroundRole()).name() == "#1a1a24"
+        seen.append(label.palette().color(label.foregroundRole()).name())
+
+    assert len(set(seen)) == 3, "chaque variante doit avoir sa couleur"
+    window.close()
+    del app
+
+
+def test_no_composite_object_name_remains() -> None:
+    """Garde anti-régression sur le piège Qt."""
+    import inspect
+
+    from ui import main_window
+
+    source = inspect.getsource(main_window)
+    assert 'setObjectName("status ' not in source
+
+
 def test_prepare_is_not_called_on_the_main_thread() -> None:
     """
     Garde anti-régression : send_message ne doit plus appeler prepare()
