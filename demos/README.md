@@ -17,6 +17,12 @@ main dans le `justfile`.
 | `demo_voices.py` | Prononce la même phrase avec les 5 voix, pour comparer | réseau (edge) |
 | `demo_vision.py` | Capture l'écran et le fait décrire par le VLM local | Ollama + llava |
 | `demo_automation.py` | Ouvre des applications de la liste blanche | aucune |
+| `calibrate_rag.py` | Mesure `RAG_MAX_DISTANCE` sur les documents indexés | Ollama + documents |
+
+`calibrate_rag.py` est le seul du lot qui produise une **valeur à reporter
+dans `config.py`**. Il refuse de tourner sous 10 chunks indexés : en
+dessous, la mesure ne vaudrait pas mieux que celle qu'elle remplace. À
+relancer après chaque ajout important de documents.
 
 `demo_avatar.py` répond à une question que les tests ne peuvent pas
 trancher : les tests prouvent que les cinq modes diffèrent, que la

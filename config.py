@@ -150,10 +150,24 @@ RANSOMWARE_MAX_FILES_SCANNED: int = 30000
 # Calibré sur la base réelle :
 #     pertinent   0,174  0,290  0,416
 #     hors sujet  0,449  0,458  0,479  0,487
-# ⚠️ Marge étroite, mesurée sur 2 chunks d'un document d'exemple. À
-# recalibrer quand de vrais documents seront indexés. Ce seuil est le
-# SECOND verrou : le premier est core/intent.py, qui empêche la plupart
-# des questions hors sujet d'atteindre le RAG.
+# ⚠️ Marge étroite, mesurée sur 2 chunks d'un document d'exemple.
+#
+# ⚠️ VALEUR PROBABLEMENT TROP PERMISSIVE. Vérifié sur un corpus de test
+# plus réaliste (trois documents distincts : congés, assurance, matériel) :
+#     pertinent   0,236 … 0,346
+#     hors sujet  0,396 … 0,474   ← quatre d'entre elles passeraient à 0,45
+# Le seuil qui sépare correctement ces deux populations est ~0,37. La
+# valeur n'est PAS changée ici parce que ces documents sont fabriqués :
+# c'est sur les vrais documents de Cyril que la mesure compte.
+#
+# Pour recalibrer, une fois de vrais documents indexés :
+#     venv\Scripts\python.exe demos\calibrate_rag.py
+# Le script rédige lui-même les questions de contrôle depuis les extraits
+# indexés, mesure les deux populations et propose la valeur à reporter ici.
+#
+# Ce seuil reste le SECOND verrou : le premier est core/intent.py, qui
+# empêche la plupart des questions hors sujet d'atteindre le RAG — c'est
+# pourquoi une valeur imparfaite dégrade sans casser.
 RAG_MAX_DISTANCE: float = 0.45
 
 # --- Intention : écran, documents, ou ni l'un ni l'autre ---
