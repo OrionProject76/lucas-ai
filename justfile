@@ -11,7 +11,7 @@ all:
     echo "🌌 Démarrage complet Orion..."
     Start-Process powershell -ArgumentList "-c ollama serve" -WindowStyle Hidden
     Start-Sleep 2
-    Start-Process powershell -ArgumentList "-c uvicorn main:app --reload --host 0.0.0.0 --port 8000" -WindowStyle Hidden
+    Start-Process powershell -ArgumentList "-c uvicorn api.server:app --reload --host 0.0.0.0 --port 8000" -WindowStyle Hidden
     Start-Sleep 2
     pythonw orion_daemon.py
 
@@ -19,9 +19,12 @@ all:
 ollama:
     ollama serve
 
+# NB : l'app FastAPI est dans api/server.py, pas dans main.py — main.py est
+# le point d'entrée PySide6 et expose une QApplication, pas une app ASGI.
+
 # Lancer FastAPI
 serve:
-    uvicorn main:app --reload --host 0.0.0.0 --port 8000
+    uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
 
 # Lancer le daemon (arrière-plan Windows)
 daemon:
@@ -33,22 +36,29 @@ daemon-debug:
 
 # ─── DÉVELOPPEMENT ───────────────────────────────────────
 
-# Tests auto
+# NB : les tests sont des test_*.py à la racine (pas de dossier tests/).
+# test_server.py et test_voice.py sont exclus : ce ne sont pas des tests
+# pytest mais des scripts de démo — test_server lance uvicorn et bloque
+# indéfiniment, test_voice joue du son et appelle edge-tts en réseau.
+
+# Tests auto (avec coverage)
 test:
-    pytest tests/ -v --cov=orion --cov-report=term-missing
+    pytest -v --ignore=test_server.py --ignore=test_voice.py --cov=core --cov=modules --cov=memory --cov=api --cov-report=term-missing
 
 # Tests rapides (sans coverage)
 test-quick:
-    pytest tests/ -v
+    pytest -v --ignore=test_server.py --ignore=test_voice.py
 
-# Linting
+# NB : ruff format réécrit les fichiers sur place.
+
+# Linting + formatage
 lint:
-    ruff check orion/ tests/
-    ruff format orion/ tests/
+    ruff check core/ modules/ memory/ api/ ui/ test_router.py
+    ruff format core/ modules/ memory/ api/ ui/ test_router.py
 
 # Type checking
 mypy:
-    mypy orion/ --ignore-missing-imports
+    mypy core/ modules/ memory/ api/ --ignore-missing-imports
 
 # Vérification complète (lint + test + type)
 check: lint test mypy

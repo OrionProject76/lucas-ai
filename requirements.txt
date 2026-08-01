@@ -40,5 +40,8 @@ GPUtil>=1.4.0            # Télémétrie GPU affichée dans le HUD
 # ─── Config ────────────────────────────────
 python-dotenv>=1.2.0     # Lecture du .env (config.py)
 
-# ─── Tests ─────────────────────────────────
-pytest>=9.0.0            # Tests unitaires (CLAUDE.md règle 8)
+# ─── Tests & qualité (CLAUDE.md règle 8 + stack lint validée) ──
+pytest>=9.0.0            # Tests unitaires
+pytest-cov>=7.1.0        # Coverage (just test)
+ruff>=0.16.0             # Lint + format (just lint)
+mypy>=2.3.0              # Type checking (just mypy)
