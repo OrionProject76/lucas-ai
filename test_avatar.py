@@ -21,8 +21,6 @@ from PySide6.QtWidgets import QApplication
 
 from ui.avatar_widget import (
     IDLE,
-    INACTIVE_STATES,
-    LISTENING,
     PRESENCE_STATES,
     SPEAKING,
     THINKING,
@@ -46,18 +44,39 @@ def avatar(app):
 
 # ── Les cinq modes ────────────────────────────────────────────────────
 
+
 def test_there_are_exactly_five_presence_states() -> None:
     assert len(PRESENCE_STATES) == 5
 
 
-def test_listening_is_declared_inactive() -> None:
+def test_listening_is_triggered_by_typing() -> None:
     """
-    Le PC n'a pas de micro (IDEAS.md #69) : LISTENING est prévu mais
-    inatteignable jusqu'au pont mobile. Le déclarer évite de croire à
-    cinq modes opérationnels alors qu'il y en a quatre.
+    LISTENING ne veut pas dire « micro ouvert » mais « Cyril s'adresse à
+    Luca's ». Il est déclenché par la saisie clavier, donc les cinq modes
+    sont atteignables dès aujourd'hui — contrairement à ce que laissait
+    croire une première rédaction de ce module.
     """
-    assert LISTENING in INACTIVE_STATES
-    assert set(INACTIVE_STATES) < set(PRESENCE_STATES)
+    import inspect
+
+    from ui import main_window
+
+    source = inspect.getsource(main_window.MainWindow._on_typing)
+    assert '"LISTENING"' in source
+
+
+def test_every_state_has_a_status_label() -> None:
+    """
+    WATCHING manquait : le libellé disait « En ligne » pendant que
+    l'avatar virait à l'ambre. Deux indicateurs qui se contredisent sont
+    pires qu'un seul.
+    """
+    import inspect
+
+    from ui import main_window
+
+    source = inspect.getsource(main_window.MainWindow._set_avatar_state)
+    for state in PRESENCE_STATES:
+        assert f'"{state}"' in source, f"{state} n'a pas de libellé de statut"
 
 
 @pytest.mark.parametrize("state", PRESENCE_STATES)
@@ -69,6 +88,7 @@ def test_every_state_renders_without_error(avatar, state: str) -> None:
 
 
 # ── Robustesse ────────────────────────────────────────────────────────
+
 
 def test_unknown_state_falls_back_to_idle(avatar) -> None:
     """
@@ -87,6 +107,7 @@ def test_paint_survives_a_direct_state_write(avatar) -> None:
 
 
 # ── WATCHING : le témoin de capture ───────────────────────────────────
+
 
 def test_watching_uses_a_distinct_colour() -> None:
     """
@@ -142,13 +163,14 @@ def test_thinking_particles_do_not_leak_into_watching(avatar) -> None:
 
 # ── Câblage avec l'interface ──────────────────────────────────────────
 
+
 def test_ui_switches_to_watching_for_a_screen_question() -> None:
     import inspect
 
     from ui import main_window
 
     source = inspect.getsource(main_window.MainWindow.send_message)
-    assert 'should_use_vision' in source
+    assert "should_use_vision" in source
     assert '"WATCHING"' in source
 
 
@@ -166,6 +188,7 @@ def test_watching_indicator_is_turned_off_after_capture() -> None:
 
 
 # ── Esthétique Astra ──────────────────────────────────────────────────
+
 
 def test_every_state_has_a_halo_palette() -> None:
     """
@@ -256,6 +279,7 @@ def test_breath_phase_stays_bounded(avatar) -> None:
 
 
 # ── Fondu entre modes ─────────────────────────────────────────────────
+
 
 def test_changing_state_starts_a_transition(avatar) -> None:
     """
@@ -350,6 +374,7 @@ def test_every_state_renders_mid_transition(avatar) -> None:
 
 # ── Libellé ───────────────────────────────────────────────────────────
 
+
 def test_every_state_has_a_readable_label() -> None:
     """« WATCHING » sous le visage ne dit rien à Cyril."""
     from ui.avatar_widget import STATE_LABELS
@@ -361,6 +386,7 @@ def test_every_state_has_a_readable_label() -> None:
 
 
 # ── Animation ─────────────────────────────────────────────────────────
+
 
 def test_idle_glow_breathes_within_bounds(avatar) -> None:
     avatar.set_state(IDLE)

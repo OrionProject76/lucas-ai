@@ -25,15 +25,15 @@ IDLE = "IDLE"            # au repos, respiration lente
 THINKING = "THINKING"    # génère une réponse
 SPEAKING = "SPEAKING"    # parle (TTS)
 WATCHING = "WATCHING"    # regarde l'écran (VLM)
-LISTENING = "LISTENING"  # écoute le micro — inactif, voir ci-dessous
+LISTENING = "LISTENING"  # attentive : Cyril s'adresse à elle
 
 PRESENCE_STATES = (IDLE, THINKING, SPEAKING, WATCHING, LISTENING)
 
-# LISTENING est prévu mais inatteignable aujourd'hui : le PC n'a pas de
-# micro (IDEAS.md #69). Il s'activera avec le pont mobile, en même temps
-# que le moteur STT déjà écrit. Le rendu est en place pour ne pas avoir
-# à y revenir.
-INACTIVE_STATES = (LISTENING,)
+# LISTENING ne veut pas dire « micro ouvert » : il signifie que Cyril est
+# en train de s'adresser à Luca's. Il est déclenché aujourd'hui par la
+# saisie clavier (ui.main_window._on_typing) — donc les cinq modes sont
+# bel et bien atteignables. Le micro viendra s'y ajouter avec le pont
+# mobile (IDEAS.md #69), sans changer le sens de l'état.
 
 # Ambre plutôt que cyan pour WATCHING, et c'est un choix de sécurité :
 # l'avatar sert de témoin, comme la LED d'une webcam. Quand Luca's
