@@ -14,6 +14,7 @@ main dans le `justfile`.
 | Script | Ce qu'il fait réellement | Dépendances |
 |---|---|---|
 | `demo_avatar.py` | Affiche l'avatar et ses 5 modes, pour juger l'esthétique | aucune |
+| `demo_voices.py` | Prononce la même phrase avec les 5 voix, pour comparer | réseau (edge) |
 | `demo_vision.py` | Capture l'écran et le fait décrire par le VLM local | Ollama + llava |
 | `demo_automation.py` | Ouvre des applications de la liste blanche | aucune |
 
