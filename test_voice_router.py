@@ -152,6 +152,72 @@ def test_speak_returns_none_when_nothing_spoken(spy_manager, monkeypatch) -> Non
     assert manager.speak("mon budget est serré", "") is None
 
 
+# ── Chaîne complète jusqu'à la base ───────────────────────────────────
+
+def test_event_reaches_the_database(tmp_path, monkeypatch) -> None:
+    """
+    Vérifie la chaîne réelle VoiceManager -> OrionCore.log_event ->
+    MemoryManager.save_event -> table system_events. Les mocks des tests
+    précédents ne prouvent que l'appel, pas l'écriture.
+
+    Base temporaire : on ne touche pas à orion_memory.db.
+    """
+    from memory.memory_manager import MemoryManager
+
+    memory = MemoryManager(db_path=tmp_path / "test_memory.db")
+    manager = VoiceManager(log_event=memory.save_event)
+
+    monkeypatch.setattr(vm_module, "TTS_ALLOW_CLOUD_ON_SENSITIVE", False)
+    monkeypatch.setattr(
+        manager, "_synthesize_piper",
+        lambda text, output_path=None: (_ for _ in ()).throw(PiperUnavailable("absent")),
+    )
+
+    assert manager._synthesize_routed("Mon portfolio vaut 50000 euros.", "") is None
+
+    rows = memory.cursor.execute(
+        "SELECT event_type, details FROM system_events ORDER BY id DESC LIMIT 1"
+    ).fetchall()
+    memory.close()
+
+    assert rows, "l'événement doit être écrit en base, pas seulement loggué en mémoire"
+    assert rows[0][0] == "tts_skipped_sensitive"
+    assert "portfolio" in rows[0][1]
+
+
+# ── Câblage UI ────────────────────────────────────────────────────────
+
+def test_tts_worker_passes_question_and_logger(monkeypatch) -> None:
+    """
+    Le TTSWorker doit transmettre la question au routeur : sans elle,
+    « quel est mon salaire ? » -> « 3200 euros » repartirait vers le cloud.
+    """
+    pytest.importorskip("PySide6")
+    from ui.main_window import TTSWorker
+
+    received: dict[str, object] = {}
+
+    class FakeVoiceManager:
+        def __init__(self, log_event=None):
+            received["log_event"] = log_event
+
+        def speak(self, text, question=""):
+            received["text"] = text
+            received["question"] = question
+            return "data/output_piper.wav"
+
+    monkeypatch.setattr("ui.main_window.VoiceManager", FakeVoiceManager)
+
+    def logger(event_type: str, details: str = "") -> None:
+        pass
+
+    worker = TTSWorker("Il est de 3200 euros.", "quel est mon salaire ?", logger)
+    worker.run()
+
+    assert received["question"] == "quel est mon salaire ?"
+    assert received["log_event"] is logger
+
+
 # ── PiperEngine ───────────────────────────────────────────────────────
 
 def test_missing_model_raises_piper_unavailable(tmp_path) -> None:
