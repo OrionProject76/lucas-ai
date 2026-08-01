@@ -229,10 +229,15 @@ DOCUMENTS_DIR = "data/documents"
 # attestations .docx).
 #
 #     seuil   extraits utiles gardés   hors-sujet bloqués
-#     0,32            88 %                  100 %      <- retenu
-#     0,33            88 %                   88 %
-#     0,34            90 %                   75 %
-#     0,38            92 %                   25 %
+#     0,34            88 %                  100 %      <- retenu
+#     0,36            98 %                   50 %
+#     0,37           100 %                   25 %
+#     0,39           100 %                    0 %
+#
+# ⚠️ Recalibré après l'ajout du nom de fichier en tête de chaque morceau
+# (format d'indexation v3) : les distances se sont resserrées, donc le
+# seuil monte sans rien céder. Tout changement du format de découpage
+# invalide cette valeur — relancer demos/calibrate_rag.py.
 #
 # ⚠️ 12 % des extraits utiles sont écartés : sur certaines questions
 # légitimes, Luca's répondra qu'elle ne trouve rien. C'est le prix pour
@@ -254,7 +259,7 @@ DOCUMENTS_DIR = "data/documents"
 # Ce seuil reste le SECOND verrou : le premier est core/intent.py, qui
 # empêche la plupart des questions hors sujet d'atteindre le RAG — c'est
 # pourquoi une valeur imparfaite dégrade sans casser.
-RAG_MAX_DISTANCE: float = 0.32
+RAG_MAX_DISTANCE: float = 0.34
 
 # --- Intention : écran, documents, ou ni l'un ni l'autre ---
 # Les listes de mots-clés couvraient 50 % des formulations réelles et ne

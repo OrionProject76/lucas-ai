@@ -256,6 +256,37 @@ def test_un_document_vide_est_ignore(rag, dossier):
 
 # ── Découpage ─────────────────────────────────────────────────────────
 
+def test_le_nom_du_fichier_est_indexe_avec_le_contenu(rag, dossier):
+    """
+    Mesuré sur les documents réels : « Résume-moi mon CV » remontait
+    « Demande d'autorisation d'absence » et jamais le CV, dont le contenu
+    ne prononce jamais le mot « CV ». Le nom du fichier est l'information
+    que Cyril utilise pour désigner un document, et c'était la seule à ne
+    pas être indexée.
+    """
+    index_directory(dossier)
+
+    morceaux = [d for d, m in rag.collection.docs.values() if m["source"] == "conges.txt"]
+    assert morceaux
+    assert all(m.startswith("[Document : conges.txt]") for m in morceaux)
+
+
+def test_changer_le_format_force_la_reindexation(rag, dossier, monkeypatch):
+    """
+    Sans version de format dans l'empreinte, un changement de découpage
+    laisserait la base intacte : le contenu source étant identique,
+    add_text() conclurait « inchangé » et personne ne verrait que la base
+    est restée à l'ancien format.
+    """
+    index_directory(dossier)
+    avant = dict(rag.collection.docs)
+
+    monkeypatch.setattr(type(rag), "_FORMAT_VERSION", 99)
+    index_directory(dossier)
+
+    assert rag.collection.docs != avant, "la base n'a pas été reconstruite"
+
+
 def test_le_decoupage_respecte_les_paragraphes():
     """
     L'ancienne version coupait tous les 500 caractères sans regarder le

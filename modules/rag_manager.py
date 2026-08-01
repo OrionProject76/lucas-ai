@@ -67,6 +67,15 @@ class RAGManager:
     # textes, ce qui rend RAG_MAX_DISTANCE interprétable. Voir config.py.
     _SPACE = "cosine"
 
+    # Version du format d'indexation. À INCRÉMENTER dès que le découpage
+    # ou la mise en forme des morceaux change : elle entre dans l'empreinte
+    # de add_text(), donc l'incrémenter suffit à forcer la réindexation de
+    # toute la base au prochain passage.
+    #   1 — découpage brut tous les 500 caractères
+    #   2 — découpage par paragraphes, avec recouvrement
+    #   3 — nom du fichier ajouté en tête de chaque morceau (01/08/2026)
+    _FORMAT_VERSION = 3
+
     def _open_collection(self):
         """
         Ouvre la collection, en la recréant si elle utilise encore l'ancien
@@ -221,8 +230,29 @@ class RAGManager:
             print(f"Document vide, ignoré: {doc_id}")
             return False
 
-        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
-        chunks = self._chunk_text(text)
+        # ⚠️ La version du FORMAT entre dans l'empreinte. Sans elle, un
+        # changement de découpage ou de préfixe laisserait la base
+        # inchangée : le contenu source est le même, donc add_text()
+        # conclurait « inchangé » et personne ne verrait que la base est
+        # restée à l'ancien format.
+        digest = hashlib.sha256(
+            f"{self._FORMAT_VERSION}\n{text}".encode("utf-8")
+        ).hexdigest()[:16]
+
+        # ⚠️ Le NOM DU FICHIER est ajouté en tête de chaque morceau.
+        #
+        # Mesuré sur les documents réels de Cyril : « Résume-moi mon CV »
+        # remontait « Demande d'autorisation d'absence » (0,303) et jamais
+        # le CV, dont le contenu ne prononce jamais le mot « CV ». Avec le
+        # nom en tête, le bon document sort premier (0,282), et les quatre
+        # questions testées s'améliorent — « ma demande d'autorisation
+        # d'absence » passe de 0,308 à 0,172.
+        #
+        # C'est l'information que Cyril utilise pour désigner un document,
+        # et elle était la seule à ne pas être indexée.
+        chunks = [
+            f"[Document : {doc_id}]\n{morceau}" for morceau in self._chunk_text(text)
+        ]
 
         if self.use_chroma and self.collection:
             if self._already_indexed(doc_id, digest):
