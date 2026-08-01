@@ -31,7 +31,10 @@ class OrionCore:
         is_cloud = destination == "cloud"
 
         snapshot = get_snapshot()
-        system_context = format_for_prompt(snapshot)
+        # Le titre de la fenêtre active ne part jamais vers le cloud : il
+        # révèle sur quoi Cyril travaille (« releve_bancaire.pdf »…) même
+        # quand la question posée est anodine. CPU et RAM restent joints.
+        system_context = format_for_prompt(snapshot, include_window=not is_cloud)
 
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},

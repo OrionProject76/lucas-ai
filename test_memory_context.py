@@ -55,6 +55,31 @@ def test_no_relevant_event_returns_empty_string() -> None:
     assert format_events_for_prompt([("tts_cloud_on_sensitive", "x", "2026-08-01")]) == ""
 
 
+# ── format_for_prompt() : le titre de fenêtre ─────────────────────────
+
+def test_window_title_is_omitted_when_asked() -> None:
+    """
+    Un titre de fenêtre est une donnée personnelle en soi : il révèle sur
+    quoi Cyril travaille, même quand la question posée est anodine.
+    """
+    from core.world_model import format_for_prompt
+
+    snapshot = {
+        "cpu_percent": 12.0,
+        "ram_percent": 44.0,
+        "active_window": "releve_bancaire_2026.pdf - Acrobat",
+    }
+
+    with_window = format_for_prompt(snapshot)
+    without_window = format_for_prompt(snapshot, include_window=False)
+
+    assert "releve_bancaire" in with_window
+    assert "releve_bancaire" not in without_window
+    # CPU et RAM ne disent rien de Cyril : ils restent dans les deux cas.
+    assert "CPU 12.0%" in without_window
+    assert "RAM 44.0%" in without_window
+
+
 # ── Injection dans _build_messages() ──────────────────────────────────
 
 class _FakeMemory:
@@ -73,7 +98,10 @@ class _FakeMemory:
 @pytest.fixture
 def core_with_events(monkeypatch) -> tuple[OrionCore, _FakeMemory]:
     monkeypatch.setattr(orion_core, "get_snapshot", dict)
-    monkeypatch.setattr(orion_core, "format_for_prompt", lambda snapshot: "[système]")
+    monkeypatch.setattr(
+        orion_core, "format_for_prompt",
+        lambda snapshot, include_window=True: "[système]",
+    )
     monkeypatch.setattr(orion_core, "RAGManager", lambda: None)
 
     memory = _FakeMemory([
@@ -89,6 +117,28 @@ def test_local_prompt_contains_events(core_with_events) -> None:
     core, _memory = core_with_events
     messages = core._build_messages("comment ça va ?", "local")
     assert any("app_launched" in m["content"] for m in messages)
+
+
+def test_cloud_prompt_omits_window_title(monkeypatch) -> None:
+    """
+    Intégration, avec le vrai format_for_prompt : le titre de fenêtre ne
+    doit apparaître que dans le prompt local.
+    """
+    monkeypatch.setattr(orion_core, "get_snapshot", lambda: {
+        "cpu_percent": 10.0,
+        "ram_percent": 30.0,
+        "active_window": "budget_2026.xlsx - Excel",
+    })
+
+    core = OrionCore.__new__(OrionCore)
+    core.memory = _FakeMemory([])
+
+    local = " ".join(m["content"] for m in core._build_messages("bonjour", "local"))
+    cloud = " ".join(m["content"] for m in core._build_messages("bonjour", "cloud"))
+
+    assert "budget_2026.xlsx" in local
+    assert "budget_2026.xlsx" not in cloud, "le titre de fenêtre ne doit jamais sortir"
+    assert "CPU 10.0%" in cloud, "CPU et RAM restent joints, ils ne disent rien de Cyril"
 
 
 def test_cloud_prompt_never_contains_events(core_with_events) -> None:
@@ -108,7 +158,10 @@ def test_event_limit_comes_from_config(core_with_events) -> None:
 def test_no_empty_system_message_when_no_events(monkeypatch) -> None:
     """Aucun événement pertinent : pas de message système vide dans le prompt."""
     monkeypatch.setattr(orion_core, "get_snapshot", dict)
-    monkeypatch.setattr(orion_core, "format_for_prompt", lambda snapshot: "[système]")
+    monkeypatch.setattr(
+        orion_core, "format_for_prompt",
+        lambda snapshot, include_window=True: "[système]",
+    )
 
     core = OrionCore.__new__(OrionCore)
     core.memory = _FakeMemory([])

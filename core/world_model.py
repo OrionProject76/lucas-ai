@@ -72,14 +72,23 @@ def format_events_for_prompt(events: list[tuple[str, str, str]]) -> str:
     return "[Événements système récents, du plus récent au plus ancien :\n" + "\n".join(lines) + "]"
 
 
-def format_for_prompt(snapshot: dict) -> str:
+def format_for_prompt(snapshot: dict, include_window: bool = True) -> str:
     """
     Formate le snapshot en une courte phrase à injecter dans le prompt
     système du LLM. Reste bref — inutile de noyer le contexte du modèle
     avec des chiffres si ce n'est pas pertinent pour la question posée.
+
+    `include_window=False` retire le titre de la fenêtre active. À utiliser
+    pour toute requête cloud : un titre comme « budget_2026.xlsx - Excel »
+    ou « releve_bancaire.pdf » est une donnée personnelle en soi, même
+    quand la question posée est anodine. CPU et RAM ne disent rien de
+    Cyril et restent joints. Voir CLAUDE.md règle 3.
     """
-    return (
-        f"[Contexte système : CPU {snapshot['cpu_percent']}%, "
-        f"RAM {snapshot['ram_percent']}%, "
-        f"fenêtre active « {snapshot['active_window']} »]"
-    )
+    parts = [
+        f"CPU {snapshot['cpu_percent']}%",
+        f"RAM {snapshot['ram_percent']}%",
+    ]
+    if include_window:
+        parts.append(f"fenêtre active « {snapshot['active_window']} »")
+
+    return "[Contexte système : " + ", ".join(parts) + "]"

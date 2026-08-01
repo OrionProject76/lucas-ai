@@ -82,7 +82,10 @@ class _FakeMemory:
 def core_with_history(monkeypatch) -> OrionCore:
     """OrionCore sans base ni World Model, avec 40 messages d'historique."""
     monkeypatch.setattr(orion_core, "get_snapshot", dict)
-    monkeypatch.setattr(orion_core, "format_for_prompt", lambda snapshot: "[système]")
+    monkeypatch.setattr(
+        orion_core, "format_for_prompt",
+        lambda snapshot, include_window=True: "[système]",
+    )
     monkeypatch.setattr(
         orion_core, "RAGManager", lambda: _FakeRag()
     )

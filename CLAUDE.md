@@ -65,6 +65,9 @@ non négociable : c'est elle qui rend l'assouplissement acceptable.
 - pas de contexte RAG (extraits de documents personnels)
 - pas d'événements système : la table `system_events` contient des extraits
   de contenu sensible (voir `voice_manager._log`), elle ne sort jamais
+- **pas le titre de la fenêtre active** : « releve_bancaire.pdf » révèle sur
+  quoi Cyril travaille même quand la question est anodine. CPU et RAM
+  restent joints, ils ne disent rien de lui
 - historique tronqué à `CLOUD_HISTORY_MESSAGES` (6) au lieu de 100 en local
 
 **Implémentation de référence** : `core/router.py` — `route()`, `is_sensitive()`,
