@@ -163,6 +163,9 @@ class TTSWorker(QThread):
     """Thread séparé pour la synthèse vocale — ne bloque jamais l'UI."""
     finished = Signal()
     error = Signal(str)
+    # Émis quand le son démarre réellement, pas quand la synthèse est
+    # lancée : edge_tts passe par le réseau et met plusieurs secondes.
+    playback_started = Signal()
 
     def __init__(self, text: str, question: str = "", log_event=None):
         super().__init__()
@@ -176,7 +179,12 @@ class TTSWorker(QThread):
                 vm = VoiceManager(log_event=self.log_event)
                 # speak() route entre Piper (local) et edge_tts (cloud) selon
                 # la sensibilité du contenu — voir CLAUDE.md règle 3.
-                if vm.speak(self.text, self.question) is None:
+                spoken = vm.speak(
+                    self.text,
+                    self.question,
+                    on_playback_start=self.playback_started.emit,
+                )
+                if spoken is None:
                     self.error.emit(SENSITIVE_SKIPPED_MESSAGE)
             else:
                 self.error.emit("Module voix non disponible")
@@ -478,16 +486,29 @@ class MainWindow(QWidget):
         )
 
     def _speak(self, text: str):
-        """Lance la lecture vocale dans un thread séparé."""
-        self._set_avatar_state("SPEAKING")
+        """
+        Lance la lecture vocale dans un thread séparé.
+
+        L'avatar ne passe PAS en SPEAKING tout de suite : la synthèse
+        prend plusieurs secondes avec edge_tts, qui passe par le réseau.
+        Le faire ici montrerait Luca's en train de parler pendant un
+        silence — l'avatar mentirait sur son état.
+        """
+        self._set_status("🔊 Synthèse de la voix...", "connecting")
         self.tts_worker = TTSWorker(
             text,
             getattr(self, "last_user_message", ""),
             self.orion.log_event,
         )
+        self.tts_worker.playback_started.connect(self._on_playback_started)
         self.tts_worker.finished.connect(self._on_tts_finished)
         self.tts_worker.error.connect(self._on_tts_error)
         self.tts_worker.start()
+
+    def _on_playback_started(self):
+        """Le son démarre : c'est maintenant que Luca's parle."""
+        self.status_label.setVisible(False)
+        self._set_avatar_state("SPEAKING")
 
     def _on_tts_finished(self):
         self._set_avatar_state("IDLE")

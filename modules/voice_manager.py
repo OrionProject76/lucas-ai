@@ -104,17 +104,30 @@ class VoiceManager:
             print(f"Erreur lecture audio: {e}")
             return False
 
-    def speak(self, text: str, question: str = "") -> str | None:
+    def speak(
+        self,
+        text: str,
+        question: str = "",
+        on_playback_start: Callable[[], None] | None = None,
+    ) -> str | None:
         """
         Route puis prononce. Retourne le chemin audio joué, ou None si rien
         n'a été prononcé (contenu sensible + voix locale indisponible).
 
         `question` sert au routage : une réponse anodine à une question
         sensible reste sensible.
+
+        `on_playback_start` est appelé juste avant que le son démarre.
+        La synthèse prend du temps — plusieurs secondes avec edge_tts, qui
+        passe par le réseau. Sans ce signal, l'appelant ne peut que
+        supposer que Luca's parle dès l'appel, et afficherait un avatar en
+        train de parler pendant un silence.
         """
         audio_path = self._synthesize_routed(text, question)
         if audio_path is None:
             return None
+        if on_playback_start is not None:
+            on_playback_start()
         self.play_audio(audio_path)
         return audio_path
 

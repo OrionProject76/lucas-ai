@@ -131,6 +131,24 @@ def test_status_variants_keep_the_base_style() -> None:
     del app
 
 
+def test_avatar_speaks_only_once_the_sound_starts() -> None:
+    """
+    _speak() ne doit pas basculer l'avatar en SPEAKING : la synthèse
+    prend plusieurs secondes, l'avatar paraîtrait parler dans le vide.
+    Le basculement appartient à _on_playback_started().
+    """
+    import inspect
+
+    from ui import main_window
+
+    launch = inspect.getsource(main_window.MainWindow._speak)
+    assert '"SPEAKING"' not in launch
+    assert "playback_started" in launch
+
+    on_start = inspect.getsource(main_window.MainWindow._on_playback_started)
+    assert '"SPEAKING"' in on_start
+
+
 def test_no_composite_object_name_remains() -> None:
     """Garde anti-régression sur le piège Qt."""
     import inspect

@@ -139,6 +139,35 @@ def test_logged_excerpt_is_truncated(spy_manager, monkeypatch) -> None:
     assert "mon salaire" in details
 
 
+def test_playback_callback_fires_before_the_sound(spy_manager, monkeypatch) -> None:
+    """
+    La synthèse prend plusieurs secondes avec edge_tts, qui passe par le
+    réseau. Sans ce signal, l'UI afficherait un avatar en train de parler
+    pendant un silence.
+    """
+    manager, _spy = spy_manager
+    order: list[str] = []
+    monkeypatch.setattr(manager, "play_audio", lambda path: order.append("son"))
+
+    manager.speak("bonjour", "", on_playback_start=lambda: order.append("signal"))
+
+    assert order == ["signal", "son"]
+
+
+def test_no_playback_callback_when_nothing_is_spoken(spy_manager, monkeypatch) -> None:
+    """Contenu sensible non prononcé : l'avatar ne doit pas parler."""
+    manager, _spy = spy_manager
+    monkeypatch.setattr(vm_module, "TTS_ALLOW_CLOUD_ON_SENSITIVE", False)
+    monkeypatch.setattr(
+        manager, "_synthesize_piper",
+        lambda text, output_path=None: (_ for _ in ()).throw(PiperUnavailable("absent")),
+    )
+    fired: list[bool] = []
+
+    assert manager.speak("mon budget", "", on_playback_start=lambda: fired.append(True)) is None
+    assert fired == []
+
+
 def test_speak_returns_none_when_nothing_spoken(spy_manager, monkeypatch) -> None:
     """speak() doit signaler à l'UI qu'il n'y a pas eu de son."""
     manager, _spy = spy_manager
@@ -201,9 +230,10 @@ def test_tts_worker_passes_question_and_logger(monkeypatch) -> None:
         def __init__(self, log_event=None):
             received["log_event"] = log_event
 
-        def speak(self, text, question=""):
+        def speak(self, text, question="", on_playback_start=None):
             received["text"] = text
             received["question"] = question
+            received["on_playback_start"] = on_playback_start
             return "data/output_piper.wav"
 
     monkeypatch.setattr("ui.main_window.VoiceManager", FakeVoiceManager)
@@ -216,6 +246,9 @@ def test_tts_worker_passes_question_and_logger(monkeypatch) -> None:
 
     assert received["question"] == "quel est mon salaire ?"
     assert received["log_event"] is logger
+    assert received["on_playback_start"] is not None, (
+        "l'UI doit être prévenue du démarrage réel du son"
+    )
 
 
 # ── PiperEngine ───────────────────────────────────────────────────────
