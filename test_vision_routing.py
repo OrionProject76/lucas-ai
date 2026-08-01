@@ -16,7 +16,6 @@ from core import orion_core
 from core.orion_core import OrionCore
 from core.router import route, should_use_vision
 
-
 # ── Déclencheur ───────────────────────────────────────────────────────
 
 @pytest.mark.parametrize(
@@ -96,12 +95,21 @@ def core(monkeypatch):
     return instance
 
 
-def _fake_vision(monkeypatch, description: str):
+def _fake_vision(monkeypatch, description: str, captured: dict | None = None):
     class _FakeVisionManager:
         def __init__(self, model=None):
             self.model = model
 
-        def see_and_describe(self):
+        def capture_screen(self, output_path=None):
+            return "data/screenshot.png"
+
+        def analyze_image(self, path, prompt=None):
+            if captured is not None:
+                captured["prompt"] = prompt
+                captured["path"] = path
+            return description
+
+        def see_and_describe(self, prompt=None):
             return description
 
     monkeypatch.setattr(
@@ -148,6 +156,30 @@ def test_vision_use_is_logged(core, monkeypatch) -> None:
     _fake_vision(monkeypatch, "un bureau")
     core._build_messages("regarde mon écran", "local")
     assert "vision_used" in [t for t, _ in core.memory.events]
+
+
+# ── Le VLM reçoit la vraie question ───────────────────────────────────
+
+def test_the_users_question_reaches_the_vlm(core, monkeypatch) -> None:
+    """
+    « C'est quoi cette erreur ? » doit être posée au modèle vision.
+    Une description passe-partout obligerait le LLM principal à deviner
+    ce qui compte dans un écran entier, et perdrait le détail demandé.
+    """
+    captured: dict = {}
+    _fake_vision(monkeypatch, "une erreur de chemin invalide", captured)
+
+    core._build_messages("c'est quoi cette erreur à l'écran ?", "local")
+
+    assert "c'est quoi cette erreur" in captured["prompt"]
+
+
+def test_vision_prompt_asks_for_french() -> None:
+    """llava bascule spontanément en anglais sans consigne explicite."""
+    prompt = OrionCore._vision_prompt("que vois-tu ?")
+    assert "français" in prompt
+    assert "capture" in prompt.lower()
+    assert "que vois-tu ?" in prompt
 
 
 # ── Dégradation ───────────────────────────────────────────────────────

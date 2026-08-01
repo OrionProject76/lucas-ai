@@ -85,6 +85,21 @@ class OrionCore:
             messages.append({"role": role, "content": content})
         return messages
 
+    @staticmethod
+    def _vision_prompt(user_message: str) -> str:
+        """
+        Transforme la question de Cyril en consigne pour le VLM.
+
+        Le modèle vision ne connaît pas la conversation : lui donner la
+        question brute suffit, mais il faut lui rappeler qu'il regarde
+        une capture d'écran et qu'il doit répondre en français — llava
+        bascule spontanément en anglais sinon.
+        """
+        return (
+            "Voici une capture de l'écran de l'utilisateur. "
+            f"Réponds en français, précisément, à sa question : {user_message}"
+        )
+
     def _describe_screen(self, user_message: str) -> str:
         """
         Capture l'écran et le fait décrire par le VLM local.
@@ -104,7 +119,15 @@ class OrionCore:
         try:
             from modules.vision_manager import VisionManager
 
-            description = VisionManager(model=VLM_MODEL).see_and_describe()
+            vision = VisionManager(model=VLM_MODEL)
+            # On transmet la vraie question au VLM plutôt qu'un « décris
+            # cette image » générique. « C'est quoi cette erreur ? »
+            # obtient une réponse ciblée ; la description passe-partout
+            # obligerait le LLM principal à deviner ce qui compte dans un
+            # écran entier, et perdrait justement le détail demandé.
+            description = vision.analyze_image(
+                vision.capture_screen(), self._vision_prompt(user_message)
+            )
         except Exception as e:  # noqa: BLE001 — voir docstring
             self.log_event("vision_failed", str(e)[:200])
             return ""
@@ -114,7 +137,10 @@ class OrionCore:
             return ""
 
         self.log_event("vision_used", user_message[:80])
-        return f"[Écran de Cyril, décrit à l'instant : {description}]"
+        return (
+            "[Luca's vient de regarder l'écran de Cyril. Ce qu'elle y a vu, "
+            f"en réponse à sa question : {description}]"
+        )
 
     def ask(self, user_message: str) -> str:
         self.memory.save_message("user", user_message)
