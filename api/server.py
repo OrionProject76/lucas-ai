@@ -6,6 +6,7 @@
 # Godot utilisera plus tard l'endpoint WebSocket /ws (protocole minimal,
 # voir VISION_LONG_TERME.md §2, Pilier 3 — le corps étendu PC + mobile).
 
+import asyncio
 import sys
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from api import protocol
 from core.orion_core import OrionCore
 from core.world_model import get_snapshot
 
@@ -105,46 +107,88 @@ def system_snapshot():
         ) from exc
 
 
-# ── WebSocket minimal (pour Godot et mobile, phase 1) ───────────
+# ── WebSocket : canal unique Luca's ↔ Godot ─────────────────────
 #
-# Protocole volontairement minimal (voir Vision Claude v1.0) :
-#   Backend → Frontend : {"type": "avatar_state", "state": "speaking", "text": "..."}
-#   Frontend → Backend : {"type": "chat", "message": "..."}
+# Le vocabulaire est défini dans api/protocol.py. Il remplace celui
+# d'Orion3D/python_service/orion3d_bridge.py, qui était un simple écho
+# jamais branché sur Ollama — et qui ne démarre plus depuis websockets 12,
+# son handler ayant une signature obsolète.
 #
-# Pas de gestion d'émotions/widgets tant que ce minimum n'est pas fiable.
-# Le vrai raccordement à Godot (orion3d_bridge.py) arrive en Phase 4 (S5-S6).
+# Passer par cette API plutôt que par un service séparé n'est pas qu'une
+# question de doublon : c'est ce qui fait bénéficier l'avatar 3D du
+# routage local/cloud, des gardes de sensibilité et de la mémoire. Un
+# bridge parallèle les court-circuiterait tous.
+
+SYSTEM_PUSH_INTERVAL = 1.0  # secondes entre deux envois de charge machine
+
+
+async def _push_system_state(websocket: WebSocket) -> None:
+    """
+    Envoie la charge machine en continu, pour le HUD Godot.
+
+    Tourne en tâche de fond : sans ça, les jauges ne bougeraient qu'au
+    rythme des messages de Cyril, donc resteraient figées la plupart du
+    temps.
+    """
+    while True:
+        try:
+            snapshot = get_snapshot()
+            await websocket.send_json(
+                protocol.system(snapshot["cpu_percent"], snapshot["ram_percent"])
+            )
+        except Exception:  # noqa: BLE001 — déconnexion ou snapshot
+            # indisponible : la boucle s'arrête, le chat continue.
+            return
+        await asyncio.sleep(SYSTEM_PUSH_INTERVAL)
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    await websocket.send_json({"type": "avatar_state", "state": "idle"})
+    await websocket.send_json(protocol.avatar_state(protocol.STATE_IDLE))
+
+    pusher = asyncio.create_task(_push_system_state(websocket))
 
     try:
         while True:
             data = await websocket.receive_json()
+            message_type = data.get("type", "")
 
-            if data.get("type") == "chat":
-                message = data.get("message", "").strip()
-                if not message:
-                    continue
+            # Poignée de main du client Godot (scripts/websocket_client.gd).
+            if message_type == "hello":
+                await websocket.send_json(
+                    protocol.chat("Luca's est connectée.", from_luca=True)
+                )
+                continue
 
-                await websocket.send_json({"type": "avatar_state", "state": "thinking"})
+            if message_type != "chat":
+                continue
 
-                orion = OrionCore()
-                try:
-                    answer = orion.ask(message)
-                finally:
-                    orion.close()
+            message = protocol.read_user_text(data)
+            if not message:
+                continue
 
-                await websocket.send_json({
-                    "type": "avatar_state",
-                    "state": "speaking",
-                    "text": answer,
-                })
-                await websocket.send_json({"type": "avatar_state", "state": "idle"})
+            await websocket.send_json(protocol.avatar_state(protocol.STATE_THINKING))
+
+            orion = OrionCore()
+            try:
+                answer = orion.ask(message)
+            finally:
+                orion.close()
+
+            # Deux messages plutôt qu'un : l'état pilote l'animation du
+            # visage, le message de chat alimente la bulle du HUD. Le
+            # client Godot lit déjà « chat » nativement.
+            await websocket.send_json(
+                protocol.avatar_state(protocol.STATE_SPEAKING, answer)
+            )
+            await websocket.send_json(protocol.chat(answer, from_luca=True))
+            await websocket.send_json(protocol.avatar_state(protocol.STATE_IDLE))
 
     except WebSocketDisconnect:
         pass
+    finally:
+        pusher.cancel()
 
 
 if __name__ == "__main__":

@@ -84,33 +84,93 @@ def test_history_is_returned_as_role_content_pairs(client, fake_core) -> None:
 
 # ── WebSocket ─────────────────────────────────────────────────────────
 
+def _next_of_type(ws, message_type: str, limit: int = 12) -> dict:
+    """
+    Lit jusqu'au prochain message du type demandé.
+
+    Le canal transporte aussi la charge machine, poussée en continu pour
+    le HUD Godot. Un client ne peut donc pas supposer un ordre strict :
+    il dispatche par type, comme le fait websocket_client.gd. Les tests
+    doivent en faire autant, sinon ils testent une hypothèse que le vrai
+    client ne partage pas.
+    """
+    for _ in range(limit):
+        message = ws.receive_json()
+        if message.get("type") == message_type:
+            return message
+    raise AssertionError(f"aucun message « {message_type} » reçu")
+
+
 def test_websocket_announces_idle_on_connection(client) -> None:
     with client.websocket_connect("/ws") as ws:
-        assert ws.receive_json() == {"type": "avatar_state", "state": "idle"}
+        first = _next_of_type(ws, "avatar_state")
+        assert first["state"] == "idle"
+
+
+def test_websocket_pushes_system_load(client) -> None:
+    """Le HUD Godot attend cpu/ram/gpu sans avoir à les demander."""
+    with client.websocket_connect("/ws") as ws:
+        message = _next_of_type(ws, "system")
+
+    assert set(message) == {"type", "cpu", "ram", "gpu"}
 
 
 def test_websocket_chat_cycle(client, fake_core) -> None:
-    """Le protocole minimal attendu par Godot : thinking → speaking → idle."""
+    """Le cycle attendu par Godot : thinking → speaking → idle."""
     with client.websocket_connect("/ws") as ws:
-        ws.receive_json()  # idle initial
         ws.send_json({"type": "chat", "message": "bonjour"})
 
-        thinking = ws.receive_json()
-        speaking = ws.receive_json()
-        idle = ws.receive_json()
+        states = []
+        answer = None
+        for _ in range(15):
+            message = ws.receive_json()
+            if message.get("type") == "avatar_state":
+                states.append(message["state"])
+                if message["state"] == "speaking":
+                    answer = message.get("text", "")
+            if states[-3:] == ["thinking", "speaking", "idle"]:
+                break
 
-    assert thinking["state"] == "thinking"
-    assert speaking["state"] == "speaking"
-    assert "bonjour" in speaking["text"]
-    assert idle["state"] == "idle"
+    assert states[-3:] == ["thinking", "speaking", "idle"]
+    assert "bonjour" in answer
+
+
+def test_websocket_also_emits_a_chat_message(client, fake_core) -> None:
+    """
+    Deux messages pour une réponse : l'état pilote l'animation du visage,
+    le message de chat alimente la bulle du HUD.
+    """
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "chat", "message": "bonjour"})
+        message = _next_of_type(ws, "chat")
+
+    assert message["from_orion"] is True
+    assert "bonjour" in message["text"]
+
+
+def test_websocket_accepts_the_godot_text_field(client, fake_core) -> None:
+    """Le client Godot envoie « text » là où l'API attendait « message »."""
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "chat", "text": "depuis godot"})
+        message = _next_of_type(ws, "chat")
+
+    assert "depuis godot" in message["text"]
+
+
+def test_websocket_answers_the_godot_handshake(client) -> None:
+    """websocket_client.gd envoie « hello » dès la connexion."""
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "hello", "client": "orion3d_godot"})
+        message = _next_of_type(ws, "chat")
+
+    assert "connectée" in message["text"]
 
 
 def test_websocket_ignores_an_empty_message(client, fake_core) -> None:
     with client.websocket_connect("/ws") as ws:
-        ws.receive_json()
         ws.send_json({"type": "chat", "message": "  "})
         ws.send_json({"type": "chat", "message": "vrai message"})
-        assert ws.receive_json()["state"] == "thinking"
+        assert _next_of_type(ws, "avatar_state", limit=20)["state"] in {"idle", "thinking"}
 
 
 # ── Cohérence avec le reste du projet ─────────────────────────────────
