@@ -1,14 +1,21 @@
 # ui/main_window.py — interface Luca's
 # Avatar animé + TTS auto + Streaming fluide + HUD dark
 
-from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QTextEdit, QLineEdit, QPushButton, QLabel, QHBoxLayout
-)
 from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
-from core.orion_core import OrionCore
+from config import WINDOW_HEIGHT, WINDOW_TITLE, WINDOW_WIDTH
 from core.llm_worker import LLMWorker
-from config import WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT
+from core.orion_core import OrionCore
+from core.router import should_use_vision
 
 # ── Imports optionnels — fallback gracieux ──
 try:
@@ -18,7 +25,7 @@ except ImportError:
     HAS_AVATAR = False
 
 try:
-    from modules.voice_manager import VoiceManager, SENSITIVE_SKIPPED_MESSAGE
+    from modules.voice_manager import SENSITIVE_SKIPPED_MESSAGE, VoiceManager
     HAS_VOICE = True
 except ImportError:
     HAS_VOICE = False
@@ -108,6 +115,42 @@ QLabel#status_thinking {
 """
 
 
+class ContextWorker(QThread):
+    """
+    Construit le contexte du prompt hors du thread principal.
+
+    Nécessaire depuis l'arrivée de la vision : sur « regarde mon écran »,
+    le premier chargement de llava en VRAM prend ~25 s. Le faire dans le
+    thread UI figerait toute l'interface, sans même un curseur d'attente.
+
+    ⚠️ Le worker crée sa PROPRE instance d'OrionCore. SQLite refuse d'être
+    utilisé depuis un autre thread que celui qui a ouvert la connexion —
+    réutiliser celle de MainWindow lèverait une ProgrammingError. Même
+    raison que dans api/server.py, et sans coût : tout l'état vit dans la
+    base, pas en mémoire Python.
+    """
+
+    ready = Signal(list)
+    error = Signal(str)
+
+    def __init__(self, text: str):
+        super().__init__()
+        self.text = text
+
+    def run(self):
+        core = None
+        try:
+            core = OrionCore()
+            self.ready.emit(core.prepare(self.text))
+        except Exception as e:  # noqa: BLE001 — une erreur de contexte
+            # doit devenir un message dans le chat, jamais une exception
+            # qui remonte dans la boucle Qt et fait tomber la fenêtre.
+            self.error.emit(f"[Erreur] Préparation du contexte impossible : {e}")
+        finally:
+            if core is not None:
+                core.close()
+
+
 class TTSWorker(QThread):
     """Thread séparé pour la synthèse vocale — ne bloque jamais l'UI."""
     finished = Signal()
@@ -129,7 +172,8 @@ class TTSWorker(QThread):
                     self.error.emit(SENSITIVE_SKIPPED_MESSAGE)
             else:
                 self.error.emit("Module voix non disponible")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — un souci de synthèse ne
+            # doit pas faire tomber le thread ni l'interface.
             self.error.emit(str(e))
         finally:
             self.finished.emit()
@@ -304,23 +348,38 @@ class MainWindow(QWidget):
         # sensible reste sensible (voir core.router.route_voice).
         self.last_user_message = text
 
-        messages = self.orion.prepare(text)
-
         # UI en mode "attente"
         self.send_button.setVisible(False)
         self.stop_button.setVisible(True)
         self.input_field.setEnabled(False)
 
-        self.status_label.setText("⏳ Connexion à Ollama...")
+        # La construction du contexte peut être longue : sur une question
+        # « regarde mon écran », le premier chargement de llava en VRAM
+        # prend ~25 s (0,8 s ensuite, modèle chaud). D'où le message
+        # explicite plutôt qu'une interface figée sans explication.
+        if should_use_vision(text):
+            self.status_label.setText("👁️ Luca's regarde ton écran...")
+        else:
+            self.status_label.setText("⏳ Préparation du contexte...")
         self.status_label.setObjectName("status status_connecting")
         self.status_label.setVisible(True)
+
+        self._set_avatar_state("THINKING")
+
+        # Le contexte est construit dans un thread : capture d'écran,
+        # analyse VLM et requête RAG bloqueraient sinon toute l'interface.
+        self.context_worker = ContextWorker(text)
+        self.context_worker.ready.connect(self._on_context_ready)
+        self.context_worker.error.connect(self._on_error)
+        self.context_worker.start()
+
+    def _on_context_ready(self, messages: list):
+        """Le contexte est prêt : on peut lancer la génération."""
+        self.status_label.setText("⏳ Connexion à Ollama...")
 
         self.chat_history.append(
             '<span style="color:#E8EAED;"><b>Luca&#39;s :</b></span> '
         )
-
-        # Avatar en mode réflexion
-        self._set_avatar_state("THINKING")
 
         # Lancer le worker LLM
         self.worker = LLMWorker(messages)

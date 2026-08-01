@@ -89,6 +89,14 @@ class OrionCore:
         """
         Capture l'écran et le fait décrire par le VLM local.
 
+        ⚠️ Coût mesuré sur cette machine : **~25 s au premier appel**, le
+        temps qu'Ollama charge llava en VRAM, puis **~0,8 s** tant que le
+        modèle reste chaud. Réduire la capture (4K → 1080p) ne change
+        rien : llava redimensionne en interne. Ollama décharge le modèle
+        après quelques minutes d'inactivité, donc l'attente de 25 s
+        revient périodiquement — c'est pour ça que l'UI construit le
+        contexte dans un thread (voir ui.main_window.ContextWorker).
+
         Retourne une chaîne vide en cas d'échec plutôt que de propager :
         une vision indisponible doit dégrader la réponse, pas empêcher
         Luca's de répondre du tout.
