@@ -21,6 +21,7 @@ from security import (
     INFO,
     WARNING,
     Guardian,
+    PersistenceWatch,
     PrivacyShield,
     RansomwareWatch,
     format_report,
@@ -609,6 +610,209 @@ def test_monitor_never_acts() -> None:
     source = inspect.getsource(mon_module)
     for call in ("kill(", "terminate(", "shutdown(", "suspend("):
         assert call not in source
+
+
+# ── Mémoire des comportements ─────────────────────────────────────────
+
+@pytest.fixture
+def history(tmp_path, monkeypatch):
+    """Historique sur fichier temporaire, apprentissage déjà terminé."""
+    from security import history as history_module
+    from security.history import BehaviourHistory
+
+    monkeypatch.setattr(history_module, "SECURITY_LEARNING_HOURS", 0)
+    return BehaviourHistory(tmp_path / "history.json")
+
+
+def test_first_observation_is_new(history) -> None:
+    assert history.is_new("net|chrome.exe|8.8.8.8")
+
+
+def test_second_observation_is_not_new(history) -> None:
+    """L'ordre compte : répondre puis enregistrer, jamais l'inverse."""
+    history.is_new("net|chrome.exe|8.8.8.8")
+    assert not history.is_new("net|chrome.exe|8.8.8.8")
+
+
+def test_learning_period_observes_without_alerting(tmp_path, monkeypatch) -> None:
+    """
+    Sans période d'apprentissage, le premier balayage signalerait chaque
+    programme de la machine. Le rapport serait illisible.
+    """
+    from security import history as history_module
+    from security.history import BehaviourHistory
+
+    monkeypatch.setattr(history_module, "SECURITY_LEARNING_HOURS", 24)
+    learning = BehaviourHistory(tmp_path / "h.json")
+
+    assert learning.is_learning
+    assert not learning.is_new("net|inconnu.exe|1.1.1.1"), "rien ne doit être signalé"
+    assert learning.has_seen("net|inconnu.exe|1.1.1.1"), "mais tout doit être mémorisé"
+
+
+def test_history_survives_a_restart(tmp_path, monkeypatch) -> None:
+    from security import history as history_module
+    from security.history import BehaviourHistory
+
+    monkeypatch.setattr(history_module, "SECURITY_LEARNING_HOURS", 0)
+    path = tmp_path / "h.json"
+
+    first = BehaviourHistory(path)
+    first.is_new("net|a.exe|1.1.1.1")
+    first.save()
+
+    assert not BehaviourHistory(path).is_new("net|a.exe|1.1.1.1")
+
+
+def test_corrupted_history_starts_empty(tmp_path) -> None:
+    """Perdre la mémoire dégrade la détection ; planter la supprime."""
+    from security.history import BehaviourHistory
+
+    path = tmp_path / "h.json"
+    path.write_text("ceci n'est pas du json", encoding="utf-8")
+    assert len(BehaviourHistory(path)) == 0
+
+
+def test_old_entries_are_purged(tmp_path, monkeypatch) -> None:
+    """Un comportement oublié redevient un signal à son retour."""
+    import json
+    import time
+
+    from security import history as history_module
+    from security.history import BehaviourHistory
+
+    monkeypatch.setattr(history_module, "SECURITY_HISTORY_RETENTION_DAYS", 30)
+    ancient = time.time() - 40 * 86400
+    path = tmp_path / "h.json"
+    path.write_text(
+        json.dumps({
+            "started_at": ancient,
+            "entries": {"net|vieux.exe|1.1.1.1": {"first_seen": ancient, "last_seen": ancient}},
+        }),
+        encoding="utf-8",
+    )
+
+    assert len(BehaviourHistory(path)) == 0
+
+
+# ── Premier contact externe ───────────────────────────────────────────
+
+def test_first_external_contact_is_flagged(history) -> None:
+    finding = PrivacyShield(history=history)._check_first_external_contact(
+        "inconnu.exe", r"C:\App\inconnu.exe", "8.8.8.8"
+    )
+    assert finding is not None
+    assert finding.severity == WARNING
+
+
+def test_known_contact_is_silent(history) -> None:
+    shield = PrivacyShield(history=history)
+    shield._check_first_external_contact("chrome.exe", "", "8.8.8.8")
+    assert shield._check_first_external_contact("chrome.exe", "", "8.8.8.8") is None
+
+
+def test_source_port_changes_do_not_create_noise(history) -> None:
+    """
+    La clé ne retient que (programme, IP). Inclure le port source ferait
+    paraître tout nouveau à chaque connexion.
+    """
+    shield = PrivacyShield(history=history)
+    assert shield._check_first_external_contact("a.exe", "", "8.8.8.8") is not None
+    assert shield._check_first_external_contact("a.exe", "", "8.8.8.8") is None
+
+
+def test_two_different_ips_are_two_facts(history) -> None:
+    shield = PrivacyShield(history=history)
+    first = shield._check_first_external_contact("a.exe", "", "8.8.8.8")
+    second = shield._check_first_external_contact("a.exe", "", "1.1.1.1")
+    assert first is not None and second is not None
+
+    kept = PrivacyShield._deduplicate([first, second])
+    assert len(kept) == 2, "deux IP nouvelles ne doivent pas être fondues en une"
+
+
+def test_without_history_the_sensor_keeps_level_0_behaviour() -> None:
+    assert PrivacyShield()._check_first_external_contact("a.exe", "", "8.8.8.8") is None
+
+
+# ── Persistance au démarrage ──────────────────────────────────────────
+
+def test_autostart_from_a_temp_directory_is_critical(history) -> None:
+    watch = PersistenceWatch(history=history)
+    assert watch._is_volatile(r"C:\Users\PC\AppData\Local\Temp\x.exe")
+
+
+def test_autostart_from_program_files_is_normal(history) -> None:
+    watch = PersistenceWatch(history=history)
+    assert not watch._is_volatile(r"C:\Program Files\App\app.exe")
+
+
+def test_volatile_autostart_is_reported(monkeypatch, history) -> None:
+    from security import persistence_watch as pw
+
+    monkeypatch.setattr(
+        pw, "_read_registry_autostarts",
+        lambda: [("HKCU\\Run", "truc", r"C:\Users\PC\AppData\Local\Temp\truc.exe")],
+    )
+    monkeypatch.setattr(pw, "_read_startup_folder", list)
+
+    findings = PersistenceWatch(history=history).scan()
+    assert any(f.kind == "autostart_volatile" and f.severity == CRITICAL for f in findings)
+
+
+def test_new_autostart_entry_is_reported_once(monkeypatch, history) -> None:
+    from security import persistence_watch as pw
+
+    monkeypatch.setattr(
+        pw, "_read_registry_autostarts",
+        lambda: [("HKCU\\Run", "MonApp", r"C:\Program Files\MonApp\app.exe")],
+    )
+    monkeypatch.setattr(pw, "_read_startup_folder", list)
+
+    watch = PersistenceWatch(history=history)
+    first = [f.kind for f in watch.scan()]
+    second = [f.kind for f in watch.scan()]
+
+    assert "autostart_new" in first
+    assert "autostart_new" not in second, "une entrée connue ne doit plus alerter"
+
+
+def test_inventory_is_reported_as_info(monkeypatch, history) -> None:
+    from security import persistence_watch as pw
+
+    monkeypatch.setattr(
+        pw, "_read_registry_autostarts",
+        lambda: [("HKCU\\Run", "A", r"C:\Program Files\a.exe")],
+    )
+    monkeypatch.setattr(pw, "_read_startup_folder", list)
+
+    findings = PersistenceWatch(history=history).scan()
+    inventory = [f for f in findings if f.kind == "autostart_inventory"]
+    assert inventory and inventory[0].severity == INFO
+
+
+def test_persistence_watch_never_writes_to_the_registry() -> None:
+    """Observation seule : le module lit le registre, il n'y écrit jamais."""
+    import inspect
+
+    from security import persistence_watch
+
+    source = inspect.getsource(persistence_watch)
+    for forbidden in ("SetValue", "CreateKey", "DeleteKey", "DeleteValue"):
+        assert forbidden not in source
+
+
+def test_unreadable_registry_does_not_break_the_scan(monkeypatch, history) -> None:
+    from security import persistence_watch as pw
+
+    def denied():
+        raise OSError("accès refusé")
+
+    monkeypatch.setattr(pw, "_read_registry_autostarts", denied)
+    monkeypatch.setattr(pw, "_read_startup_folder", list)
+
+    with pytest.raises(OSError):
+        PersistenceWatch(history=history).scan()
 
 
 # ── Rapport ───────────────────────────────────────────────────────────

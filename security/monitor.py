@@ -19,6 +19,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 from security.guardian import Guardian
+from security.history import BehaviourHistory
+from security.persistence_watch import PersistenceWatch
 from security.privacy_shield import PrivacyShield
 from security.ransomware_watch import RansomwareWatch
 from security.types import INFO, Finding
@@ -43,14 +45,20 @@ class SecurityMonitor:
         self,
         log_event: Callable[[str, str], None] | None = None,
         state_path: Path | str | None = None,
+        history=None,
     ) -> None:
         self.log_event = log_event
         self.state_path = Path(state_path or DEFAULT_STATE_PATH)
+        # Mémoire partagée des comportements : ce que la machine a
+        # l'habitude de faire. Deux capteurs s'en servent pour distinguer
+        # « nouveau » de « connu ».
+        self.history = history if history is not None else BehaviourHistory()
         # Les capteurs ne journalisent pas eux-mêmes : c'est le moniteur
         # qui décide, après déduplication.
         self.guardian = Guardian()
-        self.privacy_shield = PrivacyShield()
+        self.privacy_shield = PrivacyShield(history=self.history)
         self.ransomware_watch = RansomwareWatch()
+        self.persistence_watch = PersistenceWatch(history=self.history)
         self._seen: dict[str, float] = self._load_state()
 
     # ── État persistant ───────────────────────────────────────────────
@@ -87,12 +95,22 @@ class SecurityMonitor:
         return self._report_new(self.guardian.scan() + self.privacy_shield.scan())
 
     def scan_filesystem(self) -> list[Finding]:
-        """Fichiers — plus lent, à espacer davantage."""
-        return self._report_new(self.ransomware_watch.scan())
+        """
+        Fichiers et points de démarrage — plus lent, à espacer.
+
+        La persistance change rarement : la balayer toutes les 5 min
+        avec le runtime serait du gaspillage pour un signal identique.
+        """
+        return self._report_new(
+            self.ransomware_watch.scan() + self.persistence_watch.scan()
+        )
 
     def scan_all(self) -> list[Finding]:
         return self._report_new(
-            self.guardian.scan() + self.privacy_shield.scan() + self.ransomware_watch.scan()
+            self.guardian.scan()
+            + self.privacy_shield.scan()
+            + self.ransomware_watch.scan()
+            + self.persistence_watch.scan()
         )
 
     # ── Déduplication ─────────────────────────────────────────────────

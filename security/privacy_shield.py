@@ -60,8 +60,16 @@ class PrivacyShield:
     `log_event` est injecté : security/ ne doit pas importer OrionCore.
     """
 
-    def __init__(self, log_event: Callable[[str, str], None] | None = None) -> None:
+    def __init__(
+        self,
+        log_event: Callable[[str, str], None] | None = None,
+        history=None,
+    ) -> None:
         self.log_event = log_event
+        # Mémoire des comportements, injectée : security/ n'a pas à savoir
+        # où elle est stockée. Absente, le capteur garde son comportement
+        # de niveau 0 — il détecte, mais sans notion de « nouveau ».
+        self.history = history
 
     # ── Heuristiques unitaires ────────────────────────────────────────
 
@@ -120,6 +128,32 @@ class PrivacyShield:
             evidence={"process": name, "port": laddr.port, "chemin": exe or "inconnu"},
         )
 
+    def _check_first_external_contact(self, name: str, exe: str, ip: str) -> Finding | None:
+        """
+        Premier contact d'un programme avec une adresse publique.
+
+        La clé retenue est (programme, IP) SANS le port : les ports
+        source changent à chaque connexion, les inclure ferait paraître
+        tout nouveau à chaque balayage et noierait le signal.
+
+        Sans historique injecté, ce contrôle ne s'applique pas.
+        """
+        if self.history is None:
+            return None
+
+        if not self.history.is_new(f"net|{name.lower()}|{ip}"):
+            return None
+
+        return Finding(
+            severity=WARNING,
+            kind="first_external_contact",
+            summary=(
+                f"« {name} » contacte {ip} pour la première fois. "
+                "Nouveau comportement réseau pour ce programme."
+            ),
+            evidence={"process": name, "distant": ip, "chemin": exe or "inconnu"},
+        )
+
     # ── Balayage ──────────────────────────────────────────────────────
 
     def scan(self) -> list[Finding]:
@@ -161,10 +195,16 @@ class PrivacyShield:
 
             if conn.raddr and _is_external(conn.raddr.ip):
                 remote = f"{conn.raddr.ip}:{conn.raddr.port}"
-                finding = self._check_volatile_process_online(name, exe, remote)
-                if finding is not None:
-                    finding.evidence["pid"] = conn.pid
-                    findings.append(finding)
+                for check in (
+                    self._check_volatile_process_online(name, exe, remote),
+                    self._check_first_external_contact(name, exe, conn.raddr.ip),
+                ):
+                    if check is not None:
+                        check.evidence["pid"] = conn.pid
+                        findings.append(check)
+
+        if self.history is not None:
+            self.history.save()
 
         findings = self._deduplicate(findings)
         self._log(findings)
@@ -189,7 +229,15 @@ class PrivacyShield:
         seen: set[tuple] = set()
         unique: list[Finding] = []
         for finding in findings:
-            key = (finding.kind, finding.evidence.get("process"), finding.evidence.get("port"))
+            # « distant » entre dans la clé : deux nouvelles IP pour le
+            # même programme sont deux faits distincts, les fondre en
+            # ferait disparaître un.
+            key = (
+                finding.kind,
+                finding.evidence.get("process"),
+                finding.evidence.get("port"),
+                finding.evidence.get("distant"),
+            )
             if key in seen:
                 continue
             seen.add(key)

@@ -101,7 +101,16 @@ La détection de rançongiciel repose sur les **métadonnées seules** (extensio
 
 **Surveillance continue branchée sur le daemon** (01/08/2026) : `SecurityMonitor` orchestre les trois capteurs depuis `orion_daemon.py` — process et réseau toutes les 5 minutes, fichiers toutes les 15. Les signaux ne sont rapportés qu'une fois : un état persistant (`data/security_state.json`) déduplique d'un balayage à l'autre et d'un redémarrage à l'autre, et oublie un signal après 3 jours d'absence pour que son retour soit de nouveau une information. Les alertes atterrissent dans `system_events`, donc dans le contexte que Luca's injecte au LLM.
 
-Prochains niveaux envisageables : suivi des hooks clavier (keylogger), historique des connexions pour repérer les anomalies dans la durée, analyse d'entropie du contenu des fichiers (nécessite l'accord de Cyril — le capteur ouvrirait ses documents).
+**Niveau 1 livré le 01/08/2026 — les capteurs ont une mémoire.** `security/history.py` retient ce que la machine a l'habitude de faire, et deux capteurs s'en servent :
+
+- **Premier contact externe** : un programme qui contacte une adresse publique pour la première fois est signalé. La clé retenue est (programme, IP) sans le port — les ports source changent à chaque connexion, les inclure ferait tout paraître nouveau.
+- **Persistance au démarrage** (`security/persistence_watch.py`) : lecture des clés `Run`/`RunOnce` du registre et du dossier Démarrage. CRITIQUE si l'entrée pointe vers un répertoire temporaire, WARNING si elle est apparue depuis le dernier balayage. Le module lit le registre, il n'y écrit jamais.
+
+**Période d'apprentissage de 24 h** (`SECURITY_LEARNING_HOURS`) : les capteurs observent sans alerter au démarrage. Mesuré sur cette machine, sans elle : **27 alertes au premier balayage** — chaque navigateur et application contactant Internet. Le rapport aurait été illisible et abandonné.
+
+⚠️ **Sur les hooks clavier** : `ROADMAP` annonçait « suivi des hooks clavier (keylogger) ». Ce n'est **pas observable depuis Python de façon portable** — énumérer les hooks `SetWindowsHookEx` demande des appels natifs Win32 que `psutil` n'expose pas. Un module nommé « détecteur de keylogger » qui ne détecte rien donnerait une fausse assurance, exactement ce que §4.1 cherche à éviter. La détection de persistance vise le même adversaire par un angle réellement observable : un keylogger doit survivre au redémarrage.
+
+Prochains niveaux envisageables : analyse d'entropie du contenu des fichiers (nécessite l'accord de Cyril — le capteur ouvrirait ses documents), détection native des hooks clavier (nécessite une dépendance Win32).
 
 **Nouveau principe acté le 01/08/2026 — la liberté est conditionnée à la protection.** Guardian et Privacy Shield (`security/`) deviennent une dépendance directe de toute extension future des libertés d'action de Luca's : plus ils sont matures et testés, plus le périmètre d'autonomie peut s'élargir. Concrètement pour le séquencement de ce fichier, aucune phase n'ouvre de nouveaux droits d'action (OS Controller, automation, exécution autonome) tant que ces deux modules ne sont pas au moins ébauchés et testés. Ils n'appartiennent donc plus au « polish » de la Phase 5 — ce sont des prérequis. Doctrine : `VISION_LONG_TERME.md` §4.1, résumé opposable : `CLAUDE.md`.
 

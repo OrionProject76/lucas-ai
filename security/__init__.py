@@ -23,7 +23,9 @@
 # vigilance avant qu'on lui confie les clés.
 
 from security.guardian import Guardian
+from security.history import BehaviourHistory
 from security.monitor import SecurityMonitor
+from security.persistence_watch import PersistenceWatch
 from security.privacy_shield import PrivacyShield
 from security.ransomware_watch import RansomwareWatch
 from security.types import CRITICAL, INFO, WARNING, Finding, format_report
@@ -32,8 +34,10 @@ __all__ = [
     "CRITICAL",
     "INFO",
     "WARNING",
+    "BehaviourHistory",
     "Finding",
     "Guardian",
+    "PersistenceWatch",
     "PrivacyShield",
     "RansomwareWatch",
     "SecurityMonitor",

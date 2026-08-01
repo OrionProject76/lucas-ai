@@ -78,6 +78,17 @@ STT_CACHE_SIZE: int = 20
 API_HOST = "127.0.0.1"
 API_PORT = 8000
 
+# --- Sécurité : mémoire des comportements ---
+# Période d'apprentissage : les capteurs observent sans alerter pendant
+# ce délai après la création de l'historique. Sans elle, le premier
+# balayage signalerait chaque programme de la machine comme « nouveau »,
+# et le rapport deviendrait illisible.
+SECURITY_LEARNING_HOURS: int = 24
+
+# Au-delà, un comportement non revu est oublié. Son retour redevient donc
+# un signal, et le fichier ne grossit pas indéfiniment.
+SECURITY_HISTORY_RETENTION_DAYS: int = 30
+
 # --- Sécurité : surveillance rançongiciel ---
 # Répertoires surveillés, relatifs au profil utilisateur. Seules les
 # métadonnées sont lues (noms, extensions, dates) — jamais le contenu
