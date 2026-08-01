@@ -13,9 +13,13 @@ La commande est **relançable sans risque** : un fichier inchangé est
 ignoré, un fichier modifié est réindexé, un fichier supprimé du dossier
 est retiré de la base.
 
-**Formats lus** : `.txt`, `.md`, `.markdown`, `.rst`, `.csv`, `.json`,
-`.log`. Les PDF et les `.docx` sont signalés mais pas encore lus — la
+**Formats lus** : `.pdf`, `.txt`, `.md`, `.markdown`, `.rst`, `.csv`, `.json`,
+`.log`. Les `.docx` sont signalés mais pas encore lus — la
 commande dit quoi installer.
+
+⚠️ Un PDF **scanné** (photographié, sans couche texte) est refusé avec un
+message explicite plutôt qu'indexé à vide : seul un OCR le rendrait
+consultable. Piste pour la v1.1.
 
 ## Rien ne sort de la machine
 

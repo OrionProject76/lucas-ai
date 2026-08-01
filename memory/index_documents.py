@@ -44,26 +44,81 @@ if __package__ in (None, ""):  # exécution directe : python memory/index_docume
 from config import DOCUMENTS_DIR  # noqa: E402
 from modules.rag_manager import RAGManager  # noqa: E402
 
-# Formats lus sans dépendance supplémentaire. Le PDF est volontairement
-# absent : aucun lecteur n'est installé, et en ajouter un est une
-# décision de dépendance, pas un détail — voir _explain_unsupported().
+# Formats lus sans dépendance supplémentaire.
 TEXT_SUFFIXES = {".txt", ".md", ".markdown", ".rst", ".csv", ".json", ".log"}
 
-# Signalés explicitement plutôt qu'ignorés en silence : un document
-# déposé qui n'apparaît jamais dans les réponses est un bug incompréhensible
-# du point de vue de Cyril.
+# Le PDF demande pypdf (installé le 01/08/2026 à la demande de Cyril :
+# ses contrats et relevés sont dans ce format). Traité à part parce que
+# la dépendance peut manquer sur une autre machine — le module doit
+# rester utilisable sans elle.
+PDF_SUFFIXES = {".pdf"}
+
+# ⚠️ Un PDF SCANNÉ ne contient aucune couche texte : pypdf en extrait une
+# chaîne vide ou quelques caractères parasites. C'est le cas le plus
+# courant pour un contrat reçu par la poste et photographié. En dessous
+# de ce seuil, on considère qu'il n'y a rien à indexer et on le DIT —
+# indexer trois caractères de bruit rendrait le document introuvable
+# tout en le faisant apparaître comme traité.
+PDF_MIN_CHARS = 80
+
 # Le mode d'emploi du dossier n'est pas un document de Cyril. Indexé, il
 # répondrait à « comment j'indexe mes documents ? » par lui-même, et
 # polluerait les recherches comme le faisait sample_document.txt.
 EXCLUDED_NAMES = {"readme.md", "readme.txt", "lisezmoi.txt"}
 
+# Signalés explicitement plutôt qu'ignorés en silence : un document
+# déposé qui n'apparaît jamais dans les réponses est un bug
+# incompréhensible du point de vue de Cyril.
 KNOWN_UNSUPPORTED = {
-    ".pdf": "pip install pypdf",
     ".docx": "pip install python-docx",
     ".doc": "format ancien — réenregistrer en .docx ou .txt",
     ".odt": "réenregistrer en .txt",
     ".xlsx": "exporter en .csv",
 }
+
+
+class UnreadablePDF(Exception):
+    """PDF illisible — chiffré, corrompu, ou sans couche texte."""
+
+
+def _read_pdf(path: Path) -> str:
+    """
+    Extrait le texte d'un PDF.
+
+    ⚠️ Lève UnreadablePDF plutôt que de rendre une chaîne vide sur un PDF
+    scanné. La distinction compte pour Cyril : « document vide, ignoré »
+    ne lui dit pas quoi faire, « aucune couche texte, probablement
+    scanné » lui dit que seul un OCR le rendrait consultable.
+    """
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:
+        raise UnreadablePDF("pypdf absent — pip install pypdf") from exc
+
+    try:
+        reader = PdfReader(str(path))
+        if reader.is_encrypted:
+            # Un mot de passe vide suffit pour beaucoup de PDF « protégés
+            # contre l'impression » — ça vaut la peine d'essayer avant
+            # d'abandonner.
+            try:
+                reader.decrypt("")
+            except Exception as exc:  # noqa: BLE001
+                raise UnreadablePDF("PDF chiffré, mot de passe requis") from exc
+
+        pages = [page.extract_text() or "" for page in reader.pages]
+    except UnreadablePDF:
+        raise
+    except Exception as exc:  # noqa: BLE001 — pypdf lève des types variés
+        raise UnreadablePDF(f"illisible ({type(exc).__name__})") from exc
+
+    texte = "\n\n".join(p.strip() for p in pages if p.strip())
+    if len(texte) < PDF_MIN_CHARS:
+        raise UnreadablePDF(
+            f"aucune couche texte ({len(texte)} caractères sur "
+            f"{len(reader.pages)} page(s)) — probablement scanné"
+        )
+    return texte
 
 
 def _read_text(path: Path) -> str | None:
@@ -83,6 +138,23 @@ def _read_text(path: Path) -> str | None:
     return None
 
 
+def _read(path: Path) -> tuple[str | None, str]:
+    """
+    Lit un document, quel que soit son format.
+
+    Retourne (texte, motif) — `motif` explique l'échec quand `texte` est
+    None, pour que la sortie dise POURQUOI un fichier n'est pas indexé.
+    """
+    if path.suffix.lower() in PDF_SUFFIXES:
+        try:
+            return _read_pdf(path), ""
+        except UnreadablePDF as exc:
+            return None, str(exc)
+
+    texte = _read_text(path)
+    return (texte, "") if texte is not None else (None, "encodage illisible")
+
+
 def _collect(directory: Path) -> tuple[list[Path], dict[str, list[str]]]:
     """Fichiers indexables, et fichiers reconnus mais non gérés."""
     indexable: list[Path] = []
@@ -94,7 +166,7 @@ def _collect(directory: Path) -> tuple[list[Path], dict[str, list[str]]]:
         if path.name.lower() in EXCLUDED_NAMES:
             continue
         suffix = path.suffix.lower()
-        if suffix in TEXT_SUFFIXES:
+        if suffix in TEXT_SUFFIXES or suffix in PDF_SUFFIXES:
             indexable.append(path)
         elif suffix in KNOWN_UNSUPPORTED:
             unsupported.setdefault(suffix, []).append(path.name)
@@ -137,7 +209,7 @@ def index_directory(directory: str | Path = DOCUMENTS_DIR, reset: bool = False) 
     fichiers, non_geres = _collect(directory)
     if not fichiers:
         print(f"Aucun fichier indexable dans {directory}")
-        print(f"Formats lus : {', '.join(sorted(TEXT_SUFFIXES))}")
+        print(f"Formats lus : {', '.join(sorted(TEXT_SUFFIXES | PDF_SUFFIXES))}")
         _explain_unsupported(non_geres)
         return 1
 
@@ -150,9 +222,9 @@ def index_directory(directory: str | Path = DOCUMENTS_DIR, reset: bool = False) 
         doc_id = path.name
         vus.add(doc_id)
 
-        texte = _read_text(path)
+        texte, motif = _read(path)
         if texte is None:
-            print(f"  illisible  {doc_id}")
+            print(f"  illisible  {doc_id} — {motif}")
             illisibles += 1
             continue
 

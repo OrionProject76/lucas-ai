@@ -129,15 +129,107 @@ def test_le_readme_du_dossier_n_est_pas_un_document(rag, dossier):
 
 def test_les_formats_non_geres_sont_signales(rag, dossier, capsys):
     """
-    Ignorés en silence, un PDF déposé qui n'apparaît jamais dans les
+    Ignorés en silence, un .docx déposé qui n'apparaît jamais dans les
     réponses serait incompréhensible du point de vue de Cyril.
     """
-    (dossier / "releve.pdf").write_bytes(b"%PDF-1.4 faux")
+    (dossier / "rapport.docx").write_bytes(b"PK faux docx")
     index_directory(dossier)
 
     sortie = capsys.readouterr().out
-    assert "releve.pdf" in sortie
-    assert "pypdf" in sortie
+    assert "rapport.docx" in sortie
+    assert "python-docx" in sortie
+
+
+# ── PDF ───────────────────────────────────────────────────────────────
+#
+# pypdf est installé depuis le 01/08/2026 : les contrats et relevés de
+# Cyril sont dans ce format. Aucun PDF réel n'est lu ici — c'est le
+# COMPORTEMENT face aux trois cas qui compte, et deux d'entre eux
+# (scanné, corrompu) sont ceux qu'on rencontre vraiment.
+
+def _fake_pypdf(monkeypatch, pages, encrypted=False, boom=None):
+    """Remplace pypdf.PdfReader par une doublure."""
+    import sys
+    import types
+
+    class _Page:
+        def __init__(self, texte):
+            self._texte = texte
+
+        def extract_text(self):
+            return self._texte
+
+    class _Reader:
+        def __init__(self, path):
+            if boom:
+                raise boom
+            self.is_encrypted = encrypted
+            self.pages = [_Page(p) for p in pages]
+
+        def decrypt(self, password):
+            raise ValueError("mot de passe requis")
+
+    module = types.ModuleType("pypdf")
+    module.PdfReader = _Reader
+    monkeypatch.setitem(sys.modules, "pypdf", module)
+
+
+def test_un_pdf_avec_texte_est_indexe(rag, dossier, monkeypatch):
+    _fake_pypdf(monkeypatch, ["La franchise s'eleve a 150 euros par sinistre declare. " * 3])
+    (dossier / "contrat.pdf").write_bytes(b"%PDF-1.4")
+    index_directory(dossier)
+
+    assert "contrat.pdf" in rag.indexed_documents()
+
+
+def test_un_pdf_scanne_est_signale_comme_tel(rag, dossier, monkeypatch, capsys):
+    """
+    LE cas courant : un contrat reçu par la poste et photographié n'a
+    aucune couche texte. « document vide » ne dirait pas quoi faire ;
+    « probablement scanné » dit que seul un OCR le rendrait consultable.
+    """
+    _fake_pypdf(monkeypatch, ["", "  "])
+    (dossier / "scan.pdf").write_bytes(b"%PDF-1.4")
+    index_directory(dossier)
+
+    sortie = capsys.readouterr().out
+    assert "scan.pdf" in sortie
+    assert "scanné" in sortie
+    assert "scan.pdf" not in rag.indexed_documents()
+
+
+def test_un_pdf_corrompu_n_interrompt_pas_les_autres(rag, dossier, monkeypatch):
+    from pypdf.errors import PdfStreamError
+
+    _fake_pypdf(monkeypatch, [], boom=PdfStreamError("flux illisible"))
+    (dossier / "casse.pdf").write_bytes(b"%PDF-1.4 faux")
+    index_directory(dossier)
+
+    assert "casse.pdf" not in rag.indexed_documents()
+    assert "assurance.md" in rag.indexed_documents()
+
+
+def test_un_pdf_chiffre_est_signale(rag, dossier, monkeypatch, capsys):
+    _fake_pypdf(monkeypatch, ["du texte"], encrypted=True)
+    (dossier / "protege.pdf").write_bytes(b"%PDF-1.4")
+    index_directory(dossier)
+
+    assert "chiffré" in capsys.readouterr().out
+
+
+def test_pypdf_absent_ne_casse_pas_l_indexation(rag, dossier, monkeypatch, capsys):
+    """
+    La dépendance peut manquer sur une autre machine : le module doit
+    rester utilisable, en signalant quoi installer.
+    """
+    import sys
+
+    monkeypatch.setitem(sys.modules, "pypdf", None)
+    (dossier / "contrat.pdf").write_bytes(b"%PDF-1.4")
+    index_directory(dossier)
+
+    assert "pip install pypdf" in capsys.readouterr().out
+    assert "assurance.md" in rag.indexed_documents()
 
 
 def test_un_fichier_illisible_n_interrompt_pas_les_autres(rag, dossier):

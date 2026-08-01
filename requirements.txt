@@ -41,6 +41,14 @@ Pillow>=12.0.0           # Images pour le VLM (modules/vision_manager.py)
 # utilise le GPU — soit la contention avec Ollama qu'on cherche à éviter.
 rapidocr-onnxruntime>=1.4.0
 
+# Lecture des PDF pour le RAG (memory/index_documents.py). Les contrats
+# et relevés de Cyril sont dans ce format, ils étaient jusqu'ici
+# signalés mais pas lus.
+# ⚠️ pypdf n'extrait que la couche TEXTE. Un PDF scanné n'en a pas : il
+# est refusé avec un message explicite, pas indexé à vide. Le passer par
+# l'OCR (modules/ocr_engine.py, déjà là) est une piste v1.1.
+pypdf>=6.0.0
+
 # ─── Canal WebSocket & télémétrie ──────────
 # websockets : uvicorn s'en sert pour servir /ws — c'est la seule
 # implémentation installée, la retirer casserait le canal Godot.
