@@ -64,6 +64,50 @@ def test_listening_is_triggered_by_typing() -> None:
     assert '"LISTENING"' in source
 
 
+def test_clearing_the_input_returns_to_idle(app) -> None:
+    """
+    Effacer sa saisie laissait l'avatar en LISTENING indéfiniment, y
+    compris après avoir renoncé à écrire.
+    """
+    from ui.main_window import MainWindow
+
+    window = MainWindow()
+    window.input_field.setText("bonjour")
+    assert window.avatar.state == "LISTENING"
+
+    window.input_field.setText("")
+    assert window.avatar.state == IDLE
+    window.close()
+
+
+def test_typing_does_not_disturb_a_running_generation(app, monkeypatch) -> None:
+    """
+    Effacer son texte pendant que Luca's réfléchit la ferait paraître au
+    repos alors qu'elle travaille.
+    """
+    from ui.main_window import MainWindow
+
+    window = MainWindow()
+    window._set_avatar_state(THINKING)
+
+    class _Busy:
+        @staticmethod
+        def isRunning():
+            return True
+
+        @staticmethod
+        def stop():
+            """closeEvent() interrompt le worker en cours."""
+
+    window.worker = _Busy()
+    window.input_field.setText("texte")
+    assert window.avatar.state == THINKING
+
+    window.input_field.setText("")
+    assert window.avatar.state == THINKING
+    window.close()
+
+
 def test_every_state_has_a_status_label() -> None:
     """
     WATCHING manquait : le libellé disait « En ligne » pendant que

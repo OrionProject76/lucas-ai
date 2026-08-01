@@ -347,9 +347,26 @@ class MainWindow(QWidget):
         )
 
     def _on_typing(self):
-        """Détecte la saisie utilisateur → avatar passe en LISTENING."""
-        if self.input_field.text().strip() and self.avatar:
+        """
+        Cyril tape : Luca's devient attentive. Champ vidé : elle revient
+        au repos.
+
+        Le retour manquait — effacer sa saisie laissait l'avatar en
+        LISTENING indéfiniment, y compris après avoir renoncé à écrire.
+
+        Ne s'applique que si aucune génération n'est en cours : sinon un
+        effacement pendant que Luca's réfléchit la ferait paraître au
+        repos alors qu'elle travaille.
+        """
+        if not self.avatar:
+            return
+        if self.worker is not None and self.worker.isRunning():
+            return
+
+        if self.input_field.text().strip():
             self._set_avatar_state("LISTENING")
+        elif self.avatar.state == "LISTENING":
+            self._set_avatar_state("IDLE")
 
     # ── Chat history ──
     def _load_history(self):
