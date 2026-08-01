@@ -52,6 +52,15 @@ test:
 test-quick:
     pytest -v --ignore=test_voice.py
 
+# NB : ceux-ci parlent aux VRAIS services — Ollama, Piper, registre
+# Windows. Lents (~20 s) et dépendants de l'environnement, donc exclus
+# de la suite par défaut via pytest.ini. Chaque test se saute proprement
+# si sa dépendance manque, plutôt que d'échouer.
+
+# Tests d'intégration (Ollama doit tourner)
+test-integration:
+    pytest test_integration.py -m integration -v
+
 # NB : ruff format réécrit les fichiers sur place.
 
 # Linting + formatage

@@ -122,9 +122,16 @@ L'API expose `GET /status`, `GET /system`, `POST /chat` et `WS /ws`.
 ### Vérifier que tout fonctionne
 
 ```powershell
-pytest test_router.py -v          # 15 tests, tous verts
+just test-quick                   # suite complète, ~3 s, tout mocké
+just test-integration             # chaîne réelle avec Ollama, ~20 s
 python -c "import config, core.orion_core, main; print('imports OK')"
 ```
+
+Les tests d'intégration parlent aux vrais services — Ollama, Piper, le
+registre Windows. Ils sont exclus de la suite par défaut parce qu'ils
+sont lents et dépendent de l'environnement. Chacun se saute proprement
+si sa dépendance manque : un test rouge parce qu'Ollama est éteint
+n'apprendrait rien.
 
 ---
 
