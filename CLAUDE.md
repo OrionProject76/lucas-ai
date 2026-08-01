@@ -28,7 +28,7 @@ Cœur : LLM Multi-Modèles (Ollama local, RTX 5080)
 ## 🚫 Règles Absolues (NE JAMAIS ENFREINDRE)
 1. **PySide6 uniquement** — PAS PyQt6
 2. **Godot 4 uniquement** — PAS Unity/Unreal
-3. **Ollama local uniquement** — PAS d'API cloud pour les LLM
+3. **Local par défaut, cloud en exception** — Ollama traite tout, sauf les questions complexes explicitement routées ; JAMAIS de donnée sensible vers le cloud
 4. **CSV uniquement** pour la finance — PAS de connexions bancaires directes
 5. **Tout en anglais** : variables, fonctions, comments, docstrings
 6. **Type hints obligatoires** sur toutes les fonctions
@@ -38,6 +38,39 @@ Cœur : LLM Multi-Modèles (Ollama local, RTX 5080)
 10. **PAS d'avatar 3D Unity/Unreal** — Godot 4 seul
 11. **PAS de voice cloning avancé/XTTS** — Piper/Kokoro seuls
 12. **PAS de Swarm Intelligence** en v1.0 (plusieurs LLM autonomes coordonnés — `IDEAS.md` #38) — reporté v1.1+
+
+### ⚠️ Précision sur la règle 3 — architecture hybride (assouplie le 01/08/2026)
+
+La règle 3 disait « Ollama local uniquement — PAS d'API cloud ». Elle contredisait
+le code, qui route déjà vers le cloud (`core/router.py`, `core/cloud_llm.py`).
+Cyril valide explicitement l'architecture hybride : c'est la règle qui change,
+pas le code qui disparaît.
+
+**Le principe** : le local est le défaut, le cloud est l'exception justifiée par
+la qualité de réponse — jamais par confort. Et une donnée sensible ne sort
+jamais, quelle que soit la question posée.
+
+| Destination | Quand | Mots-clés déclencheurs |
+|---|---|---|
+| **Cloud** | Questions complexes où la qualité de réponse compte | `analyse`, `compare`, `projection`, `stratégie`, `optimise`, `20 ans` |
+| **Local (forcé)** | Finance perso, documents privés, identité — **même si un mot-clé cloud est présent** | `portfolio`, `risque`, `budget`, `dépense`, `salaire`, `revenu`, `compte bancaire`, `impôt`, `iban`, `mot de passe`… |
+| **Local (forcé)** | Questions sur les documents personnels (RAG) | voir `KEYWORDS_RAG` |
+| **Local** | Tout le reste (défaut sûr) | — |
+
+**Le local gagne toujours en cas de conflit.** « Analyse mon portfolio » contient
+`analyse` (cloud) et `portfolio` (sensible) → reste local. Cette priorité est
+non négociable : c'est elle qui rend l'assouplissement acceptable.
+
+**Ce qui est joint à une requête cloud** est volontairement réduit :
+- pas de contexte RAG (extraits de documents personnels)
+- historique tronqué à `CLOUD_HISTORY_MESSAGES` (6) au lieu de 100 en local
+
+**Implémentation de référence** : `core/router.py` — `route()`, `is_sensitive()`,
+`should_use_rag()`. Toute évolution du routage passe par ce fichier, jamais par
+un appel cloud direct ailleurs dans le code. Tests : `test_router.py`.
+
+Cohérent avec `VISION_LONG_TERME.md` §4 : « la sécurité vient du contrôle de
+*ce qui* est envoyé et *quand*, pas du canal utilisé ».
 
 ### ⚠️ Précision sur la règle 12 — "multi-agents" (clarifié le 01/08/2026)
 

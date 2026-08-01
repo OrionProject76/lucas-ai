@@ -34,6 +34,11 @@ OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 DB_PATH = "memory/orion_memory.db"
 MAX_HISTORY_MESSAGES = 100      # garde les 100 derniers messages max
 
+# Historique joint à une requête CLOUD : volontairement bien plus court que
+# MAX_HISTORY_MESSAGES. Limite ce qui sort de la machine tout en gardant le
+# fil de la conversation. Voir CLAUDE.md règle 3.
+CLOUD_HISTORY_MESSAGES: int = 6
+
 # --- Identité d'Orion ---
 SYSTEM_PROMPT = (
     "Tu es Orion, l'assistant personnel de Cyril. "

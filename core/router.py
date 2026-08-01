@@ -1,10 +1,24 @@
-# core/router.py — décide si la question part en local ou (plus tard) en cloud
+# core/router.py — décide si la question part en local (Ollama) ou en cloud
 # + décide si le RAG (documents personnels) doit être consulté
+# Architecture hybride : local par défaut, cloud pour les questions complexes,
+# jamais de donnée sensible vers le cloud (CLAUDE.md règle 3).
 
 KEYWORDS_CLOUD = [
     "analyse", "compare", "projection",
-    "20 ans", "stratégie", "risque",
-    "portfolio", "optimise",
+    "20 ans", "stratégie", "optimise",
+]
+
+# Mots-clés qui signalent une donnée ultra-sensible (finance personnelle,
+# documents privés, identité). Ces questions restent LOCALES même si elles
+# contiennent aussi un mot-clé cloud — voir route() et CLAUDE.md règle 3.
+# "portfolio" et "risque" étaient dans KEYWORDS_CLOUD : ce sont des termes
+# de finance perso, ils ont été déplacés ici le 01/08/2026.
+KEYWORDS_SENSITIVE = [
+    "portfolio", "risque", "budget", "dépense", "salaire",
+    "revenu", "compte bancaire", "banque", "économies",
+    "impôt", "relevé", "transaction", "iban", "crédit",
+    "emprunt", "mot de passe", "carte bancaire",
+    "mon contrat", "ma facture",
 ]
 
 # Mots-clés qui signalent que la question porte probablement sur des
@@ -19,8 +33,34 @@ KEYWORDS_RAG = [
 ]
 
 
+def is_sensitive(text: str) -> bool:
+    """
+    Décide si la question porte sur des données ultra-sensibles (finance
+    personnelle, documents privés, identité). Même approche volontairement
+    simple que should_use_rag() : mots-clés, pas de classification LLM.
+    """
+    text_lower = text.lower()
+    return any(keyword in text_lower for keyword in KEYWORDS_SENSITIVE)
+
+
 def route(text: str) -> str:
-    """Décide local vs cloud — inchangé."""
+    """
+    Décide si la question part en local (Ollama) ou en cloud.
+
+    Ordre de priorité — le local est le défaut sûr, le cloud l'exception :
+      1. donnée sensible détectée  -> local, même si un mot-clé cloud est
+         présent (« analyse mon portfolio » reste local)
+      2. question sur les documents personnels (RAG) -> local
+      3. question complexe (mot-clé cloud) -> cloud
+      4. tout le reste -> local
+
+    Voir CLAUDE.md règle 3 pour la règle projet correspondante.
+    """
+    if is_sensitive(text):
+        return "local"
+    if should_use_rag(text):
+        return "local"
+
     text_lower = text.lower()
     if any(keyword in text_lower for keyword in KEYWORDS_CLOUD):
         return "cloud"
