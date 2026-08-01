@@ -1,3 +1,44 @@
-PyQt6>=6.6.0
-python-dotenv>=1.0.0     # Lecture du .env dans config.py (optionnel)
-pytest>=8.0.0            # Tests unitaires (CLAUDE.md règle 8)
+# Dépendances de l'application Luca's (UI PySide6 + API FastAPI + modules)
+# Installation : pip install -r requirements.txt
+#
+# Généré à partir des imports réels du code le 01/08/2026.
+# Le daemon 24/7 a ses propres dépendances : requirements_daemon.txt
+# Les planchers de version correspondent à ce qui est installé et fonctionne
+# aujourd'hui — remonter un plancher demande de retester le module concerné.
+
+# ─── Interface (PySide6 uniquement — CLAUDE.md règle 1) ────
+PySide6>=6.11.0          # UI, QThread streaming, avatar QPainter
+
+# ─── LLM & HTTP ────────────────────────────
+requests>=2.32.0         # Appels Ollama (core/local_llm.py, core/llm_worker.py)
+ollama>=0.6.0            # Client Ollama pour la vision (modules/vision_manager.py)
+
+# ─── API & Mobile bridge ───────────────────
+fastapi>=0.128.0         # api/server.py — REST + WebSocket
+uvicorn>=0.51.0          # Serveur ASGI
+pydantic>=2.12.0         # Modèles de requête/réponse de l'API
+
+# ─── Système (World Model) ─────────────────
+psutil>=7.2.0            # CPU, RAM, processus (core/world_model.py)
+pywin32>=312             # Fenêtre active Windows (win32gui, win32con)
+
+# ─── Mémoire & RAG ─────────────────────────
+chromadb>=1.5.0          # Base vectorielle (modules/rag_manager.py)
+
+# ─── Web ───────────────────────────────────
+duckduckgo-search>=8.1.0 # Recherche web (modules/web_search.py)
+
+# ─── Voix & Vision ─────────────────────────
+edge-tts>=7.2.0          # TTS (modules/voice_manager.py)
+pygame>=2.6.0            # Lecture audio du TTS
+Pillow>=12.0.0           # Images pour le VLM (modules/vision_manager.py)
+
+# ─── Bridge Godot (Orion3D/python_service) ─
+websockets>=16.1.0       # Canal Python <-> Godot
+GPUtil>=1.4.0            # Télémétrie GPU affichée dans le HUD
+
+# ─── Config ────────────────────────────────
+python-dotenv>=1.2.0     # Lecture du .env (config.py)
+
+# ─── Tests ─────────────────────────────────
+pytest>=9.0.0            # Tests unitaires (CLAUDE.md règle 8)
