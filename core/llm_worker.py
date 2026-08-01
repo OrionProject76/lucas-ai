@@ -2,10 +2,11 @@
 # Streaming fluide + timeout de connexion + arrêt propre
 
 import json
+
 import requests
 from PySide6.QtCore import QThread, Signal
 
-from config import OLLAMA_URL, MODEL_NAME, OLLAMA_CONNECT_TIMEOUT, OLLAMA_READ_TIMEOUT
+from config import MODEL_NAME, OLLAMA_CONNECT_TIMEOUT, OLLAMA_READ_TIMEOUT, OLLAMA_URL
 
 
 class LLMWorker(QThread):

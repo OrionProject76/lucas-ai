@@ -1,9 +1,9 @@
 # core/orion_core.py — le chef d'orchestre
 
-from config import SYSTEM_PROMPT, CLOUD_HISTORY_MESSAGES, RECENT_EVENTS_IN_PROMPT
-from core.router import route, should_use_rag
-from core.local_llm import ask_local
+from config import CLOUD_HISTORY_MESSAGES, RECENT_EVENTS_IN_PROMPT, SYSTEM_PROMPT
 from core.cloud_llm import ask_cloud
+from core.local_llm import ask_local
+from core.router import route, should_use_rag
 from core.world_model import (
     format_events_for_prompt,
     format_for_prompt,

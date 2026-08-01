@@ -1,7 +1,8 @@
 # core/local_llm.py — parle au modèle local via Ollama (version non-streaming, utilisée en secours)
 
 import requests
-from config import OLLAMA_URL, MODEL_NAME
+
+from config import MODEL_NAME, OLLAMA_URL
 
 
 def ask_local(messages: list[dict]) -> str:
