@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from config import CLOUD_HISTORY_MESSAGES
-from core.router import is_sensitive, route, should_use_rag
+from core.router import is_sensitive, route, should_use_rag, should_use_vision
 
 # core.orion_core tire chromadb (via modules/rag_manager). Les tests de routage
 # n'en ont pas besoin : on les garde exécutables même sur un environnement
@@ -59,6 +59,72 @@ def test_rag_beats_cloud_keyword() -> None:
     question = "résume le document et analyse-le"
     assert should_use_rag(question)
     assert route(question) == "local"
+
+
+# ── Robustesse de la saisie réelle ────────────────────────────────────
+#
+# Ces cas viennent d'un test en conditions réelles, pas d'une revue de
+# code : « qu'est-ce que tu vois à l'écran » ne déclenchait pas la vision
+# quand l'apostrophe était typographique, et — bien plus grave — une
+# question financière tapée sans accents partait au CLOUD.
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "analyse mes dépenses du mois",
+        "analyse mes depenses du mois",
+        "compare mon relevé bancaire",
+        "compare mon releve bancaire",
+        "analyse mon crédit immobilier",
+        "analyse mon credit immobilier",
+        "ANALYSE MES DEPENSES",
+    ],
+)
+def test_accents_do_not_defeat_the_sensitive_guard(question: str) -> None:
+    """
+    Taper vite, sans accents, suffisait à envoyer une question financière
+    au cloud : « depense » ne correspondait pas au mot-clé « dépense ».
+    La règle 3 était rendue inopérante par une faute de frappe.
+    """
+    assert is_sensitive(question), f"« {question} » doit être reconnu comme sensible"
+    assert route(question) == "local"
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "qu'est-ce que tu vois à l'écran ?",
+        "qu'est ce que tu vois à l'écran ?",
+        "qu’est ce que tu vois à l’écran ?",
+        "qu'est ce que tu vois a l'ecran",
+        "QU'EST CE QUE TU VOIS À L'ÉCRAN",
+    ],
+)
+def test_apostrophes_and_accents_do_not_defeat_vision(question: str) -> None:
+    """
+    L'apostrophe typographique « ’ » que produisent Windows et les
+    correcteurs ne correspondait pas à l'apostrophe droite des mots-clés.
+    La question la plus naturelle pour demander la vision ne déclenchait
+    donc rien.
+    """
+    assert should_use_vision(question)
+    assert route(question) == "local"
+
+
+def test_normalisation_is_shared_by_every_keyword_list() -> None:
+    """
+    Garde anti-régression : toute comparaison de mots-clés doit passer
+    par core.text_utils, sinon la faille revient sur une liste oubliée.
+    """
+    import inspect
+
+    from core import router
+
+    source = inspect.getsource(router)
+    assert "contains_any" in source
+    assert ".lower()" not in source, (
+        "une comparaison en minuscules seule ignore accents et apostrophes"
+    )
 
 
 # ── _build_messages() ─────────────────────────────────────────────────

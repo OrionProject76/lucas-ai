@@ -8,8 +8,9 @@
 # Deux étages : règles par mots-clés d'abord (déterministe, gratuit, hors
 # ligne), LLM local seulement pour ce que les règles n'ont pas reconnu.
 
-import unicodedata
 from collections.abc import Callable
+
+from core.text_utils import normalize as _normalize
 
 UNCATEGORIZED = "Non catégorisé"
 
@@ -57,13 +58,6 @@ KEYWORD_RULES: dict[str, list[str]] = {
         "allocation", "caf", "pole emploi", "dividende",
     ],
 }
-
-
-def _normalize(text: str) -> str:
-    """Minuscules sans accents — « Électricité » et « electricite » matchent."""
-    lowered = text.lower()
-    decomposed = unicodedata.normalize("NFD", lowered)
-    return "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
 
 
 def categorize_by_rules(label: str) -> str | None:

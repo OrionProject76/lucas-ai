@@ -20,6 +20,8 @@ import re
 
 from duckduckgo_search import DDGS
 
+from core.text_utils import contains_any
+
 logger = logging.getLogger(__name__)
 
 SNIPPET_LENGTH = 150
@@ -53,8 +55,9 @@ def is_identifying(query: str) -> bool:
     Vrai si la requête contient une donnée propre à Cyril plutôt qu'un
     sujet de recherche. Volontairement étroit : voir l'en-tête du module.
     """
-    lowered = query.lower()
-    if any(keyword in lowered for keyword in IDENTIFYING_KEYWORDS):
+    # Normalisé : « mon releve » sans accent contournait le filtre et
+    # partait chez DuckDuckGo (voir core/text_utils.py).
+    if contains_any(query, IDENTIFYING_KEYWORDS):
         return True
     return bool(IBAN_PATTERN.search(query) or LONG_NUMBER_PATTERN.search(query))
 

@@ -3,6 +3,8 @@
 # Architecture hybride : local par défaut, cloud pour les questions complexes,
 # jamais de donnée sensible vers le cloud (CLAUDE.md règle 3).
 
+from core.text_utils import contains_any
+
 KEYWORDS_CLOUD = [
     "analyse", "compare", "projection",
     "20 ans", "stratégie", "optimise",
@@ -39,8 +41,7 @@ def is_sensitive(text: str) -> bool:
     personnelle, documents privés, identité). Même approche volontairement
     simple que should_use_rag() : mots-clés, pas de classification LLM.
     """
-    text_lower = text.lower()
-    return any(keyword in text_lower for keyword in KEYWORDS_SENSITIVE)
+    return contains_any(text, KEYWORDS_SENSITIVE)
 
 
 def route(text: str) -> str:
@@ -66,8 +67,7 @@ def route(text: str) -> str:
     if should_use_vision(text):
         return "local"
 
-    text_lower = text.lower()
-    if any(keyword in text_lower for keyword in KEYWORDS_CLOUD):
+    if contains_any(text, KEYWORDS_CLOUD):
         return "cloud"
     return "local"
 
@@ -93,8 +93,7 @@ def should_use_vision(text: str) -> bool:
     LLM. Une capture + analyse VLM coûte plusieurs secondes, on ne la
     déclenche donc que sur une demande explicite.
     """
-    text_lower = text.lower()
-    return any(keyword in text_lower for keyword in KEYWORDS_VISION)
+    return contains_any(text, KEYWORDS_VISION)
 
 
 def route_voice(answer: str, question: str = "") -> str:
@@ -126,5 +125,4 @@ def should_use_rag(text: str) -> bool:
     de répondre. Axe de décision indépendant de route() — une question
     peut être locale ET utiliser le RAG, ou cloud sans RAG, etc.
     """
-    text_lower = text.lower()
-    return any(keyword in text_lower for keyword in KEYWORDS_RAG)
+    return contains_any(text, KEYWORDS_RAG)
