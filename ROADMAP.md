@@ -52,9 +52,20 @@ Reclassé en Phase 6 (S5-S6), branche `experimental/godot-avatar`. Ne bloque pas
 | **Phase 0 — Audit** | S0 | Nettoyage, inventaire | ✅ Fait (avec incident de suppression accidentelle résolu — voir CLAUDE.md) |
 | **Phase 1 — Cerveau solide** | S1 | FastAPI unique + World Model | ✅ **Fait et validé aujourd'hui** |
 | **Phase 2 — Mémoire & Finance** | S2 | RAG, TTS, Finance CSV | ✅ Fait le 01/08 — reste la validation TTS à l'oreille dans l'UI |
-| **Phase 3 — Vision & Voix** | S3-S4 | VLM écran, Avatar QPainter V3, 5 modes de présence | 🔴 Priorité actuelle |
+| **Phase 3 — Vision & Voix** | S3-S4 | VLM écran, Avatar QPainter V3, 5 modes de présence | 🟡 En cours — VLM écran ✅, 5 modes de présence ✅ |
 | **Phase 4 — Expansion** | S5-S6 | PWA mobile, sync, Godot 4 V1 (branche expérimentale) | À venir |
 | **Phase 5 — Polish** | S7-S8 | Sécurité finale, packaging, release v1.0 | À venir |
+
+### État détaillé de la Phase 3 (au 01/08/2026)
+
+| Brique | État |
+|---|---|
+| **VLM écran** | ✅ Fait. « Regarde mon écran » déclenche une capture analysée par llava en local. Le déclencheur est dans `core/router.py` (`should_use_vision`), volontairement étroit — une analyse coûte ~25 s au premier appel, 0,8 s modèle chaud. La question de Cyril est transmise au VLM plutôt qu'un prompt générique. Forcé en local : la description de l'écran ne part jamais au cloud. |
+| **5 modes de présence** | ✅ Fait. `IDLE`, `THINKING`, `SPEAKING`, `WATCHING`, `LISTENING` dans `ui/avatar_widget.py`. `WATCHING` sert de témoin de capture, comme la LED d'une webcam. `LISTENING` reste inactif faute de micro. |
+| **Avatar QPainter V3** | 🟡 Partiel. Le rendu a été restauré et fiabilisé (voir §6), les modes sont câblés sur le comportement réel. Une refonte esthétique complète reste possible si Cyril la souhaite. |
+| **STT** | ⛔ Bloqué par le matériel — moteur écrit, voir ci-dessous. |
+
+⚠️ **Attention en reprenant la Phase 3** : « 5 modes de présence » n'était défini nulle part. Il s'agit des états de Luca's elle-même, **à ne pas confondre avec les 8 « modes AURA »** d'`IDEAS.md` (Working, Gaming, Meeting…), qui sont des contextes d'activité de Cyril et relèvent de S5.
 
 ### ⚠️ Ce qui dépend du micro et de la caméra ne peut pas être fait avant le mobile
 
