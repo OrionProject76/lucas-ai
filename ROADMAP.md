@@ -92,6 +92,8 @@ Deux surfaces de sortie n'ont aujourd'hui aucun garde-fou, contrairement au LLM 
 
 **L'API écoute sur `0.0.0.0:8000` sans authentification.** N'importe quel appareil du réseau local peut lire `GET /history` — l'intégralité des conversations —, `GET /system`, ou déclencher `POST /chat`. Pistes : jeton partagé dans le `.env`, écoute sur `127.0.0.1` par défaut, ou statu quo assumé.
 
+**`cmd` figure dans la liste blanche d'`automation_manager`.** Ouvrir un interpréteur de commandes donne accès à tout ce que la liste blanche est censée interdire : une fois `cmd.exe` lancé, n'importe quel programme peut l'être. L'entrée annule donc la protection qu'elle est censée illustrer. Conservée en attendant l'arbitrage — les ouvertures de shell sont pour l'instant journalisées distinctement (`automation_shell_opened`). Pistes : retirer l'entrée, ou la conserver derrière une confirmation explicite quand le moteur de décision existera.
+
 **`modules/web_search.py` envoie chaque requête à DuckDuckGo.** Aucun filtre de sensibilité. Réutiliser `is_sensitive()` tel quel sur-bloquerait : « quel est le meilleur crédit immobilier » est une recherche légitime que le mot-clé « crédit » ferait refuser. Pistes : blocage strict, avertissement journalisé sans blocage, ou liste de mots-clés spécifique à la recherche, plus étroite que celle du routeur.
 
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026
