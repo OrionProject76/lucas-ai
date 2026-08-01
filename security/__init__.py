@@ -24,6 +24,7 @@
 
 from security.guardian import Guardian
 from security.privacy_shield import PrivacyShield
+from security.ransomware_watch import RansomwareWatch
 from security.types import CRITICAL, INFO, WARNING, Finding, format_report
 
 __all__ = [
@@ -33,5 +34,6 @@ __all__ = [
     "Finding",
     "Guardian",
     "PrivacyShield",
+    "RansomwareWatch",
     "format_report",
 ]

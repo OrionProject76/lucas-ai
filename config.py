@@ -46,6 +46,24 @@ PIPER_VOICES_DIR = "data/voices"       # modèles .onnx (non versionnés)
 # Voir CLAUDE.md règle 3, section TTS.
 TTS_ALLOW_CLOUD_ON_SENSITIVE: bool = False
 
+# --- Sécurité : surveillance rançongiciel ---
+# Répertoires surveillés, relatifs au profil utilisateur. Seules les
+# métadonnées sont lues (noms, extensions, dates) — jamais le contenu
+# des documents. Voir security/ransomware_watch.py.
+RANSOMWARE_WATCH_DIRS = ["Documents", "Desktop", "Pictures"]
+
+# Seuil de « rafale » : nombre de fichiers modifiés dans la fenêtre
+# ci-dessous au-delà duquel on signale. Une sauvegarde ou une synchro
+# déclenchent le même motif, d'où un simple avertissement.
+RANSOMWARE_BURST_THRESHOLD: int = 50
+RANSOMWARE_BURST_WINDOW_MINUTES: int = 5
+
+# Borne de parcours, répartie entre les répertoires surveillés : un
+# balayage qui met deux minutes ne serait jamais lancé. Au-delà, le
+# rapport signale explicitement qu'il est incomplet.
+# Mesuré sur cette machine : ~9 200 fichiers parcourus en 1,4 s.
+RANSOMWARE_MAX_FILES_SCANNED: int = 30000
+
 # --- Mémoire ---
 DB_PATH = "memory/orion_memory.db"
 MAX_HISTORY_MESSAGES = 100      # garde les 100 derniers messages max

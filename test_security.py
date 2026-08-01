@@ -10,12 +10,21 @@
 from __future__ import annotations
 
 import inspect
+import time
 from types import SimpleNamespace
 
 import psutil
 import pytest
 
-from security import CRITICAL, INFO, WARNING, Guardian, PrivacyShield, format_report
+from security import (
+    CRITICAL,
+    INFO,
+    WARNING,
+    Guardian,
+    PrivacyShield,
+    RansomwareWatch,
+    format_report,
+)
 from security.guardian import LOOKALIKE_NAMES
 from security.privacy_shield import _is_external, summarize_exposure
 from security.types import Finding, sort_findings
@@ -28,10 +37,10 @@ def test_sensors_never_act() -> None:
     fermer une socket. Donner ce pouvoir à Luca's est une décision
     distincte, à valider par Cyril (VISION_LONG_TERME.md §4.1).
     """
-    from security import guardian, privacy_shield
+    from security import guardian, privacy_shield, ransomware_watch
 
     forbidden = ("kill(", "terminate(", "shutdown(", "close()", "suspend(")
-    for module in (guardian, privacy_shield):
+    for module in (guardian, privacy_shield, ransomware_watch):
         source = inspect.getsource(module)
         for call in forbidden:
             assert call not in source, f"{module.__name__} ne doit pas appeler {call}"
@@ -42,10 +51,10 @@ def test_sensors_make_no_outbound_call() -> None:
     Envoyer la liste des process ou des connexions de Cyril à un service
     tiers serait exactement la fuite qu'on cherche à empêcher.
     """
-    from security import guardian, privacy_shield
+    from security import guardian, privacy_shield, ransomware_watch
 
     forbidden = ("requests.", "urllib", "http://", "https://", "socket.create_connection")
-    for module in (guardian, privacy_shield):
+    for module in (guardian, privacy_shield, ransomware_watch):
         source = inspect.getsource(module)
         for call in forbidden:
             assert call not in source, f"{module.__name__} ne doit rien émettre ({call})"
@@ -315,6 +324,181 @@ def test_summarize_exposure_survives_access_denied(monkeypatch) -> None:
 
     monkeypatch.setattr(psutil, "net_connections", denied)
     assert summarize_exposure() == {"disponible": False}
+
+
+# ── Rançongiciel ──────────────────────────────────────────────────────
+
+@pytest.fixture
+def watched(tmp_path, monkeypatch):
+    """Un répertoire surveillé isolé — on ne touche pas aux dossiers réels."""
+    from security import ransomware_watch as rw
+
+    directory = tmp_path / "Documents"
+    directory.mkdir()
+    monkeypatch.setattr(rw, "_watched_directories", lambda: [directory])
+    return directory
+
+
+def test_ransom_extension_is_critical(watched) -> None:
+    (watched / "rapport.docx.locked").write_text("x")
+    findings = RansomwareWatch().scan()
+    assert any(f.kind == "ransom_extension" and f.severity == CRITICAL for f in findings)
+
+
+def test_ransom_note_is_detected(watched) -> None:
+    (watched / "HOW_TO_DECRYPT.txt").write_text("envoyez des bitcoins")
+    findings = RansomwareWatch().scan()
+    assert any(f.kind == "ransom_note" for f in findings)
+
+
+def test_ordinary_files_raise_nothing(watched) -> None:
+    (watched / "rapport.docx").write_text("x")
+    (watched / "photo.jpg").write_text("x")
+    assert RansomwareWatch().scan() == []
+
+
+def test_burst_of_modifications_is_a_warning_not_critical(watched, monkeypatch) -> None:
+    """
+    Une sauvegarde produit le même motif qu'un chiffrement. Crier au
+    rançongiciel à chaque synchro rendrait le capteur inutile.
+    """
+    from security import ransomware_watch as rw
+
+    monkeypatch.setattr(rw, "RANSOMWARE_BURST_THRESHOLD", 5)
+    for i in range(6):
+        (watched / f"fichier_{i}.txt").write_text("x")
+
+    findings = RansomwareWatch().scan()
+    burst = [f for f in findings if f.kind == "mass_modification"]
+    assert len(burst) == 1
+    assert burst[0].severity == WARNING
+
+
+def test_old_files_do_not_count_as_a_burst(watched, monkeypatch) -> None:
+    import os
+
+    from security import ransomware_watch as rw
+
+    monkeypatch.setattr(rw, "RANSOMWARE_BURST_THRESHOLD", 3)
+    old = time.time() - 3600
+    for i in range(5):
+        path = watched / f"vieux_{i}.txt"
+        path.write_text("x")
+        os.utime(path, (old, old))
+
+    assert not [f for f in RansomwareWatch().scan() if f.kind == "mass_modification"]
+
+
+# ── Rançongiciel : fichiers-appâts ────────────────────────────────────
+
+def test_canary_deployment_is_idempotent(watched) -> None:
+    watch = RansomwareWatch()
+    first = watch.deploy_canaries()
+    second = watch.deploy_canaries()
+    assert first == second
+    assert len(list(watched.glob("*"))) == 1
+
+
+def test_intact_canary_raises_nothing(watched) -> None:
+    watch = RansomwareWatch()
+    watch.deploy_canaries()
+    assert not [f for f in watch.scan() if f.kind.startswith("canary")]
+
+
+def test_modified_canary_is_critical(watched) -> None:
+    from security.ransomware_watch import CANARY_FILENAME
+
+    watch = RansomwareWatch()
+    watch.deploy_canaries()
+    (watched / CANARY_FILENAME).write_text("contenu chiffre")
+
+    findings = watch.scan()
+    assert any(f.kind == "canary_modified" and f.severity == CRITICAL for f in findings)
+
+
+def test_scan_never_deploys_canaries(watched) -> None:
+    """
+    Aucun fichier ne doit apparaître dans les dossiers de Cyril sans qu'il
+    l'ait décidé : deploy_canaries() est un acte délibéré.
+    """
+    RansomwareWatch().scan()
+    assert list(watched.glob("*")) == []
+
+
+# ── Rançongiciel : le contenu des fichiers n'est jamais lu ────────────
+
+def test_user_file_contents_are_never_read(watched) -> None:
+    """
+    Choix de conception : détection sur métadonnées uniquement. L'analyse
+    d'entropie serait plus fiable mais obligerait à ouvrir les documents
+    personnels — décision qui revient à Cyril.
+    """
+    secret = "IBAN FR76 3000 4000 0512 3456 7890 123"
+    (watched / "releve.txt.locked").write_text(secret)
+
+    findings = RansomwareWatch().scan()
+    assert findings, "le fichier doit être signalé par son extension"
+    for finding in findings:
+        assert secret not in finding.summary
+        assert secret not in str(finding.evidence)
+
+
+def test_metadata_scan_opens_no_user_file() -> None:
+    """Garde-fou structurel : aucune lecture de contenu dans _scan_metadata."""
+    source = inspect.getsource(RansomwareWatch._scan_metadata)
+    for call in ("read_text", "read_bytes", "open(", "entropy"):
+        assert call not in source
+
+
+def test_budget_is_shared_between_directories(tmp_path, monkeypatch) -> None:
+    """
+    Le plafond de parcours se répartit par répertoire. Sinon un Bureau
+    chargé épuiserait le quota et les autres dossiers ne seraient jamais
+    regardés — c'est exactement ce qui se passait avant correction.
+    """
+    from security import ransomware_watch as rw
+
+    gros = tmp_path / "Gros"
+    petit = tmp_path / "Petit"
+    gros.mkdir()
+    petit.mkdir()
+    for i in range(40):
+        (gros / f"f{i}.txt").write_text("x")
+    (petit / "rapport.docx.locked").write_text("x")
+
+    monkeypatch.setattr(rw, "_watched_directories", lambda: [gros, petit])
+    monkeypatch.setattr(rw, "RANSOMWARE_MAX_FILES_SCANNED", 20)
+
+    findings = RansomwareWatch().scan()
+    assert any(f.kind == "ransom_extension" for f in findings), (
+        "le second répertoire doit être examiné malgré le premier"
+    )
+
+
+def test_no_watched_directory_returns_nothing(monkeypatch) -> None:
+    from security import ransomware_watch as rw
+
+    monkeypatch.setattr(rw, "_watched_directories", list)
+    assert RansomwareWatch().scan() == []
+
+
+def test_truncated_scan_says_so(watched, monkeypatch) -> None:
+    """Un balayage incomplet ne doit pas passer pour un balayage rassurant."""
+    from security import ransomware_watch as rw
+
+    monkeypatch.setattr(rw, "RANSOMWARE_MAX_FILES_SCANNED", 3)
+    for i in range(10):
+        (watched / f"f{i}.txt").write_text("x")
+
+    findings = RansomwareWatch().scan()
+    assert any(f.kind == "scan_truncated" for f in findings)
+
+
+def test_findings_reach_the_event_log(watched) -> None:
+    events: list[tuple[str, str]] = []
+    (watched / "doc.locked").write_text("x")
+    RansomwareWatch(log_event=lambda t, d="": events.append((t, d))).scan()
+    assert "security_ransom_extension" in [t for t, _ in events]
 
 
 # ── Rapport ───────────────────────────────────────────────────────────
