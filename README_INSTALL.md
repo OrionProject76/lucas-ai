@@ -108,10 +108,16 @@ Avec le venv activé et Ollama démarré :
 python main.py
 
 # API seule (mobile, Godot)
-uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+uvicorn api.server:app --reload --host 127.0.0.1 --port 8000
 ```
 
 L'API expose `GET /status`, `GET /system`, `POST /chat` et `WS /ws`.
+
+> ⚠️ Elle écoute sur `127.0.0.1` : joignable depuis ce PC uniquement.
+> Elle n'a aucune authentification et `GET /history` renvoie toutes les
+> conversations — l'ouvrir au réseau (`0.0.0.0`) la rendrait lisible par
+> n'importe quel appareil du WiFi. Le passage au réseau viendra en Phase 5
+> avec le mobile, et exigera un jeton partagé au préalable.
 
 ### Vérifier que tout fonctionne
 
@@ -174,23 +180,27 @@ nssm start OrionDaemon
 | `just logs` | Suit les logs du daemon |
 | `just install` | Installe les deux fichiers de dépendances |
 | `just doctor` | Affiche les versions Python / Ollama / uvicorn |
+| `just serve` | Lance l'API sur `127.0.0.1:8000` |
+| `just all` | Ollama + API + daemon |
+| `just test` | Tous les tests avec coverage |
+| `just test-quick` | Tous les tests, sans coverage |
+| `just lint` | `ruff check` puis `ruff format` (réécrit les fichiers) |
+| `just mypy` | Vérification de types |
 | `just git-commit "msg"` | `git add .` puis commit |
 | `just git-push` | Push sur `main` |
 | `just git-feature nom` | Crée la branche `feature/nom` |
 
-**⚠️ Cassées — le justfile pointe vers des chemins qui n'existent pas encore :**
+**⚠️ Encore cassées — leur cible n'existe pas :**
 
 | Commande | Problème |
 |---|---|
-| `just serve`, `just all` | lancent `uvicorn main:app`, or `main.py` expose une `QApplication`, pas une app FastAPI. Utiliser `uvicorn api.server:app` |
-| `just test`, `just test-quick` | ciblent `tests/`, qui n'existe pas — les tests sont des `test_*.py` à la racine |
-| `just lint`, `just mypy`, `just check` | ciblent un package `orion/` qui n'existe pas |
 | `just index` | `memory/index_documents.py` absent |
 | `just clean` | `scripts/cleanup.py` absent |
 | `just train` | `training/train_lora.py` absent |
 
-Ces cibles décrivent l'arborescence visée dans `CLAUDE.md`, pas celle
-d'aujourd'hui. À corriger lors d'une passe dédiée sur le `justfile`.
+Ces trois-là décrivent l'arborescence visée dans `CLAUDE.md`, pas celle
+d'aujourd'hui. Elles fonctionneront quand les modules correspondants
+seront écrits.
 
 ---
 

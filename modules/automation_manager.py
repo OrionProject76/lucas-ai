@@ -22,15 +22,18 @@ WHITELISTED_APPS: dict[str, list[str]] = {
     "calculatrice": [r"C:\Windows\System32\calc.exe"],
     "notepad": [r"C:\Windows\System32\notepad.exe"],
     "explorer": [r"C:\Windows\Explorer.exe"],
-    # ⚠️ `cmd` ouvre un interpréteur de commandes : depuis lui, n'importe
-    # quel programme peut être lancé, ce qui vide la liste blanche de son
-    # sens. Conservé en attendant l'arbitrage de Cyril — voir ROADMAP §5.1.
-    "cmd": [r"C:\Windows\System32\cmd.exe"],
 }
 
-# Entrées qui donnent accès à un interpréteur : signalées comme telles
-# pour que la journalisation permette de les repérer après coup.
-SHELL_LIKE_APPS = frozenset({"cmd", "powershell", "wscript", "cscript"})
+# ⚠️ `cmd` a été RETIRÉ de la liste blanche le 01/08/2026 (décision de
+# Cyril, ROADMAP §5.1). Un interpréteur de commandes permet de lancer
+# n'importe quel programme : le laisser dans une liste blanche revient à
+# n'en avoir aucune.
+#
+# La détection ci-dessous reste en place pour plus tard : le jour où un
+# shell sera réintroduit — derrière une confirmation explicite, quand le
+# moteur de décision existera — son ouverture devra rester distinguable
+# d'une ouverture ordinaire dans le journal.
+SHELL_LIKE_APPS = frozenset({"cmd", "powershell", "pwsh", "wscript", "cscript", "bash"})
 
 
 class AutomationManager:

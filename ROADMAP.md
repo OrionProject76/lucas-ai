@@ -86,15 +86,16 @@ Prochains niveaux envisageables : suivi des hooks clavier (keylogger), historiqu
 
 ---
 
-## 5.1 Décisions de sécurité en attente (relevées le 01/08/2026)
+## 5.1 Décisions de sécurité — tranchées le 01/08/2026
 
-Deux surfaces de sortie n'ont aujourd'hui aucun garde-fou, contrairement au LLM cloud et au TTS. Elles demandent un arbitrage de Cyril, pas un choix d'implémentation.
+Trois surfaces de sortie n'avaient aucun garde-fou, contrairement au LLM cloud et au TTS. Cyril a arbitré les trois.
 
-**L'API écoute sur `0.0.0.0:8000` sans authentification.** N'importe quel appareil du réseau local peut lire `GET /history` — l'intégralité des conversations —, `GET /system`, ou déclencher `POST /chat`. Pistes : jeton partagé dans le `.env`, écoute sur `127.0.0.1` par défaut, ou statu quo assumé.
+**API sur `127.0.0.1` — fait.** L'API n'a aucune authentification et `GET /history` renvoie l'intégralité des conversations : l'exposer au réseau la rendrait lisible par tout appareil du WiFi. Elle n'écoute donc plus que sur ce PC (`API_HOST` dans `config.py`). Pas de jeton pour l'instant, le mobile n'étant pas branché.
+**➜ À revoir en Phase 5** : le passage à `0.0.0.0` pour la PWA exigera un jeton partagé *au préalable*, pas après.
 
-**`cmd` figure dans la liste blanche d'`automation_manager`.** Ouvrir un interpréteur de commandes donne accès à tout ce que la liste blanche est censée interdire : une fois `cmd.exe` lancé, n'importe quel programme peut l'être. L'entrée annule donc la protection qu'elle est censée illustrer. Conservée en attendant l'arbitrage — les ouvertures de shell sont pour l'instant journalisées distinctement (`automation_shell_opened`). Pistes : retirer l'entrée, ou la conserver derrière une confirmation explicite quand le moteur de décision existera.
+**`cmd` retiré de la liste blanche — fait.** Un interpréteur de commandes permet de lancer n'importe quel programme : le laisser dans une liste blanche revient à n'en avoir aucune. `SHELL_LIKE_APPS` et la journalisation distincte (`automation_shell_opened`) restent en place pour le jour où un shell reviendrait derrière une confirmation explicite, quand le moteur de décision existera.
 
-**`modules/web_search.py` envoie chaque requête à DuckDuckGo.** Aucun filtre de sensibilité. Réutiliser `is_sensitive()` tel quel sur-bloquerait : « quel est le meilleur crédit immobilier » est une recherche légitime que le mot-clé « crédit » ferait refuser. Pistes : blocage strict, avertissement journalisé sans blocage, ou liste de mots-clés spécifique à la recherche, plus étroite que celle du routeur.
+**Filtre de recherche web — fait.** `modules/web_search.py` refuse, avant tout appel réseau, les requêtes contenant une donnée réellement identifiante : IBAN, numéro de carte ou de compte (motifs numériques), et expressions comme « mon solde » ou « mon numéro de carte ». Volontairement **plus étroit** que `KEYWORDS_SENSITIVE` : « crédit », « banque », « budget », « risque » et « portfolio » restent cherchables, car un filtre qui empêche l'usage normal finit désactivé, donc inutile.
 
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026
 

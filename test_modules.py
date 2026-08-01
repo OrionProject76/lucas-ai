@@ -161,6 +161,76 @@ def test_short_snippet_gets_no_ellipsis(fake_ddgs) -> None:
     assert "court..." not in WebSearch().get_summary("test")
 
 
+# ── WebSearch : filtre des données identifiantes ──────────────────────
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "mon IBAN",
+        "quel est mon solde",
+        "mon numéro de carte",
+        "FR76 3000 4000 0512 3456 7890 123",
+        "4539 1488 0343 6467",
+        "mon mot de passe wifi",
+    ],
+)
+def test_identifying_queries_are_refused(query: str, fake_ddgs) -> None:
+    """Ces requêtes désignent les données de Cyril, pas un sujet de recherche."""
+    fake_ddgs.results = [{"title": "ne doit pas apparaître", "href": "", "body": ""}]
+    results = WebSearch().search(query)
+    assert results[0]["title"] == "Recherche annulée"
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "quel est le meilleur crédit immobilier",
+        "comment changer de banque",
+        "taux d'intérêt 2026",
+        "budget moyen d'un ménage français",
+        "risque sismique en France",
+        "portfolio management définition",
+    ],
+)
+def test_legitimate_searches_are_not_blocked(query: str, fake_ddgs) -> None:
+    """
+    Le filtre est volontairement plus étroit que KEYWORDS_SENSITIVE :
+    « crédit », « banque », « budget », « risque » et « portfolio » ont
+    un usage de recherche parfaitement légitime. Un filtre qui empêche
+    l'usage normal finit désactivé, donc inutile.
+    """
+    fake_ddgs.results = [{"title": "résultat", "href": "", "body": ""}]
+    assert WebSearch().search(query)[0]["title"] == "résultat"
+
+
+def test_refused_query_makes_no_network_call(monkeypatch) -> None:
+    """Le refus doit intervenir AVANT tout appel à DuckDuckGo."""
+    def must_not_be_called():
+        raise AssertionError("aucune requête ne doit partir")
+
+    monkeypatch.setattr(ws_module, "DDGS", must_not_be_called)
+    WebSearch().search("mon IBAN est FR76 3000 4000 0512 3456 7890 123")
+
+
+def test_refusal_is_logged(fake_ddgs) -> None:
+    events: list[tuple[str, str]] = []
+    WebSearch(log_event=lambda t, d="": events.append((t, d))).search("mon solde")
+    assert [t for t, _ in events] == ["websearch_refused"]
+
+
+def test_logged_query_is_truncated(fake_ddgs) -> None:
+    """Le journal ne doit pas devenir une copie de la donnée refusée."""
+    events: list[tuple[str, str]] = []
+    WebSearch(log_event=lambda t, d="": events.append((t, d))).search("mon solde " + "x" * 500)
+    assert len(events[0][1]) <= 80
+
+
+def test_a_year_is_not_mistaken_for_a_card_number(fake_ddgs) -> None:
+    """Garde-fou sur le motif numérique : 2026 ne doit rien déclencher."""
+    fake_ddgs.results = [{"title": "résultat", "href": "", "body": ""}]
+    assert WebSearch().search("météo 2026")[0]["title"] == "résultat"
+
+
 def test_max_results_is_honored(fake_ddgs) -> None:
     fake_ddgs.results = [{"title": str(i), "href": "", "body": ""} for i in range(10)]
     assert len(WebSearch().search("test", max_results=3)) == 3

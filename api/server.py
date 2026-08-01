@@ -149,4 +149,9 @@ async def websocket_endpoint(websocket: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+    from config import API_HOST, API_PORT
+
+    # 127.0.0.1 par défaut : l'API n'a aucune authentification et
+    # /history expose toutes les conversations. Voir config.py.
+    uvicorn.run(app, host=API_HOST, port=API_PORT)

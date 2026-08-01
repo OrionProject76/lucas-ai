@@ -46,6 +46,17 @@ PIPER_VOICES_DIR = "data/voices"       # modèles .onnx (non versionnés)
 # Voir CLAUDE.md règle 3, section TTS.
 TTS_ALLOW_CLOUD_ON_SENSITIVE: bool = False
 
+# --- API ---
+# ⚠️ 127.0.0.1 : l'API n'est joignable que depuis ce PC. Elle n'a aucune
+# authentification, et GET /history renvoie l'intégralité des
+# conversations — l'exposer au réseau local la rendrait lisible par tout
+# appareil du WiFi.
+# À REVOIR EN PHASE 5 (mobile/PWA) : passer à 0.0.0.0 exigera d'abord un
+# jeton partagé, sinon le téléphone ouvre la porte à tout le réseau.
+# Décision actée le 01/08/2026, voir ROADMAP.md §5.1.
+API_HOST = "127.0.0.1"
+API_PORT = 8000
+
 # --- Sécurité : surveillance rançongiciel ---
 # Répertoires surveillés, relatifs au profil utilisateur. Seules les
 # métadonnées sont lues (noms, extensions, dates) — jamais le contenu

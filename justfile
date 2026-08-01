@@ -11,7 +11,7 @@ all:
     echo "🌌 Démarrage complet Orion..."
     Start-Process powershell -ArgumentList "-c ollama serve" -WindowStyle Hidden
     Start-Sleep 2
-    Start-Process powershell -ArgumentList "-c uvicorn api.server:app --reload --host 0.0.0.0 --port 8000" -WindowStyle Hidden
+    Start-Process powershell -ArgumentList "-c uvicorn api.server:app --reload --host 127.0.0.1 --port 8000" -WindowStyle Hidden
     Start-Sleep 2
     pythonw orion_daemon.py
 
@@ -21,10 +21,12 @@ ollama:
 
 # NB : l'app FastAPI est dans api/server.py, pas dans main.py — main.py est
 # le point d'entrée PySide6 et expose une QApplication, pas une app ASGI.
+# 127.0.0.1 et non 0.0.0.0 : l'API n'a pas d'authentification, elle ne doit
+# pas être joignable depuis le réseau local. À revoir en Phase 5 (mobile).
 
 # Lancer FastAPI
 serve:
-    uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+    uvicorn api.server:app --reload --host 127.0.0.1 --port 8000
 
 # Lancer le daemon (arrière-plan Windows)
 daemon:

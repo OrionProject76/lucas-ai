@@ -135,22 +135,38 @@ def test_no_shell_execution() -> None:
                     ), "aucun appel ne doit passer shell=True"
 
 
-def test_shell_like_apps_are_logged_distinctly(launcher) -> None:
+def test_no_shell_in_the_default_whitelist() -> None:
     """
-    Ouvrir cmd donne accès à tout : l'événement doit être distinguable
-    d'une ouverture ordinaire dans le journal (voir ROADMAP §5.1).
+    Décision du 01/08/2026 : un interpréteur de commandes permet de
+    lancer n'importe quoi. Le laisser dans une liste blanche revient à
+    n'en avoir aucune.
     """
-    manager, _launched, events = launcher
+    assert not (set(WHITELISTED_APPS) & SHELL_LIKE_APPS)
+
+
+def test_cmd_is_no_longer_launchable(launcher) -> None:
+    manager, launched, events = launcher
+    assert "non autorisée" in manager.open_app("cmd")
+    assert launched == []
+    assert [t for t, _ in events] == ["automation_refused"]
+
+
+def test_shell_detection_still_works_if_one_is_reintroduced(monkeypatch) -> None:
+    """
+    La détection reste en place pour plus tard : si un shell revient un
+    jour derrière une confirmation, son ouverture doit rester
+    distinguable d'une ouverture ordinaire dans le journal.
+    """
+    monkeypatch.setattr("modules.automation_manager.Path.exists", lambda self: True)
+    monkeypatch.setattr(subprocess, "Popen", lambda cmd: None)
+
+    events: list[tuple[str, str]] = []
+    manager = AutomationManager(
+        whitelist={"cmd": [r"C:\Windows\System32\cmd.exe"]},
+        log_event=lambda t, d="": events.append((t, d)),
+    )
     manager.open_app("cmd")
     assert [t for t, _ in events] == ["automation_shell_opened"]
-
-
-def test_shell_like_set_covers_the_whitelist_entries() -> None:
-    """Garde-fou : si un shell entre dans la liste, il doit être marqué."""
-    known_shells = {"cmd", "powershell", "pwsh", "wscript", "cscript", "bash"}
-    for app in WHITELISTED_APPS:
-        if app in known_shells:
-            assert app in SHELL_LIKE_APPS, f"{app} doit être marqué comme shell"
 
 
 if __name__ == "__main__":
