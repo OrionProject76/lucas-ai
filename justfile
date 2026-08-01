@@ -37,17 +37,18 @@ daemon-debug:
 # ─── DÉVELOPPEMENT ───────────────────────────────────────
 
 # NB : les tests sont des test_*.py à la racine (pas de dossier tests/).
-# test_server.py et test_voice.py sont exclus : ce ne sont pas des tests
-# pytest mais des scripts de démo — test_server lance uvicorn et bloque
-# indéfiniment, test_voice joue du son et appelle edge-tts en réseau.
+# Seul test_voice.py est exclu : ce n'est pas un test pytest mais un
+# script de démo qui joue du son et appelle edge-tts en réseau.
+# test_server.py était dans le même cas — il lançait uvicorn et bloquait
+# la suite — il a été réécrit en vrais tests le 01/08/2026.
 
 # Tests auto (avec coverage)
 test:
-    pytest -v --ignore=test_server.py --ignore=test_voice.py --cov=core --cov=modules --cov=memory --cov=api --cov-report=term-missing
+    pytest -v --ignore=test_voice.py --cov=core --cov=modules --cov=memory --cov=api --cov-report=term-missing
 
 # Tests rapides (sans coverage)
 test-quick:
-    pytest -v --ignore=test_server.py --ignore=test_voice.py
+    pytest -v --ignore=test_voice.py
 
 # NB : ruff format réécrit les fichiers sur place.
 

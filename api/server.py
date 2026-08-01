@@ -1,34 +1,152 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
-import sqlite3
-from uvicorn import run
+# api/server.py — API FastAPI unique de Luca's
+#
+# Pourquoi une seule API (et pas un serveur séparé pour Godot) ?
+# Un seul point de vérité, moins de code à maintenir en double.
+# Le mobile (PWA) utilise les routes REST classiques ci-dessous.
+# Godot utilisera plus tard l'endpoint WebSocket /ws (protocole minimal,
+# voir VISION_LONG_TERME.md §2, Pilier 3 — le corps étendu PC + mobile).
 
-app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
+import sys
+from pathlib import Path
 
-@app.post("/chat")
-async def chat(request: Request):
-    data = await request.json()
-    message = data["message"]
-    # Traitement du message ici...
-    response = {"response": "Réponse au message", "status": "ok"}
-    return JSONResponse(content=response, media_type="application/json")
+# Permet de lancer ce fichier directement (uvicorn api.server:app depuis la racine)
+# ou en important le module depuis un autre script, sans casser les imports relatifs.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-@app.get("/history")
-async def history():
-    conn = sqlite3.connect("orion.db")
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM conversations")
-    rows = cur.fetchall()
-    conn.close()
-    historique = [{"message": row[1], "response": row[2]} for row in rows]
-    return JSONResponse(content=historique, media_type="application/json")
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+from core.orion_core import OrionCore
+from core.world_model import get_snapshot
+
+app = FastAPI(title="Luca's API", version="0.2")
+
+# CORS ouvert pour l'instant (dev local uniquement).
+# À restreindre à l'IP du mobile une fois le PWA en place (S5).
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    # La spec CORS interdit credentials + origine « * » : les navigateurs
+    # rejettent la combinaison. False reflète ce qui se passe réellement.
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+class ChatRequest(BaseModel):
+    message: str
+
+
+# ── Endpoints REST ──────────────────────────────────────────────
 
 @app.get("/status")
-async def status():
-    response = {"status": "running", "version": "0.1"}
-    return JSONResponse(content=response, media_type="application/json")  # Correction de l'erreur de syntaxe
+def status():
+    """Ping simple — confirme que le serveur tourne."""
+    return {"status": "running", "version": "0.2"}
+
+
+@app.post("/chat")
+def chat(req: ChatRequest):
+    """
+    Envoie un message à Luca's et retourne sa réponse.
+
+    Note technique : on crée une instance OrionCore par requête plutôt
+    qu'une instance partagée au niveau du module. Raison : SQLite refuse
+    par défaut d'être utilisé depuis un thread différent de celui qui a
+    ouvert la connexion, et FastAPI traite chaque requête dans un thread
+    du pool. Comme tout l'état (historique) vit dans la base SQLite et
+    pas en mémoire Python, recréer OrionCore() à chaque appel est sans
+    coût réel de logique — juste une micro-latence d'ouverture de fichier.
+    """
+    if not req.message.strip():
+        raise HTTPException(status_code=400, detail="Message vide")
+
+    orion = OrionCore()
+    try:
+        answer = orion.ask(req.message)
+    finally:
+        orion.close()
+
+    return {"response": answer, "status": "ok"}
+
+
+@app.get("/history")
+def history():
+    """Retourne l'historique complet de conversation (mémoire SQLite réelle)."""
+    orion = OrionCore()
+    try:
+        rows = orion.history()
+    finally:
+        orion.close()
+
+    return {
+        "history": [
+            {"role": role, "content": content}
+            for role, content in rows
+        ]
+    }
+
+
+@app.get("/system")
+def system_snapshot():
+    """
+    World Model v1 — snapshot de l'état système en RAM, pas de persistance.
+    Voir VISION_LONG_TERME.md §2 : structure Python rafraîchie à la
+    demande, pas de graphe de connaissances (GraphRAG) pour l'instant.
+    """
+    try:
+        return get_snapshot()
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Dépendance manquante pour le World Model : {exc}",
+        ) from exc
+
+
+# ── WebSocket minimal (pour Godot et mobile, phase 1) ───────────
+#
+# Protocole volontairement minimal (voir Vision Claude v1.0) :
+#   Backend → Frontend : {"type": "avatar_state", "state": "speaking", "text": "..."}
+#   Frontend → Backend : {"type": "chat", "message": "..."}
+#
+# Pas de gestion d'émotions/widgets tant que ce minimum n'est pas fiable.
+# Le vrai raccordement à Godot (orion3d_bridge.py) arrive en Phase 4 (S5-S6).
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    await websocket.send_json({"type": "avatar_state", "state": "idle"})
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+
+            if data.get("type") == "chat":
+                message = data.get("message", "").strip()
+                if not message:
+                    continue
+
+                await websocket.send_json({"type": "avatar_state", "state": "thinking"})
+
+                orion = OrionCore()
+                try:
+                    answer = orion.ask(message)
+                finally:
+                    orion.close()
+
+                await websocket.send_json({
+                    "type": "avatar_state",
+                    "state": "speaking",
+                    "text": answer,
+                })
+                await websocket.send_json({"type": "avatar_state", "state": "idle"})
+
+    except WebSocketDisconnect:
+        pass
+
 
 if __name__ == "__main__":
-    run("api.server:app", host="0.0.0.0", port=8000)
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
