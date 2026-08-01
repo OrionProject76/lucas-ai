@@ -3,6 +3,7 @@
 
 import sqlite3
 from pathlib import Path
+
 from config import MAX_HISTORY_MESSAGES
 
 DB_PATH = Path(__file__).parent / "orion_memory.db"

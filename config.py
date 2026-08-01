@@ -15,7 +15,13 @@ except ImportError:
 
 # --- IA locale (Ollama) ---
 OLLAMA_URL = "http://localhost:11434/api/chat"
-MODEL_NAME = "qwen2.5"
+# ⚠️ Tag explicite obligatoire. « qwen2.5 » sans tag ne correspond à
+# aucun modèle exactement : Ollama devine « qwen2.5:latest », et cette
+# résolution échoue tant que son registre n'est pas chargé — c'était la
+# cause des « 404 model not found » intermittents au démarrage.
+# qwen2.5:7b et qwen2.5:latest ont le même digest : même modèle, celui
+# que ROADMAP.md donne comme validé en usage réel.
+MODEL_NAME = "qwen2.5:7b"
 
 # Liste des modèles disponibles (pour futur sélecteur)
 AVAILABLE_MODELS = ["qwen2.5", "llama3.2", "mistral", "codellama"]

@@ -16,6 +16,11 @@ from core import orion_core
 from core.orion_core import OrionCore
 from core.router import route, should_use_vision
 
+# Marqueur du bloc vision injecté dans le prompt. Défini une fois :
+# répété en dur dans chaque test, il a divergé du code au premier
+# changement de formulation.
+VISION_MARKER = "TU VIENS DE REGARDER L'ÉCRAN"
+
 # ── Déclencheur ───────────────────────────────────────────────────────
 
 @pytest.mark.parametrize(
@@ -139,7 +144,7 @@ def test_no_capture_on_a_cloud_request(core, monkeypatch) -> None:
 
     monkeypatch.setattr("modules.vision_manager.VisionManager", must_not_be_called)
     messages = core._build_messages("regarde mon écran", "cloud")
-    assert not any("Écran de Cyril" in m["content"] for m in messages)
+    assert not any(VISION_MARKER in m["content"] for m in messages)
 
 
 def test_vision_can_be_disabled(core, monkeypatch) -> None:
@@ -182,6 +187,40 @@ def test_vision_prompt_asks_for_french() -> None:
     assert "que vois-tu ?" in prompt
 
 
+def test_vision_prompt_demands_concrete_detail() -> None:
+    """
+    Sans consigne, llava rend une paraphrase vague (« un message d'erreur
+    ou de confirmation ») au lieu de citer ce qui est écrit.
+    """
+    prompt = OrionCore._vision_prompt("c'est quoi cette erreur ?").lower()
+    assert "concrètement" in prompt
+    assert "cite" in prompt
+
+
+def test_injected_block_forbids_denying_sight(core, monkeypatch) -> None:
+    """
+    Le bug le plus sournois de la vision : qwen répondait « je ne peux
+    pas voir l'écran » alors que la description était juste au-dessus
+    dans son contexte. Un modèle de texte affirme par défaut qu'il n'a
+    pas d'yeux — le bloc doit le contredire explicitement.
+    """
+    _fake_vision(monkeypatch, "une fenêtre de console")
+    messages = core._build_messages("que vois-tu à l'écran ?", "local")
+    block = next(m["content"] for m in messages if VISION_MARKER in m["content"])
+
+    assert "Ne dis JAMAIS que tu ne peux pas voir" in block
+    assert "une fenêtre de console" in block
+
+
+def test_injected_block_is_an_instruction_not_a_statement(core, monkeypatch) -> None:
+    """Rédigé comme un simple constat, le bloc était ignoré."""
+    _fake_vision(monkeypatch, "un éditeur")
+    messages = core._build_messages("regarde mon écran", "local")
+    block = next(m["content"] for m in messages if VISION_MARKER in m["content"])
+
+    assert "Réponds à sa question" in block, "le bloc doit donner un ordre"
+
+
 # ── Dégradation ───────────────────────────────────────────────────────
 
 def test_vlm_failure_does_not_block_the_answer(core, monkeypatch) -> None:
@@ -192,7 +231,7 @@ def test_vlm_failure_does_not_block_the_answer(core, monkeypatch) -> None:
     _fake_vision(monkeypatch, "Erreur analyse (modèle llava peut-être non installé)")
     messages = core._build_messages("regarde mon écran", "local")
 
-    assert not any("Écran de Cyril" in m["content"] for m in messages)
+    assert not any(VISION_MARKER in m["content"] for m in messages)
     assert messages, "le prompt doit rester exploitable"
     assert "vision_failed" in [t for t, _ in core.memory.events]
 

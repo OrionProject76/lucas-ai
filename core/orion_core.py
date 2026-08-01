@@ -97,7 +97,10 @@ class OrionCore:
         """
         return (
             "Voici une capture de l'écran de l'utilisateur. "
-            f"Réponds en français, précisément, à sa question : {user_message}"
+            "Décris CONCRÈTEMENT ce qui est affiché : applications ouvertes, "
+            "titres de fenêtres, textes lisibles, messages d'erreur, chiffres. "
+            "Cite les mots que tu lis plutôt que de les paraphraser. "
+            f"Réponds en français à sa question : {user_message}"
         )
 
     def _describe_screen(self, user_message: str) -> str:
@@ -137,9 +140,19 @@ class OrionCore:
             return ""
 
         self.log_event("vision_used", user_message[:80])
+        # ⚠️ Le bloc doit DONNER UN ORDRE, pas seulement décrire. Rédigé
+        # comme un simple constat, qwen l'ignorait et répondait « je ne
+        # peux pas voir l'écran » — alors que la description était juste
+        # au-dessus dans son contexte. Un modèle de texte affirme par
+        # défaut qu'il n'a pas d'yeux ; il faut le contredire
+        # explicitement.
         return (
-            "[Luca's vient de regarder l'écran de Cyril. Ce qu'elle y a vu, "
-            f"en réponse à sa question : {description}]"
+            "TU VIENS DE REGARDER L'ÉCRAN DE CYRIL. Voici ce que tu y as vu :\n"
+            f"{description}\n"
+            "Réponds à sa question en t'appuyant sur cette observation. "
+            "Ne dis JAMAIS que tu ne peux pas voir l'écran : tu viens de le "
+            "faire. Si l'observation est incomplète, dis ce que tu as vu et "
+            "ce qui te manque."
         )
 
     def ask(self, user_message: str) -> str:

@@ -7,6 +7,7 @@ import requests
 from PySide6.QtCore import QThread, Signal
 
 from config import MODEL_NAME, OLLAMA_CONNECT_TIMEOUT, OLLAMA_READ_TIMEOUT, OLLAMA_URL
+from core.ollama_client import OllamaModelMissing, post_chat
 
 
 class LLMWorker(QThread):
@@ -23,13 +24,15 @@ class LLMWorker(QThread):
     def run(self):
         full_response = ""
         try:
-            response = requests.post(
+            # post_chat réessaie une fois sur 404 : au démarrage, Ollama
+            # répond avant d'avoir fini de charger son registre de
+            # modèles, et le premier message de la session échouait.
+            response = post_chat(
                 OLLAMA_URL,
-                json={"model": MODEL_NAME, "messages": self.messages, "stream": True},
-                stream=True,
+                {"model": MODEL_NAME, "messages": self.messages, "stream": True},
                 timeout=(OLLAMA_CONNECT_TIMEOUT, OLLAMA_READ_TIMEOUT),
+                stream=True,
             )
-            response.raise_for_status()
             
             # ✅ Connexion établie ! On peut masquer l'indicateur "connexion..."
             self.started_thinking.emit()
@@ -56,6 +59,8 @@ class LLMWorker(QThread):
             if self._is_running:
                 self.response_complete.emit(full_response)
 
+        except OllamaModelMissing as e:
+            self.error_occurred.emit(f"[Erreur] {e}")
         except requests.exceptions.ConnectionError:
             self.error_occurred.emit(
                 f"[Erreur] Impossible de contacter Ollama sur {OLLAMA_URL}. "

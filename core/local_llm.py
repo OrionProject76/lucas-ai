@@ -3,6 +3,7 @@
 import requests
 
 from config import MODEL_NAME, OLLAMA_URL
+from core.ollama_client import OllamaModelMissing, post_chat
 
 
 def ask_local(messages: list[dict]) -> str:
@@ -11,18 +12,15 @@ def ask_local(messages: list[dict]) -> str:
     Retourne toujours une string (jamais d'exception qui remonte à l'UI).
     """
     try:
-        response = requests.post(
+        response = post_chat(
             OLLAMA_URL,
-            json={
-                "model": MODEL_NAME,
-                "messages": messages,
-                "stream": False,
-            },
+            {"model": MODEL_NAME, "messages": messages, "stream": False},
             timeout=60,
         )
-        response.raise_for_status()
         return response.json()["message"]["content"]
 
+    except OllamaModelMissing as e:
+        return f"[Erreur] {e}"
     except requests.exceptions.ConnectionError:
         return (
             "[Erreur] Impossible de contacter Ollama sur "
