@@ -41,6 +41,13 @@ class OrionCore:
         """
         is_cloud = destination == "cloud"
 
+        # ⚠️ Le contexte est calculé AVANT tout, et sur l'historique privé
+        # de la question courante : prepare() vient de l'enregistrer, et
+        # se donner sa propre question comme « échange précédent » n'aurait
+        # aucun sens. Il sert aux questions elliptiques — « Et en décembre
+        # 2025 ? » n'a de sens que par rapport au tour d'avant.
+        context = self.recent_context()
+
         snapshot = get_snapshot()
         # Le titre de la fenêtre active ne part jamais vers le cloud : il
         # révèle sur quoi Cyril travaille (« releve_bancaire.pdf »…) même
@@ -65,7 +72,7 @@ class OrionCore:
         # La vision est décidée AVANT de charger l'historique : quand elle
         # se déclenche, l'historique doit être raccourci (voir plus bas).
         vision_context = ""
-        if not is_cloud and VISION_ENABLED and should_use_vision(user_message):
+        if not is_cloud and VISION_ENABLED and should_use_vision(user_message, context):
             vision_context = self._describe_screen(user_message)
 
         history = self.memory.load_history()
@@ -103,7 +110,7 @@ class OrionCore:
         # get_context() rend une chaîne VIDE quand aucun extrait n'est
         # assez proche : on n'injecte alors rien du tout.
         rag_context = ""
-        if not is_cloud and should_use_rag(user_message):
+        if not is_cloud and should_use_rag(user_message, context):
             rag_context = RAGManager().get_context(user_message)
             if not rag_context:
                 # ⚠️ NE PAS SE TAIRE. Observé en conditions réelles : sur
@@ -335,7 +342,7 @@ class OrionCore:
 
     def ask(self, user_message: str) -> str:
         self.memory.save_message("user", user_message)
-        destination = route(user_message)
+        destination = route(user_message, self.recent_context())
         messages = self._build_messages(user_message, destination)
 
         if destination == "cloud":
@@ -345,6 +352,26 @@ class OrionCore:
 
         self.memory.save_message("assistant", answer)
         return answer
+
+    def recent_context(self) -> str:
+        """
+        Dernier échange, mis en forme pour le classifieur d'intention.
+
+        ⚠️ Exposé publiquement pour que l'UI et _build_messages voient
+        EXACTEMENT le même contexte. Le cache de core/intent est indexé
+        sur (contexte, question) : deux contextes différents pour un même
+        message, c'est deux appels au classifieur au lieu d'un.
+
+        La question courante est exclue quand elle est déjà enregistrée —
+        se donner sa propre question comme « échange précédent » n'aurait
+        aucun sens.
+        """
+        from core.intent import format_context
+
+        history = self.memory.load_history()
+        if history and history[-1][0] == "user":
+            history = history[:-1]
+        return format_context(history)
 
     def prepare(self, user_message: str) -> list[dict]:
         """

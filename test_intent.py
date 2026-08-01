@@ -106,7 +106,7 @@ def fake_classifier(monkeypatch):
     """Remplace l'appel Ollama par un dictionnaire question -> label."""
 
     def install(answers: dict[str, str] | None, calls: list | None = None):
-        def fake(question: str):
+        def fake(question: str, context: str = ""):
             if calls is not None:
                 calls.append(question)
             return None if answers is None else answers.get(question)
@@ -221,6 +221,83 @@ def test_deixis_never_creates_a_document_lookup(fake_classifier):
         assert not result.needs_documents
 
 
+# ── Contexte conversationnel ──────────────────────────────────────────
+#
+# « Et en décembre 2025 ? » après une question sur un bulletin de paie
+# était classée AUCUN : la phrase, seule, ne parle ni d'écran ni de
+# documents. Elle n'a de sens que par rapport au tour d'avant.
+
+def test_le_contexte_est_transmis_au_classifieur(monkeypatch):
+    recu = {}
+
+    def fake(question, context=""):
+        recu["question"] = question
+        recu["context"] = context
+        return DOCUMENTS
+
+    monkeypatch.setattr(intent, "_ask_classifier", fake)
+    classify("Et en décembre 2025 ?", "Cyril : mon salaire de juillet 2025 ?")
+
+    assert "juillet 2025" in recu["context"]
+    assert recu["question"] == "Et en décembre 2025 ?"
+
+
+def test_le_cache_distingue_les_contextes(monkeypatch):
+    """
+    ⚠️ La clé du cache inclut le contexte. « Et en décembre 2025 ? » ne se
+    classe pas pareil selon ce qui précède : garder le verdict d'un autre
+    contexte rendrait la réponse fausse et impossible à comprendre.
+    """
+    reponses = iter([DOCUMENTS, SCREEN])
+    monkeypatch.setattr(intent, "_ask_classifier", lambda q, c="": next(reponses))
+
+    a = classify("et ensuite ?", "Cyril : que dit mon relevé ?")
+    b = classify("et ensuite ?", "Cyril : c'est écrit quoi à l'écran ?")
+
+    assert a.needs_documents
+    assert b.needs_screen
+
+
+def test_le_contexte_exclut_la_question_courante():
+    """
+    prepare() enregistre la question AVANT _build_messages : se donner sa
+    propre question comme « échange précédent » n'aurait aucun sens.
+    """
+    from core.intent import format_context
+
+    historique = [
+        ("user", "que dit mon relevé de carrière"),
+        ("assistant", "Il récapitule vos trimestres."),
+    ]
+    contexte = format_context(historique)
+
+    assert "relevé de carrière" in contexte
+    assert "Cyril :" in contexte and "Toi :" in contexte
+
+
+def test_un_contexte_vide_ne_change_rien(fake_classifier):
+    fake_classifier({"quelle heure il est": NEITHER})
+    resultat = classify("quelle heure il est", "")
+
+    assert not resultat.needs_screen
+    assert not resultat.needs_documents
+
+
+def test_le_contexte_est_borne():
+    """
+    Le classifieur doit rendre un mot en 0,14 s, pas relire la
+    conversation — et une réponse entière ferait basculer la décision sur
+    son contenu plutôt que sur la question posée.
+    """
+    from config import CONTEXT_MAX_CHARS, CONTEXT_TURNS
+    from core.intent import format_context
+
+    long = [("user", "x" * 5000), ("assistant", "y" * 5000)] * 10
+    contexte = format_context(long)
+
+    assert len(contexte) <= CONTEXT_TURNS * (CONTEXT_MAX_CHARS + 20)
+
+
 def test_disabled_classifier_uses_keywords(monkeypatch):
     monkeypatch.setattr(intent, "INTENT_CLASSIFIER_ENABLED", False)
     result = classify("regarde mon écran")
@@ -238,7 +315,7 @@ def test_the_sensitive_guard_never_calls_the_classifier(monkeypatch):
     bancaire chez OpenAI. La seconde décision ne doit jamais dépendre de
     la disponibilité d'un modèle. Voir CLAUDE.md règle 3.
     """
-    def boom(_question):
+    def boom(_question, _context=""):
         raise AssertionError("is_sensitive() a consulté le classifieur")
 
     monkeypatch.setattr(intent, "_ask_classifier", boom)
@@ -256,7 +333,7 @@ def test_tts_routing_never_calls_the_classifier(monkeypatch):
     classifieur indisponible ne doit jamais avoir pour effet d'AUTORISER
     une sortie.
     """
-    def boom(_question):
+    def boom(_question, _context=""):
         raise AssertionError("route_voice() a consulté le classifieur")
 
     monkeypatch.setattr(intent, "_ask_classifier", boom)

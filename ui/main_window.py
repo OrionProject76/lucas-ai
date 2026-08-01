@@ -430,7 +430,11 @@ class MainWindow(QWidget):
         # L'avatar dit ce que Luca's est en train de faire. WATCHING n'est
         # pas cosmétique : c'est le témoin que l'écran est en train d'être
         # capturé, comme la LED d'une webcam.
-        if should_use_vision(text):
+        # ⚠️ Le MÊME contexte que ContextWorker, via le même helper : le
+        # cache de core/intent est indexé sur (contexte, question), donc
+        # deux contextes différents pour un seul message donneraient deux
+        # appels au classifieur au lieu d'un.
+        if should_use_vision(text, self.orion.recent_context()):
             self._set_status("👁️ Luca's regarde ton écran...", "watching")
             self._set_avatar_state("WATCHING")
         else:

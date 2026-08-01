@@ -287,8 +287,8 @@ def test_une_recherche_infructueuse_est_annoncee_au_modele(monkeypatch):
     monkeypatch.setattr(
         orion_core, "format_for_prompt", lambda s, include_window=True: "[système]"
     )
-    monkeypatch.setattr(orion_core, "should_use_rag", lambda text: True)
-    monkeypatch.setattr(orion_core, "should_use_vision", lambda text: False)
+    monkeypatch.setattr(orion_core, "should_use_rag", lambda text, context="": True)
+    monkeypatch.setattr(orion_core, "should_use_vision", lambda text, context="": False)
     monkeypatch.setattr(orion_core, "RAGManager", _RagVide)
 
     core = OrionCore.__new__(OrionCore)

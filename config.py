@@ -309,6 +309,17 @@ INTENT_MODEL = "qwen2.5:7b"
 # à faire attendre Cyril. Le classifieur ne doit jamais bloquer une réponse.
 INTENT_TIMEOUT_SECONDS: float = 5.0
 
+# Contexte conversationnel donné au classifieur, pour les questions
+# elliptiques. « Et en décembre 2025 ? » après une question sur un
+# bulletin de paie était classée AUCUN : la phrase, seule, ne parle ni
+# d'écran ni de documents.
+#
+# ⚠️ Volontairement COURT. Le classifieur doit rendre un mot en 0,14 s,
+# pas relire la conversation — et une réponse entière ferait basculer la
+# décision sur son contenu plutôt que sur la question posée.
+CONTEXT_TURNS: int = 2
+CONTEXT_MAX_CHARS: int = 200
+
 # --- Mémoire ---
 DB_PATH = "memory/orion_memory.db"
 MAX_HISTORY_MESSAGES = 100      # garde les 100 derniers messages max

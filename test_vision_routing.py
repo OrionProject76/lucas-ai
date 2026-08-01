@@ -549,7 +549,7 @@ def test_history_is_shortened_when_the_rag_fires(core_with_history, monkeypatch)
     from config import SOURCE_HISTORY_MESSAGES
 
     monkeypatch.setattr(
-        orion_core, "should_use_rag", lambda text: True
+        orion_core, "should_use_rag", lambda text, context="": True
     )
 
     class _FakeRAG:

@@ -44,6 +44,8 @@ from dataclasses import dataclass
 from config import (
     INTENT_CLASSIFIER_ENABLED,
     INTENT_MODEL,
+    CONTEXT_MAX_CHARS,
+    CONTEXT_TURNS,
     INTENT_TIMEOUT_SECONDS,
     OLLAMA_URL,
 )
@@ -137,7 +139,40 @@ class Intent:
         return self.source == "keywords"
 
 
-def _ask_classifier(question: str) -> str | None:
+def format_context(history) -> str:
+    """
+    Résume le dernier échange, pour donner au classifieur de quoi
+    interpréter une question elliptique.
+
+    ⚠️ Le DERNIER échange seulement. Observé : « Et en décembre 2025 ? »
+    après une question sur un bulletin de paie était classée AUCUN — la
+    phrase, seule, ne parle ni d'écran ni de documents. Elle n'a de sens
+    que par rapport à ce qui précède.
+
+    Volontairement court et tronqué : le classifieur doit rendre un mot
+    en 0,14 s, pas relire la conversation. Une réponse entière ferait
+    basculer la décision sur son contenu plutôt que sur la question.
+
+    `history` est une liste de (rôle, texte) telle que la rend
+    MemoryManager.load_history(), la plus récente en dernier.
+    """
+    if not history:
+        return ""
+
+    derniers = [
+        (role, texte) for role, texte in history[-CONTEXT_TURNS:] if texte.strip()
+    ]
+    if not derniers:
+        return ""
+
+    lignes = []
+    for role, texte in derniers:
+        qui = "Cyril" if role == "user" else "Toi"
+        lignes.append(f"{qui} : {texte.strip()[:CONTEXT_MAX_CHARS]}")
+    return "\n".join(lignes)
+
+
+def _ask_classifier(question: str, context: str = "") -> str | None:
     """
     Interroge le modèle local. Retourne un label, ou None si quoi que ce
     soit a échoué — Ollama absent, délai dépassé, réponse inattendue.
@@ -154,6 +189,18 @@ def _ask_classifier(question: str) -> str | None:
                 "model": INTENT_MODEL,
                 "messages": [
                     {"role": "system", "content": CLASSIFIER_PROMPT},
+                    *(
+                        [{
+                            "role": "system",
+                            "content": (
+                                "Échange précédent, pour interpréter une "
+                                "question elliptique. Classe la QUESTION "
+                                "qui suit, pas cet échange :\n" + context
+                            ),
+                        }]
+                        if context
+                        else []
+                    ),
                     {"role": "user", "content": question},
                 ],
                 "stream": False,
@@ -180,24 +227,33 @@ def _ask_classifier(question: str) -> str | None:
 # OrionCore._build_messages() les reconsulte pour décider quels blocs
 # injecter. Sans cache, les 0,14 s deviendraient 0,56 s.
 # Le résultat est déterministe (temperature 0), donc le cache est exact.
-_CACHE: dict[str, Intent] = {}
+#
+# ⚠️ La clé inclut le CONTEXTE. « Et en décembre 2025 ? » ne se classe
+# pas pareil selon ce qui précède : garder le verdict d'un autre contexte
+# rendrait la réponse fausse et impossible à comprendre.
+_CACHE: dict[tuple[str, str], Intent] = {}
 _CACHE_MAX = 64
 
 
-def classify(question: str) -> Intent:
+def classify(question: str, context: str = "") -> Intent:
     """
     Décide quelle source consulter pour cette question.
+
+    `context` est le dernier échange, mis en forme par format_context().
+    Il sert aux questions elliptiques — « Et en décembre 2025 ? » n'a de
+    sens que par rapport à ce qui précède, et était classée AUCUN.
 
     Bascule sur les mots-clés si le classifieur est désactivé ou
     indisponible. Le repli est volontairement l'ancien comportement à
     l'identique : il vaut mieux 50 % de couverture qu'aucune réponse.
     """
-    cached = _CACHE.get(question)
+    cle = (context, question)
+    cached = _CACHE.get(cle)
     if cached is not None:
         return cached
 
     if INTENT_CLASSIFIER_ENABLED and question.strip():
-        label = _ask_classifier(question)
+        label = _ask_classifier(question, context)
         if label is not None:
             # La garde déictique ne corrige QUE le sens DOCUMENTS → ECRAN.
             # Elle ne peut jamais faire naître une consultation de
@@ -217,7 +273,7 @@ def classify(question: str) -> Intent:
             # cette question pour toute la session.
             if len(_CACHE) >= _CACHE_MAX:
                 _CACHE.clear()
-            _CACHE[question] = intent
+            _CACHE[cle] = intent
             return intent
 
     return _classify_by_keywords(question)

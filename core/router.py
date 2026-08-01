@@ -59,7 +59,7 @@ def is_sensitive(text: str) -> bool:
     return contains_any(text, KEYWORDS_SENSITIVE)
 
 
-def route(text: str) -> str:
+def route(text: str, context: str = "") -> str:
     """
     Décide si la question part en local (Ollama) ou en cloud.
 
@@ -75,11 +75,11 @@ def route(text: str) -> str:
     """
     if is_sensitive(text):
         return "local"
-    if should_use_rag(text):
+    if should_use_rag(text, context):
         return "local"
     # L'image ne part jamais au cloud, mais sa DESCRIPTION en dirait tout
     # autant : « une fenêtre de banque affichant un solde de 3200 € ».
-    if should_use_vision(text):
+    if should_use_vision(text, context):
         return "local"
 
     if contains_any(text, KEYWORDS_CLOUD):
@@ -103,7 +103,7 @@ KEYWORDS_VISION = [
 ]
 
 
-def should_use_vision(text: str) -> bool:
+def should_use_vision(text: str, context: str = "") -> bool:
     """
     Décide si Luca's doit regarder l'écran avant de répondre.
 
@@ -111,10 +111,13 @@ def should_use_vision(text: str) -> bool:
     plus que de repli quand le classifieur est indisponible : ils ne
     couvraient que la moitié des formulations réelles, et rataient
     entièrement celles qui ne nomment pas l'écran (« c'est écrit quoi ? »).
+
+    `context` est le dernier échange (voir intent.format_context), pour
+    les questions elliptiques qui n'ont de sens que par rapport à lui.
     """
     from core.intent import classify
 
-    return classify(text).needs_screen
+    return classify(text, context).needs_screen
 
 
 def route_voice(answer: str, question: str = "") -> str:
@@ -147,7 +150,7 @@ def route_voice(answer: str, question: str = "") -> str:
     return "cloud"
 
 
-def should_use_rag(text: str) -> bool:
+def should_use_rag(text: str, context: str = "") -> bool:
     """
     Décide si on va chercher dans les documents personnels (RAG) avant
     de répondre. Axe de décision indépendant de route() — une question
@@ -160,7 +163,7 @@ def should_use_rag(text: str) -> bool:
     """
     from core.intent import classify
 
-    return classify(text).needs_documents
+    return classify(text, context).needs_documents
 
 
 def matches_rag_keywords(text: str) -> bool:
