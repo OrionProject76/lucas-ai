@@ -1,239 +1,249 @@
-# 🌌 ORION AI — Kit d'Installation 24/7
+# 🌌 ORION AI — Installation
 
-Ce dossier contient tout ce qu'il faut pour transformer ton PC en **usine Orion** qui travaille jour et nuit.
+Ce document couvre l'installation complète : l'application principale
+(interface + API) et, en option, le daemon 24/7.
 
----
-
-## 📦 Contenu du Kit
-
-| Fichier | Description |
-|---------|-------------|
-| `orion_daemon.py` | Cerveau nocturne — tourne 24/7 en arrière-plan |
-| `justfile` | Commandes rapides (`just serve`, `just test`, etc.) |
-| `CLAUDE.md` | Bible du projet — Claude Code lit ça automatiquement |
-| `requirements_daemon.txt` | Dépendances Python du daemon |
-| `missions/` | 10 missions structurées prêtes pour Claude Code |
+> Le projet s'appelle désormais **Luca's**. Le renommage technique (chemins,
+> titres de fenêtre, prompts) est volontairement différé — voir `ROADMAP.md`
+> section 6. Les chemins ci-dessous restent donc en `OrionAI`.
 
 ---
 
-## 🚀 Installation Étape par Étape
+## 📦 Ce que contient le dépôt
 
-### Étape 1 : Installer `just` (task runner)
+| Élément | Rôle |
+|---|---|
+| `main.py` | Point d'entrée de l'interface PySide6 |
+| `api/server.py` | API FastAPI (REST + WebSocket) — mobile et Godot |
+| `core/` | Cerveau : routage local/cloud, mémoire, World Model |
+| `modules/` | RAG, vision, voix, web, finance |
+| `orion_daemon.py` | Daemon 24/7 optionnel (tâches de fond) |
+| `Orion3D/` | Frontend Godot 4 (avatar holographique) |
+| `missions/` | 10 fiches de spécification pour Claude Code |
+| `justfile` | Raccourcis de commandes |
 
-Dans PowerShell (admin) :
+---
+
+## 🚀 Installation
+
+### Prérequis
+
+- **Python 3.12** (le projet tourne sur 3.12.7)
+- **Ollama** installé et fonctionnel — [ollama.com](https://ollama.com)
+- **git**
+
+`just` est optionnel (raccourcis de commandes) :
+
 ```powershell
 winget install Casey.Just
 ```
 
-Vérifie :
-```powershell
-just --version
-```
-
-### Étape 2 : Copier les fichiers dans OrionAI
-
-Copie **tout le contenu** de ce dossier dans `C:\OrionAI\` :
-
-```
-C:\OrionAI\
-├── orion_daemon.py          ← COPIER
-├── justfile                 ← COPIER
-├── CLAUDE.md                ← COPIER (remplace l'ancien si besoin)
-├── requirements_daemon.txt  ← COPIER
-├── missions/                ← COPIER (créer le dossier)
-│   ├── mission_01_screen_watcher.md
-│   ├── mission_02_system_watcher.md
-│   ├── ...
-│   └── mission_10_stt_engine.md
-├── (tes fichiers existants)
-```
-
-### Étape 3 : Installer les dépendances du daemon
+### Étape 1 : Récupérer le dépôt
 
 ```powershell
+git clone https://github.com/OrionProject76/lucas-ai.git C:\OrionAI
 cd C:\OrionAI
+```
+
+### Étape 2 : Créer l'environnement virtuel
+
+```powershell
+python -m venv venv
 .\venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+```
+
+### Étape 3 : Installer les dépendances
+
+```powershell
+pip install -r requirements.txt
+```
+
+Environ 99 paquets, ~1,1 Go. C'est tout ce qu'il faut pour l'interface et
+l'API.
+
+Le daemon 24/7 a ses propres dépendances (`requirements_daemon.txt`) —
+voir la section dédiée plus bas. **Ne l'installe pas maintenant** : plusieurs
+de ses paquets exigent une compilation C sous Windows et ne servent qu'aux
+modules de perception, pas encore écrits.
+
+### Étape 4 : Configurer les secrets
+
+```powershell
+copy .env.example .env
+```
+
+Le `.env` n'est jamais versionné. La seule variable actuelle,
+`OPENAI_API_KEY`, est **optionnelle** : laissée vide, Orion reste en 100 %
+local via Ollama. Voir `CLAUDE.md` règle 3 pour l'architecture hybride.
+
+### Étape 5 : Préparer Ollama
+
+```powershell
+ollama serve
+```
+
+Dans un autre terminal, récupérer le modèle utilisé par défaut
+(`MODEL_NAME` dans `config.py`) :
+
+```powershell
+ollama pull qwen2.5
+ollama list
+```
+
+> ⚠️ **Ne jamais avoir deux instances d'Ollama actives.** L'appli tray relance
+> un serveur en tâche de fond ; combinée à un `ollama serve` en CLI, on obtient
+> deux process sur le port 11434 avec des jeux de modèles différents, et des
+> erreurs `404 model not found` sur un modèle pourtant listé. Vérifier avec
+> `tasklist | findstr ollama`. Détails dans `CLAUDE.md`.
+
+---
+
+## ▶️ Lancer Orion
+
+Avec le venv activé et Ollama démarré :
+
+```powershell
+# Interface principale (PySide6)
+python main.py
+
+# API seule (mobile, Godot)
+uvicorn api.server:app --reload --host 0.0.0.0 --port 8000
+```
+
+L'API expose `GET /status`, `GET /system`, `POST /chat` et `WS /ws`.
+
+### Vérifier que tout fonctionne
+
+```powershell
+pytest test_router.py -v          # 15 tests, tous verts
+python -c "import config, core.orion_core, main; print('imports OK')"
+```
+
+---
+
+## 🌙 Daemon 24/7 (optionnel)
+
+Le daemon tourne en arrière-plan pour les tâches de fond (captures d'écran,
+rapports). Il n'est pas nécessaire pour utiliser Orion.
+
+```powershell
 pip install -r requirements_daemon.txt
+python orion_daemon.py            # mode visible, pour voir les logs
+pythonw orion_daemon.py           # mode invisible, arrière-plan
 ```
 
-### Étape 4 : Tester le daemon
+> `requirements_daemon.txt` déclare aujourd'hui plus que ce que le code
+> importe (`pyaudio`, `webrtcvad`, `openai-whisper`, `piper-tts`,
+> `sentence-transformers`, `pynput`, `pywinauto`, `sounddevice`). Ces paquets
+> correspondent aux missions 03-05 et 09-10, pas encore implémentées, et
+> certains échouent à l'installation sous Windows faute de compilateur C.
+> Le daemon actuel n'a besoin que de `Pillow`, `opencv-python`, `numpy`,
+> `pyautogui`, `schedule`, `psutil` et `pywin32`.
+
+Suivre les logs :
 
 ```powershell
-# Mode visible (pour voir les logs en direct)
-python orion_daemon.py
-
-# Tu dois voir :
-# 🌌 Orion Daemon initialisé.
-# 📅 Planning configuré.
-# 🚀 Orion Daemon démarré. Ctrl+C pour arrêter.
-```
-
-Appuie sur `Ctrl+C` pour arrêter.
-
-### Étape 5 : Lancer le daemon en arrière-plan (24/7)
-
-```powershell
-# Mode invisible (Windows)
-pythonw orion_daemon.py
-```
-
-Le daemon tourne maintenant en arrière-plan. Tu ne vois pas de fenêtre.
-
-### Étape 6 : Vérifier que ça marche
-
-```powershell
-# Voir les logs en temps réel
-just logs
-
-# Ou directement :
 Get-Content C:\OrionAI\data\logs\daemon.log -Tail 20 -Wait
 ```
 
-Tu dois voir des lignes apparaître toutes les 30 secondes (screenshots).
+### Démarrage automatique au boot (optionnel)
 
-### Étape 7 : Créer le service Windows (optionnel mais recommandé)
-
-Pour que le daemon démarre automatiquement au boot :
-
-1. Télécharge **NSSM** : https://nssm.cc/download
+1. Télécharger **NSSM** : https://nssm.cc/download
 2. Extraire `nssm.exe` dans `C:\Windows\System32\`
-3. Dans PowerShell admin :
+3. En PowerShell admin :
 
 ```powershell
 nssm install OrionDaemon
-# Path : C:\OrionAI\venv\Scripts\pythonw.exe
+# Path      : C:\OrionAI\venv\Scripts\pythonw.exe
 # Arguments : C:\OrionAI\orion_daemon.py
-# Démarrer le service
 nssm start OrionDaemon
 ```
 
 ---
 
-## 🎯 Utilisation Quotidienne
+## 🔧 Commandes `just`
 
-### Matin (08h)
-```powershell
-cd C:\OrionAI
+**Fonctionnelles aujourd'hui :**
 
-# 1. Voir le rapport de la nuit
-just report-today
+| Commande | Action |
+|---|---|
+| `just ollama` | Lance `ollama serve` |
+| `just daemon` | Lance le daemon en arrière-plan |
+| `just daemon-debug` | Lance le daemon en mode visible |
+| `just logs` | Suit les logs du daemon |
+| `just install` | Installe les deux fichiers de dépendances |
+| `just doctor` | Affiche les versions Python / Ollama / uvicorn |
+| `just git-commit "msg"` | `git add .` puis commit |
+| `just git-push` | Push sur `main` |
+| `just git-feature nom` | Crée la branche `feature/nom` |
 
-# 2. Lancer Ollama + FastAPI
-just all
+**⚠️ Cassées — le justfile pointe vers des chemins qui n'existent pas encore :**
 
-# 3. Ouvrir VS Code + Cline (extension)
-# 4. Ouvrir terminal + Claude Code
-```
+| Commande | Problème |
+|---|---|
+| `just serve`, `just all` | lancent `uvicorn main:app`, or `main.py` expose une `QApplication`, pas une app FastAPI. Utiliser `uvicorn api.server:app` |
+| `just test`, `just test-quick` | ciblent `tests/`, qui n'existe pas — les tests sont des `test_*.py` à la racine |
+| `just lint`, `just mypy`, `just check` | ciblent un package `orion/` qui n'existe pas |
+| `just index` | `memory/index_documents.py` absent |
+| `just clean` | `scripts/cleanup.py` absent |
+| `just train` | `training/train_lora.py` absent |
 
-### Pendant la journée
-```powershell
-# Lancer une mission Claude Code
-cd C:\OrionAI
-claude
-# Puis : "Implémente la mission missions/mission_01_screen_watcher.md"
-
-# Ajustements rapides avec Cline (VS Code)
-# → Ouvrir Cline dans la barre latérale
-# → Sélectionner Ollama (qwen2.5:7b)
-# → Demander des corrections
-
-# Tests
-just test
-
-# Lint + format
-just lint
-```
-
-### Soir (21h)
-```powershell
-# Commit + push
-just git-commit "feat: module X terminé"
-just git-push
-
-# Le daemon continue de tourner la nuit
-```
+Ces cibles décrivent l'arborescence visée dans `CLAUDE.md`, pas celle
+d'aujourd'hui. À corriger lors d'une passe dédiée sur le `justfile`.
 
 ---
 
-## 📋 Les 10 Missions — Ordre d'exécution
+## 🛠️ Dépannage
 
-Donne ces missions à **Claude Code** une par une, dans cet ordre :
+### `ModuleNotFoundError` au lancement
 
-1. **`mission_01_screen_watcher.md`** — Capture écran + OCR
-2. **`mission_02_system_watcher.md`** — Surveillance système Windows
-3. **`mission_03_audio_watcher.md`** — Micro + STT Whisper
-4. **`mission_04_webcam_watcher.md`** — Webcam + émotions
-5. **`mission_05_input_watcher.md`** — Patterns clavier/souris
-6. **`mission_06_world_model.md`** — Agrégation état temps réel
-7. **`mission_07_memory_palace.md`** — Mémoire à 5 types
-8. **`mission_08_rag_engine.md`** — Retrieval Augmented Generation
-9. **`mission_09_tts_engine.md`** — Text-to-Speech
-10. **`mission_10_stt_engine.md`** — Speech-to-Text
+Vérifier que le venv est bien activé :
 
-**Format pour Claude Code :**
+```powershell
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+### Ollama ne répond pas
+
+```powershell
+tasklist | findstr ollama     # un seul ollama.exe attendu
+ollama serve
+ollama list
+```
+
+### `404 model not found` alors que le modèle est listé
+
+Symptôme typique du doublon d'instances Ollama — voir l'avertissement de
+l'étape 5.
+
+### L'interface se lance mais le chat ne répond pas
+
+Ollama doit tourner **avant** `main.py`. Vérifier `OLLAMA_URL` et
+`MODEL_NAME` dans `config.py`.
+
+---
+
+## 📋 Les 10 missions
+
+Fiches de spécification à donner à Claude Code, dans l'ordre :
+
+1. `mission_01_screen_watcher.md` — Capture écran + OCR
+2. `mission_02_system_watcher.md` — Surveillance système Windows
+3. `mission_03_audio_watcher.md` — Micro + STT Whisper
+4. `mission_04_webcam_watcher.md` — Webcam + émotions
+5. `mission_05_input_watcher.md` — Patterns clavier/souris
+6. `mission_06_world_model.md` — Agrégation état temps réel
+7. `mission_07_memory_palace.md` — Mémoire à 5 types
+8. `mission_08_rag_engine.md` — Retrieval Augmented Generation
+9. `mission_09_tts_engine.md` — Text-to-Speech
+10. `mission_10_stt_engine.md` — Speech-to-Text
+
 ```
 Implémente la mission décrite dans missions/mission_01_screen_watcher.md
 ```
 
 ---
 
-## 🔧 Commandes `just` Essentielles
-
-| Commande | Action |
-|----------|--------|
-| `just all` | Lance Ollama + FastAPI + Daemon |
-| `just serve` | Lance FastAPI seul |
-| `just daemon` | Lance le daemon en arrière-plan |
-| `just daemon-debug` | Lance le daemon en mode visible |
-| `just test` | Exécute tous les tests |
-| `just lint` | Formate le code avec ruff |
-| `just check` | Lint + test + type check |
-| `just train` | Entraînement LoRA manuel |
-| `just index` | Indexation RAG manuelle |
-| `just clean` | Cleanup manuel |
-| `just report` | Génère le rapport matinal |
-| `just logs` | Voir les logs en temps réel |
-| `just doctor` | Vérifier l'environnement |
-
----
-
-## 🛠️ Dépannage
-
-### "ModuleNotFoundError" au lancement du daemon
-```powershell
-.\venv\Scripts\Activate.ps1
-pip install -r requirements_daemon.txt
-```
-
-### "Permission denied" pour pynput (input watcher)
-→ Lancer VS Code / terminal **en administrateur**
-
-### Ollama ne répond pas
-```powershell
-ollama serve
-# Dans un autre terminal :
-ollama list
-```
-
-### Le daemon ne capture pas les screenshots
-→ Vérifier que `pyautogui` est installé :
-```powershell
-python -c "import pyautogui; print('OK')"
-```
-
----
-
-## 📊 Rendement Attendu
-
-| Période | Action | Résultat |
-|---------|--------|----------|
-| **Jour** | 4 missions Claude Code + ajustements Cline | 3-4 modules fonctionnels |
-| **Nuit** | Daemon auto (LoRA, RAG, screenshots, cleanup) | Données prêtes le matin |
-| **Semaine** | 20-28 modules | S1-S2 complètes |
-| **8 semaines** | 60+ modules | v1.0 Orion fonctionnelle |
-
----
-
 *"L'intelligence ne se contente pas de répondre. Elle anticipe, elle comprend, elle évolue."*
-
-**Bienvenue dans l'usine Orion. 🌌**
