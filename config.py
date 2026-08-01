@@ -46,6 +46,15 @@ PIPER_VOICES_DIR = "data/voices"       # modèles .onnx (non versionnés)
 # Voir CLAUDE.md règle 3, section TTS.
 TTS_ALLOW_CLOUD_ON_SENSITIVE: bool = False
 
+# --- Voix : transcription (STT) ---
+# « base » ≈ 150 Mo, suffisant pour la v1.0 ; « small » ≈ 500 Mo, plus
+# précis, envisagé en v1.1 (mission_10_stt_engine.md).
+STT_MODEL_SIZE = "base"
+
+# Transcriptions récentes gardées en mémoire : re-transcrire deux fois
+# le même extrait coûte plusieurs secondes de calcul pour rien.
+STT_CACHE_SIZE: int = 20
+
 # --- API ---
 # ⚠️ 127.0.0.1 : l'API n'est joignable que depuis ce PC. Elle n'a aucune
 # authentification, et GET /history renvoie l'intégralité des

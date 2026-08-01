@@ -51,10 +51,28 @@ Reclassé en Phase 6 (S5-S6), branche `experimental/godot-avatar`. Ne bloque pas
 |---|---|---|---|
 | **Phase 0 — Audit** | S0 | Nettoyage, inventaire | ✅ Fait (avec incident de suppression accidentelle résolu — voir CLAUDE.md) |
 | **Phase 1 — Cerveau solide** | S1 | FastAPI unique + World Model | ✅ **Fait et validé aujourd'hui** |
-| **Phase 2 — Mémoire & Finance** | S2 | RAG, TTS, Finance CSV | 🔴 Priorité actuelle |
-| **Phase 3 — Vision & Voix** | S3-S4 | VLM écran, STT, Avatar QPainter V3, 5 modes de présence | À venir |
+| **Phase 2 — Mémoire & Finance** | S2 | RAG, TTS, Finance CSV | ✅ Fait le 01/08 — reste la validation TTS à l'oreille dans l'UI |
+| **Phase 3 — Vision & Voix** | S3-S4 | VLM écran, Avatar QPainter V3, 5 modes de présence | 🔴 Priorité actuelle |
 | **Phase 4 — Expansion** | S5-S6 | PWA mobile, sync, Godot 4 V1 (branche expérimentale) | À venir |
 | **Phase 5 — Polish** | S7-S8 | Sécurité finale, packaging, release v1.0 | À venir |
+
+### ⚠️ Ce qui dépend du micro et de la caméra ne peut pas être fait avant le mobile
+
+`IDEAS.md` #69 et `VISION_LONG_TERME.md` §2 Pilier 3 l'actent : **le PC n'a ni micro ni webcam, et c'est définitif.** Tout ce qui en dépend passe obligatoirement par le S25 Ultra, donc par le pont mobile — la Phase 4 de ce tableau.
+
+Trois missions sont concernées, alors qu'elles sont annoncées en S1 dans la liste des priorités de `CLAUDE.md` :
+
+| Mission | Dépend de | Faisable à partir de |
+|---|---|---|
+| `mission_03_audio_watcher` | micro | Phase 4 (pont mobile) |
+| `mission_04_webcam_watcher` | caméra | Phase 4 (pont mobile) |
+| `mission_10_stt_engine` | micro | Phase 4 — moteur déjà écrit, voir ci-dessous |
+
+**Ne pas rebuter dessus** : les prendre avant le pont produit du code correct que rien ne peut alimenter ni valider en usage réel.
+
+Le moteur STT (`modules/stt_engine.py`) est **déjà écrit et testé**, commité le 01/08 comme socle. Il ne capte rien : il transcrit ce qu'on lui donne, et attend que le mobile lui envoie de l'audio. **Il ne compte pas comme une avancée de Phase 3.**
+
+> **Note de numérotation.** Ce tableau place le pont mobile en **Phase 4** (semaines S5-S6), tandis que la section « Priorités de Développement » de `CLAUDE.md` situe le « Mobile Bridge » en S7. Les commentaires de code écrits le 01/08 (`config.py`, `README_INSTALL.md`, `stt_engine.py`) parlent de « Phase 5 », en reprenant le libellé de semaine. Les trois désignent la même étape : **l'arrivée du S25 Ultra**. À harmoniser lors d'une passe dédiée sur la numérotation.
 
 ---
 
