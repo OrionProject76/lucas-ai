@@ -1,44 +1,48 @@
 # Dépendances du Daemon Orion (24/7 background tasks)
 # Installation : pip install -r requirements_daemon.txt
+#
+# Réduit le 01/08/2026 à ce que orion_daemon.py importe réellement.
+# Le daemon est autonome : il n'importe ni core/ ni modules/, il parle
+# directement à SQLite. Pas besoin de requirements.txt pour le lancer.
 
 # ─── Base ──────────────────────────────────
 schedule>=1.2.0          # Planning des tâches cron-like
 
-# ─── Capture écran ───────────────────────────
-Pillow>=10.0.0           # Manipulation images
+# ─── Capture écran ─────────────────────────
+Pillow>=12.0.0           # Manipulation images (PIL.Image)
 pyautogui>=0.9.54        # Screenshot
-pywin32>=306             # Hooks Windows (fenêtres, processus)
-psutil>=5.9.0            # Info système (CPU, RAM, processus)
-pywinauto>=0.6.8         # Automation UI Windows (URL navigateur)
+pywin32>=312             # Fenêtre active Windows (win32gui)
 
-# ─── Audio ───────────────────────────────────
-pyaudio>=0.2.13          # Capture micro
-webrtcvad>=2.0.10        # Voice Activity Detection
-openai-whisper>=20231117 # STT Whisper local
-numpy>=1.24.0            # Traitement audio
+# ─── Traitement image ──────────────────────
+opencv-python>=5.0.0     # Comparaison de captures (cv2)
+numpy>=2.4.0             # Calculs sur les images
 
-# ─── Webcam & Vision ───────────────────────
-opencv-python>=4.8.0     # Capture webcam, traitement image
 
-# ─── Input ───────────────────────────────────
-pynput>=1.7.6            # Hooks clavier/souris globaux
-
-# ─── WebSocket & Communication ─────────────
-websockets>=12.0         # Serveur/client WebSocket
-
-# ─── Base de données ───────────────────────
-chromadb>=0.4.0          # Vector DB pour RAG
-sentence-transformers>=2.2.0  # Embeddings (fallback si Ollama down)
-
-# ─── TTS ────────────────────────────────────
-piper-tts>=1.2.0         # TTS local rapide
-sounddevice>=0.4.6       # Lecture audio
-
-# ─── Tests & Qualité ───────────────────────
-pytest>=7.4.0            # Tests unitaires
-pytest-mock>=3.11.0      # Mock pour tests
-pytest-cov>=4.1.0        # Coverage tests
-
-# ─── Utils ──────────────────────────────────
-python-dotenv>=1.0.0     # Variables d'environnement
-requests>=2.31.0         # HTTP client
+# ══════════════════════════════════════════════════════════════════
+# NON INSTALLÉ — dépendances des missions à venir
+# ══════════════════════════════════════════════════════════════════
+# Ces paquets figuraient dans ce fichier alors qu'aucun code ne les
+# importe. Plusieurs exigent un compilateur C sous Windows et font
+# échouer l'installation complète. Les décommenter mission par mission,
+# au moment de l'implémenter — voir missions/.
+#
+# Mission 03 — audio_watcher (micro + STT)
+# pyaudio>=0.2.13              # Capture micro
+# webrtcvad>=2.0.10            # Voice Activity Detection
+# openai-whisper>=20231117     # STT Whisper local
+#
+# Mission 05 — input_watcher (clavier/souris)
+# pynput>=1.7.6                # Hooks clavier/souris globaux
+#
+# Mission 09 — tts_engine
+# piper-tts>=1.2.0             # TTS local rapide
+# sounddevice>=0.4.6           # Lecture audio
+#
+# Mission 02 — system_watcher (URL navigateur)
+# pywinauto>=0.6.8             # Automation UI Windows
+#
+# Fallback embeddings si Ollama indisponible (mission 08)
+# sentence-transformers>=2.2.0
+#
+# Déjà couverts par requirements.txt (application principale) :
+# chromadb, requests, python-dotenv, psutil, pytest, pytest-cov
