@@ -524,15 +524,49 @@ def test_history_is_shortened_when_vision_fires(core_with_history, monkeypatch):
     donner plus de contexte » — le modèle imitait sa propre mauvaise
     habitude. Mesuré 0/9 à 100 messages, 9/9 à 6.
     """
-    from config import VISION_HISTORY_MESSAGES
+    from config import SOURCE_HISTORY_MESSAGES
 
     _fake_vision(monkeypatch, "un éditeur de texte")
     messages = core_with_history._build_messages("c'est écrit quoi ?", "local")
 
     old = [m for m in messages if m["content"].startswith(("vieille question", "vieille réponse"))]
-    assert len(old) <= VISION_HISTORY_MESSAGES, (
+    assert len(old) <= SOURCE_HISTORY_MESSAGES, (
         f"{len(old)} messages d'historique joints alors que la vision est "
-        f"active — au-delà de {VISION_HISTORY_MESSAGES}, l'observation est noyée"
+        f"active — au-delà de {SOURCE_HISTORY_MESSAGES}, l'observation est noyée"
+    )
+
+
+def test_history_is_shortened_when_the_rag_fires(core_with_history, monkeypatch):
+    """
+    ⚠️ CE TEST MANQUAIT, et c'est pour ça que le RAG est resté cassé
+    après la correction de la vision : le plafond ne s'appliquait qu'à
+    l'écran. En conditions réelles, « Résume-moi mon CV » recevait ses
+    extraits sous 70 messages d'historique, et Luca's demandait à Cyril
+    de lui dicter son CV — alors que le bloc était juste au-dessus.
+
+    Toute source externe ajoutée au prompt doit passer par ce plafond.
+    """
+    from config import SOURCE_HISTORY_MESSAGES
+
+    monkeypatch.setattr(
+        orion_core, "should_use_rag", lambda text: True
+    )
+
+    class _FakeRAG:
+        def get_context(self, query, top_k=3):
+            return "Contexte trouvé dans les documents:\n[Extrait 1] Aide-soignant"
+
+    monkeypatch.setattr(orion_core, "RAGManager", _FakeRAG)
+
+    messages = core_with_history._build_messages("résume-moi mon CV", "local")
+
+    old = [m for m in messages if m["content"].startswith(("vieille question", "vieille réponse"))]
+    assert len(old) <= SOURCE_HISTORY_MESSAGES, (
+        f"{len(old)} messages d'historique joints alors que le RAG est "
+        f"actif — au-delà de {SOURCE_HISTORY_MESSAGES}, les extraits sont noyés"
+    )
+    assert "Aide-soignant" in messages[-2]["content"], (
+        "le bloc RAG doit être immédiatement avant la question"
     )
 
 

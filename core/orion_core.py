@@ -7,7 +7,7 @@ from config import (
     RECENT_EVENTS_IN_PROMPT,
     SYSTEM_PROMPT,
     VISION_ENABLED,
-    VISION_HISTORY_MESSAGES,
+    SOURCE_HISTORY_MESSAGES,
     VLM_ENABLED,
     VLM_MAX_CHARS,
     VLM_MODEL,
@@ -95,20 +95,38 @@ class OrionCore:
             current_question = history[-1]
             history = history[:-1]
 
-        # ⚠️ SECONDE MOITIÉ DU MÊME BUG. Remettre le bloc au bon endroit
-        # ne suffisait pas : avec 100 messages d'historique, Luca's
-        # répondait encore « décris-moi ton écran » alors que le texte lu
-        # était juste au-dessus de la question.
+        # RAG : uniquement si le routeur juge la question pertinente pour
+        # les documents personnels. Jamais vers le cloud : les documents
+        # personnels restent locaux. route() force déjà le local dans ce
+        # cas — garde redondante assumée, deux verrous valent mieux qu'un
+        # sur un chemin qui sort de la machine.
+        # get_context() rend une chaîne VIDE quand aucun extrait n'est
+        # assez proche : on n'injecte alors rien du tout.
+        rag_context = ""
+        if not is_cloud and should_use_rag(user_message):
+            rag_context = RAGManager().get_context(user_message)
+
+        # ⚠️ SECONDE MOITIÉ DU MÊME BUG, et elle vaut pour LES DEUX SOURCES.
+        #
+        # Remettre le bloc au bon endroit ne suffisait pas : avec 100
+        # messages d'historique, Luca's répondait encore « décris-moi ton
+        # écran » alors que le texte lu était juste au-dessus de la
+        # question.
         #
         # La cause n'est pas la taille de la fenêtre de contexte. La base
         # contenait douze réponses « pourriez-vous me donner plus de
         # contexte » — des tentatives ratées précédentes. Cent messages de
-        # ce motif enseignent au modèle le réflexe même qu'on corrige. Il
+        # ce motif enseignent au modèle le réflexe même qu'on corrige : il
         # imitait sa propre mauvaise habitude.
-        #
         # Mesuré : 0/9 à 100 messages, 9/9 à 6. Voir config.py.
-        if vision_context and not is_cloud:
-            history = history[-VISION_HISTORY_MESSAGES:]
+        #
+        # ⚠️ Le plafond n'a d'abord été appliqué qu'à la VISION, et le RAG
+        # est resté cassé pour exactement la même raison — « Résume-moi
+        # mon CV » recevait ses extraits sous 70 messages, et Luca's
+        # demandait à Cyril de lui dicter son CV. Toute source externe
+        # ajoutée ici devra passer par ce même plafond.
+        if not is_cloud and (vision_context or rag_context):
+            history = history[-SOURCE_HISTORY_MESSAGES:]
 
         for role, content in history:
             messages.append({"role": role, "content": content})
@@ -121,17 +139,8 @@ class OrionCore:
         if vision_context:
             messages.append({"role": "system", "content": vision_context})
 
-        # RAG : uniquement si le routeur juge la question pertinente pour
-        # les documents personnels. Jamais vers le cloud : les documents
-        # personnels restent locaux. route() force déjà le local dans ce
-        # cas — garde redondante assumée, deux verrous valent mieux qu'un
-        # sur un chemin qui sort de la machine.
-        # get_context() rend une chaîne VIDE quand aucun extrait n'est
-        # assez proche : on n'injecte alors rien du tout.
-        if not is_cloud and should_use_rag(user_message):
-            rag_context = RAGManager().get_context(user_message)
-            if rag_context:
-                messages.append({"role": "system", "content": rag_context})
+        if rag_context:
+            messages.append({"role": "system", "content": rag_context})
 
         if current_question is not None:
             messages.append(

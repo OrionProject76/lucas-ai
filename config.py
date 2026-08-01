@@ -115,7 +115,7 @@ VLM_ENABLED: bool = False
 # ⚠️ LIMITE CONNUE — qwen2.5 dérive en chinois sur contexte long. Observé
 # une fois, avec un bloc vision de 12 447 caractères et 91 messages
 # d'historique. Non reproduit depuis que les deux sont bornés
-# (VLM_MAX_CHARS, VISION_HISTORY_MESSAGES). Comportement du modèle, pas
+# (VLM_MAX_CHARS, SOURCE_HISTORY_MESSAGES). Comportement du modèle, pas
 # bug applicatif : à ne pas poursuivre indéfiniment.
 
 # ⚠️ Une capture d'écran peut contenir un relevé bancaire ou un mot de
@@ -287,7 +287,13 @@ CLOUD_HISTORY_MESSAGES: int = 6
 # requête cloud — voir OrionCore._build_messages().
 RECENT_EVENTS_IN_PROMPT: int = 5
 
-# Historique joint quand la VISION se déclenche. Mesuré sur la base réelle
+# Historique joint quand une SOURCE EXTERNE est injectée — écran (vision)
+# ou documents personnels (RAG). Les deux ont exactement le même problème,
+# et c'est pour l'avoir oublié que le RAG est resté cassé après la
+# correction de la vision : le plafond ne s'appliquait qu'à l'écran, et
+# « Résume-moi mon CV » recevait ses extraits noyés sous 70 messages.
+#
+# Mesuré sur la base réelle
 # de Cyril (100 messages), en injectant un texte d'écran sans ambiguïté et
 # en comptant les réponses qui le citent, 3 tirages par question :
 #     100 messages  ->  0/9   Luca's demande « décris-moi ton écran »
@@ -302,7 +308,7 @@ RECENT_EVENTS_IN_PROMPT: int = 5
 # (0/9 à 100 messages). C'est la longueur seule qui décide.
 # Quand Cyril interroge son écran, l'écran est le sujet ; quelques tours
 # suffisent à garder le fil de la conversation.
-VISION_HISTORY_MESSAGES: int = 6
+SOURCE_HISTORY_MESSAGES: int = 6
 
 # --- Identité de Luca's ---
 SYSTEM_PROMPT = (
