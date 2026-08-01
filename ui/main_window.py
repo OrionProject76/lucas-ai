@@ -357,14 +357,17 @@ class MainWindow(QWidget):
         # « regarde mon écran », le premier chargement de llava en VRAM
         # prend ~25 s (0,8 s ensuite, modèle chaud). D'où le message
         # explicite plutôt qu'une interface figée sans explication.
+        # L'avatar dit ce que Luca's est en train de faire. WATCHING n'est
+        # pas cosmétique : c'est le témoin que l'écran est en train d'être
+        # capturé, comme la LED d'une webcam.
         if should_use_vision(text):
             self.status_label.setText("👁️ Luca's regarde ton écran...")
+            self._set_avatar_state("WATCHING")
         else:
             self.status_label.setText("⏳ Préparation du contexte...")
+            self._set_avatar_state("THINKING")
         self.status_label.setObjectName("status status_connecting")
         self.status_label.setVisible(True)
-
-        self._set_avatar_state("THINKING")
 
         # Le contexte est construit dans un thread : capture d'écran,
         # analyse VLM et requête RAG bloqueraient sinon toute l'interface.
@@ -376,6 +379,9 @@ class MainWindow(QWidget):
     def _on_context_ready(self, messages: list):
         """Le contexte est prêt : on peut lancer la génération."""
         self.status_label.setText("⏳ Connexion à Ollama...")
+        # La capture est terminée : le témoin ambre doit s'éteindre au
+        # moment exact où Luca's cesse de regarder.
+        self._set_avatar_state("THINKING")
 
         self.chat_history.append(
             '<span style="color:#E8EAED;"><b>Luca&#39;s :</b></span> '

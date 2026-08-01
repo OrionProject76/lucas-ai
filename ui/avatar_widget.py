@@ -1,8 +1,45 @@
-import sys
 import random
-from PySide6.QtWidgets import QWidget, QApplication, QVBoxLayout, QHBoxLayout, QPushButton
-from PySide6.QtCore import Qt, QTimer, QPointF
-from PySide6.QtGui import QPainter, QColor, QRadialGradient, QBrush, QPen, QFont
+import sys
+
+from PySide6.QtCore import QPointF, Qt, QTimer
+from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QRadialGradient
+from PySide6.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
+
+# ── Les 5 modes de présence ───────────────────────────────────────────
+#
+# Ce que fait Luca's doit se lire sur son visage. Les cinq états
+# couvrent tout ce qu'elle peut être en train de faire.
+#
+# ⚠️ À ne pas confondre avec les 8 « modes AURA » d'IDEAS.md, qui sont
+# des contextes d'activité de Cyril (Working, Gaming, Meeting…) prévus
+# en S5. Ici il s'agit de l'état de Luca's elle-même.
+
+IDLE = "IDLE"            # au repos, respiration lente
+THINKING = "THINKING"    # génère une réponse
+SPEAKING = "SPEAKING"    # parle (TTS)
+WATCHING = "WATCHING"    # regarde l'écran (VLM)
+LISTENING = "LISTENING"  # écoute le micro — inactif, voir ci-dessous
+
+PRESENCE_STATES = (IDLE, THINKING, SPEAKING, WATCHING, LISTENING)
+
+# LISTENING est prévu mais inatteignable aujourd'hui : le PC n'a pas de
+# micro (IDEAS.md #69). Il s'activera avec le pont mobile, en même temps
+# que le moteur STT déjà écrit. Le rendu est en place pour ne pas avoir
+# à y revenir.
+INACTIVE_STATES = (LISTENING,)
+
+# Ambre plutôt que cyan pour WATCHING, et c'est un choix de sécurité :
+# l'avatar sert de témoin, comme la LED d'une webcam. Quand Luca's
+# regarde l'écran de Cyril, ça doit sauter aux yeux et non se fondre
+# dans l'ambiance habituelle de l'interface.
+WATCHING_COLOR = QColor(255, 170, 0)
+
 
 class AvatarWidget(QWidget):
     def __init__(self, parent=None):
@@ -13,7 +50,7 @@ class AvatarWidget(QWidget):
         # toute l'interface — de démarrer.
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
-        self.state = "IDLE"
+        self.state = IDLE
         self.mouth_open = 0.0
         self.glow_intensity = 0.5
         self.glow_direction = 1
@@ -21,6 +58,9 @@ class AvatarWidget(QWidget):
         self.blink_timer = 0
         self.particles = []
         self.mouse_pos = QPointF(70, 70)
+        # Position de la ligne de balayage du mode WATCHING, en pixels
+        # depuis le haut du visage.
+        self.scan_offset = 0.0
 
         # Timer animation globale (60fps)
         self.anim_timer = QTimer(self)
@@ -35,6 +75,15 @@ class AvatarWidget(QWidget):
         self.setMouseTracking(True)
 
     def set_state(self, state):
+        """
+        Change l'état affiché.
+
+        Un état inconnu retombe sur IDLE plutôt que d'être accepté tel
+        quel : sans ça, paintEvent dessinait un dégradé sans couleur,
+        et l'avatar disparaissait à moitié sans que rien ne l'explique.
+        """
+        if state not in PRESENCE_STATES:
+            state = IDLE
         self.state = state
         self.update()
 
@@ -80,6 +129,13 @@ class AvatarWidget(QWidget):
         elif self.state == "SPEAKING":
             self.mouth_open = 0.3 + 0.4 * abs(random.random() - 0.5) * 2
             self.glow_intensity = 0.6
+        elif self.state == WATCHING:
+            # Halo soutenu et stable : Luca's est concentrée sur l'écran,
+            # pas en train de réfléchir dans le vide.
+            self.glow_intensity = 0.85
+            # Balayage descendant qui reboucle — le signe visible que la
+            # capture est en cours.
+            self.scan_offset = (self.scan_offset + 2.5) % 90
 
         self.update()
 
@@ -110,6 +166,15 @@ class AvatarWidget(QWidget):
         elif self.state == "SPEAKING":
             gradient.setColorAt(0, QColor(0, 212, 255, 80))
             gradient.setColorAt(1, QColor(124, 58, 237, 40))
+        elif self.state == WATCHING:
+            gradient.setColorAt(0, QColor(WATCHING_COLOR.red(), WATCHING_COLOR.green(), 0, 150))
+            gradient.setColorAt(1, QColor(WATCHING_COLOR.red(), WATCHING_COLOR.green(), 0, 0))
+        else:
+            # Filet de sécurité : un dégradé sans couleur ferait
+            # disparaître le halo. set_state() garantit déjà l'état, mais
+            # paintEvent peut être appelé après une écriture directe.
+            gradient.setColorAt(0, QColor(0, 212, 255, 40))
+            gradient.setColorAt(1, QColor(124, 58, 237, 0))
 
         painter.setBrush(QBrush(gradient))
         painter.setPen(Qt.NoPen)
@@ -122,15 +187,24 @@ class AvatarWidget(QWidget):
         body_gradient.setColorAt(1, QColor(0, 212, 255, 100))
 
         painter.setBrush(QBrush(body_gradient))
-        pen = QPen(QColor(0, 212, 255, 150), 2)
-        painter.setPen(pen)
+        # Contour ambre en mode WATCHING : le visage entier change de
+        # couleur, on ne peut pas le manquer du coin de l'œil.
+        border = WATCHING_COLOR if self.state == WATCHING else QColor(0, 212, 255)
+        painter.setPen(QPen(QColor(border.red(), border.green(), border.blue(), 150), 2))
         painter.drawEllipse(center, 45, 45)
 
         # Yeux
         if not self.eye_blink:
-            # Calcul direction yeux (suivent la souris)
-            dx = self.mouse_pos.x() - center.x()
-            dy = self.mouse_pos.y() - center.y()
+            if self.state == WATCHING:
+                # Regard fixe droit devant : elle regarde l'écran, pas la
+                # souris. Suivre le curseur donnerait l'impression qu'elle
+                # cherche, alors qu'elle est en train d'analyser.
+                dx = dy = 0.0
+                dist = 0.0
+            else:
+                # Calcul direction yeux (suivent la souris)
+                dx = self.mouse_pos.x() - center.x()
+                dy = self.mouse_pos.y() - center.y()
             dist = (dx**2 + dy**2) ** 0.5
             if dist > 0:
                 eye_offset_x = (dx / dist) * 8
@@ -177,6 +251,15 @@ class AvatarWidget(QWidget):
             # Bouche ouverte (arc)
             painter.setBrush(QBrush(QColor(20, 10, 30)))
             painter.drawEllipse(60, mouth_y - mouth_height//2, mouth_width, mouth_height)
+
+        # Ligne de balayage (état WATCHING)
+        if self.state == WATCHING:
+            scan_y = 28 + self.scan_offset
+            painter.setPen(QPen(QColor(WATCHING_COLOR.red(), WATCHING_COLOR.green(), 0, 180), 2))
+            # Largeur suivant la courbure du visage, pour que la ligne
+            # reste à l'intérieur du cercle.
+            half = max(0.0, (45.0**2 - (scan_y - 70.0) ** 2)) ** 0.5
+            painter.drawLine(int(70 - half), int(scan_y), int(70 + half), int(scan_y))
 
         # Particules (état THINKING)
         if self.state == "THINKING":
