@@ -8,6 +8,7 @@ from config import (
     SYSTEM_PROMPT,
     VISION_ENABLED,
     VISION_HISTORY_MESSAGES,
+    VLM_ENABLED,
     VLM_MAX_CHARS,
     VLM_MODEL,
 )
@@ -217,7 +218,17 @@ class OrionCore:
         return result.text[:OCR_MAX_CHARS]
 
     def _describe_visual_context(self, vision, screenshot: str, user_message: str) -> str:
-        """Description du VLM, ou chaîne vide s'il a échoué."""
+        """
+        Description du VLM, ou chaîne vide s'il est désactivé ou en échec.
+
+        Désactivé par défaut en v1.0 : llava fabrique des messages
+        d'erreur absents de l'écran. Le chemin est conservé intact pour
+        être réactivé en v1.1 avec internvl2 — voir config.VLM_ENABLED,
+        qui documente le compromis accepté.
+        """
+        if not VLM_ENABLED:
+            return ""
+
         try:
             description = vision.analyze_image(
                 screenshot, self._vision_prompt(user_message)
@@ -262,9 +273,14 @@ class OrionCore:
             )
 
         if screen_text and not visual:
+            # Formulé comme une consigne, pas comme une panne. En v1.0 le
+            # VLM est volontairement coupé (config.VLM_ENABLED) : annoncer
+            # un échec pousserait le modèle à se dédire alors qu'il a bien
+            # le texte de l'écran sous les yeux.
             parts.append(
-                "\nLe contexte visuel n'a pas pu être établi : appuie-toi "
-                "sur le texte seul."
+                "\nTu disposes du texte de l'écran, pas d'une description "
+                "de sa disposition : appuie-toi sur le texte seul, et ne "
+                "spécule pas sur l'apparence ou l'application utilisée."
             )
 
         parts.append(

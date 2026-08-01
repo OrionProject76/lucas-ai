@@ -116,6 +116,22 @@ def core(monkeypatch):
 
 
 def _fake_vision(monkeypatch, description: str, captured: dict | None = None):
+    """
+    Installe un faux VLM — et l'ACTIVE.
+
+    Le VLM est coupé par défaut en v1.0 (config.VLM_ENABLED, llava
+    fabrique). Mais un test qui prend la peine d'installer une fausse
+    description veut manifestement que ce chemin s'exécute : ces tests
+    décrivent le comportement à retrouver en v1.1 avec internvl2, et ils
+    doivent continuer à tourner d'ici là, sinon la réactivation se fera
+    sans filet.
+
+    La garantie que le VLM est bien coupé en production ne repose donc
+    pas sur ces tests, mais sur test_the_vlm_is_off_in_v1_and_never_called,
+    qui vérifie le réglage réel de config.py.
+    """
+    monkeypatch.setattr(orion_core, "VLM_ENABLED", True)
+
     class _FakeVisionManager:
         def __init__(self, model=None):
             self.model = model
@@ -282,7 +298,10 @@ def test_vlm_failure_leaves_the_ocr_alone(core, monkeypatch) -> None:
     block = next(m["content"] for m in messages if VISION_MARKER in m["content"])
 
     assert "Solde : 3200 euros" in block
-    assert "contexte visuel n'a pas pu" in block
+    # La consigne dit au modèle de s'en tenir au texte, sans annoncer une
+    # panne : c'est le cas normal en v1.0, VLM coupé (config.VLM_ENABLED).
+    assert "texte seul" in block
+    assert "spécule pas" in block
 
 
 def test_both_failing_produces_no_block(core, monkeypatch) -> None:
@@ -528,6 +547,47 @@ def test_history_is_kept_whole_without_vision(core_with_history):
     assert len(old) == 90, f"historique tronqué à {len(old)} sans raison"
 
 
+def test_the_vlm_is_off_in_v1_and_never_called(core_with_history, monkeypatch):
+    """
+    llava fabrique : quatre observations réelles sur quatre, dont un
+    traceback Python complet pour un bug inexistant. Coupé en v1.0.
+
+    ⚠️ Ce test ne consacre PAS l'abandon de la description visuelle : il
+    consacre le fait que le VLM ne doit pas tourner tant que le modèle
+    reste llava. En v1.1, avec internvl2, VLM_ENABLED repasse à True et
+    ce test devient à mettre à jour, pas à supprimer.
+    """
+    from config import VLM_ENABLED
+
+    assert VLM_ENABLED is False, (
+        "VLM_ENABLED est repassé à True — vérifier que le modèle n'est "
+        "plus llava (voir config.py) avant de modifier ce test"
+    )
+
+    appels = []
+
+    class _VLMQuiNeDoitPasTourner:
+        def __init__(self, model=None):
+            pass
+
+        def capture_screen(self, output_path=None):
+            return "data/screenshot.png"
+
+        def analyze_image(self, path, prompt=None):
+            appels.append(prompt)
+            return "description fabriquée"
+
+    monkeypatch.setattr("modules.vision_manager.VisionManager", _VLMQuiNeDoitPasTourner)
+    _fake_ocr(monkeypatch, "ERREUR 0x8007007E")
+
+    messages = core_with_history._build_messages("c'est écrit quoi ?", "local")
+
+    assert not appels, "le VLM a été interrogé alors qu'il est désactivé"
+    block = next(m for m in messages if VISION_MARKER in m["content"])
+    assert "ERREUR 0x8007007E" in block["content"], "l'OCR doit rester la source"
+    assert "fabriquée" not in block["content"]
+
+
 def test_the_vlm_description_is_capped(core_with_history, monkeypatch):
     """
     Mesuré en usage réel : llava a rendu 10 270 caractères pour 1 761
@@ -535,6 +595,10 @@ def test_the_vlm_description_is_capped(core_with_history, monkeypatch):
     """
     from config import VLM_MAX_CHARS
 
+    # Le plafond concerne la v1.1 : il doit rester correct le jour où le
+    # VLM est réactivé avec internvl2, sinon on retrouvera les 10 270
+    # caractères au premier changement de modèle.
+    monkeypatch.setattr(orion_core, "VLM_ENABLED", True)
     _fake_vision(monkeypatch, "bla " * 5000)
     messages = core_with_history._build_messages("c'est écrit quoi ?", "local")
 

@@ -74,18 +74,43 @@ TTS_ALLOW_CLOUD_ON_SENSITIVE: bool = False
 # machine ; internvl2 est envisagé en v1.1 (voir CLAUDE.md, tableau LLM).
 VLM_MODEL = "llava"
 
-# ⚠️ LIMITE CONNUE — llava FABRIQUE du contenu. Observé en conditions
-# réelles le 01/08/2026, trois fois sur trois captures :
+# ── Le VLM est DÉSACTIVÉ en v1.0 — décision de Cyril, 01/08/2026 ──────
+#
+# ⚠️ Ce n'est PAS un abandon de la description visuelle. C'est une
+# suspension le temps de changer de modèle. Voir le compromis assumé
+# plus bas : il faut le connaître avant de toucher à ce réglage.
+#
+# MOTIF — llava ne se trompe pas, il FABRIQUE. Observé en conditions
+# réelles, quatre fois sur quatre captures :
 #   • « Error: unable to connect to local socket path /var/run/docker.sock »
 #   • « mount: mounting /dev/sda6 on /media failed: Invalid argument »
 #   • « Je ne peux pas aider avec la description de l'image »
-# Aucune de ces phrases n'était à l'écran. Le modèle produit des messages
-# d'erreur plausibles et les présente avec assurance.
+#   • un traceback Python complet — « TypeError: 'int' object is not
+#     iterable », fichier et numéro de ligne inclus — suivi de trois
+#     paragraphes de solution pour un bug inexistant
+# Aucune de ces phrases n'était à l'écran. Sur les trois essais réels
+# finaux, sa contribution a dégradé deux réponses et n'en a amélioré
+# aucune ; le faux traceback contaminait jusqu'à la réponse voisine.
 #
-# C'est pourquoi _compose_vision_block() étiquette explicitement le VLM
-# comme « indicatif, peut se tromper » face à l'OCR « transcription
-# exacte, fiable ». Le contenu vient de l'OCR ; le VLM ne sert qu'à
-# situer. Ne pas inverser cette hiérarchie sans changer de modèle.
+# Une vision absente se voit. Une vision fausse se croit. C'est ce qui
+# rend llava plus nuisible qu'utile ici, malgré l'étiquette « indicatif,
+# peut se tromper » de _compose_vision_block().
+#
+# ⚠️ CE QU'ON PERD, ET IL FAUT L'ASSUMER : Luca's ne sait plus dire
+# QUELLE APPLICATION est ouverte ni comment l'écran est disposé. Elle lit
+# le texte, elle ne décrit plus la scène. Sur un écran sans texte — une
+# image, une vidéo, un graphique — elle n'a plus rien à dire. Ce n'est
+# pas un détail : c'est la moitié de la promesse de la couche perception
+# (VISION_LONG_TERME.md §2), mise en pause faute d'un modèle fiable.
+#
+# ➜ v1.1 : reprendre la description visuelle avec internvl2, déjà prévu
+#   au tableau des modèles de CLAUDE.md. Le point de vigilance reste la
+#   contention GPU avec Ollama (VISION_LONG_TERME.md §3) — c'est
+#   précisément ce qui avait fait préférer llava. Remettre
+#   VLM_ENABLED = True et VLM_MODEL = "internvl2" suffit à réactiver le
+#   chemin : le code des deux sources est conservé intact, rien n'a été
+#   supprimé.
+VLM_ENABLED: bool = False
 #
 # ⚠️ LIMITE CONNUE — qwen2.5 dérive en chinois sur contexte long. Observé
 # une fois, avec un bloc vision de 12 447 caractères et 91 messages

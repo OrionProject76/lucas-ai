@@ -60,10 +60,41 @@ Reclassé en Phase 6 (S5-S6), branche `experimental/godot-avatar`. Ne bloque pas
 
 | Brique | État |
 |---|---|
-| **VLM écran** | ✅ Fait. « Regarde mon écran » déclenche une capture analysée par llava en local. Le déclencheur est dans `core/router.py` (`should_use_vision`), volontairement étroit — une analyse coûte ~25 s au premier appel, 0,8 s modèle chaud. La question de Cyril est transmise au VLM plutôt qu'un prompt générique. Forcé en local : la description de l'écran ne part jamais au cloud. |
+| **Vision écran** | 🟡 **OCR seul en v1.0** — voir l'encadré ci-dessous. La capture est lue par RapidOCR (CPU) ; le VLM est coupé. Le déclencheur n'est plus une liste de mots-clés mais `core/intent.py`. Forcé en local : ce qui est lu à l'écran ne part jamais au cloud. |
 | **5 modes de présence** | ✅ Fait. `IDLE`, `THINKING`, `SPEAKING`, `WATCHING`, `LISTENING` dans `ui/avatar_widget.py`. `WATCHING` sert de témoin de capture, comme la LED d'une webcam. `LISTENING` reste inactif faute de micro. |
 | **Avatar QPainter V3** | 🟡 Partiel. Le rendu a été restauré et fiabilisé (voir §6), les modes sont câblés sur le comportement réel. Une refonte esthétique complète reste possible si Cyril la souhaite. |
 | **STT** | ⛔ Bloqué par le matériel — moteur écrit, voir ci-dessous. |
+
+#### 🟡 Vision v1.0 = OCR seul. Le VLM est suspendu, pas abandonné.
+
+**Décision de Cyril, 01/08/2026.** `VLM_ENABLED = False` dans `config.py`.
+
+**Motif** : llava ne se trompe pas, il **fabrique**. Quatre observations
+réelles sur quatre captures : une erreur `docker.sock`, un `mount /dev/sda6`,
+un « je ne peux pas décrire l'image », et un traceback Python complet —
+`TypeError: 'int' object is not iterable`, fichier et numéro de ligne — suivi
+de trois paragraphes de solution pour un bug inexistant. Aucune de ces phrases
+n'était à l'écran. Sur les trois essais réels finaux, sa contribution a dégradé
+deux réponses et n'en a amélioré aucune ; le faux traceback contaminait jusqu'à
+la réponse voisine.
+
+> Une vision absente se voit. Une vision fausse se croit.
+
+**⚠️ Ce qu'on perd, et qu'il faut assumer** : Luca's **ne sait plus dire quelle
+application est ouverte ni comment l'écran est disposé**. Elle lit le texte,
+elle ne décrit plus la scène. Sur un écran sans texte — image, vidéo,
+graphique — elle n'a plus rien à dire. C'est la moitié de la promesse de la
+couche perception (`VISION_LONG_TERME.md` §2), mise en pause faute d'un modèle
+fiable. Ce n'est pas une suppression discrète de fonctionnalité : c'est un
+compromis, et il est ici pour être relu.
+
+**➜ v1.1 — rétablir la description visuelle avec `internvl2`**, déjà prévu au
+tableau des modèles de `CLAUDE.md`. Point de vigilance inchangé : la contention
+GPU avec Ollama (`VISION_LONG_TERME.md` §3) — c'est précisément ce qui avait
+fait préférer llava. **Rien n'a été supprimé** : le code des deux sources est
+intact, les tests du chemin VLM tournent toujours (`_fake_vision` l'active
+explicitement), et `VLM_ENABLED = True` + `VLM_MODEL = "internvl2"` suffisent à
+le réactiver.
 
 ⚠️ **Attention en reprenant la Phase 3** : « 5 modes de présence » n'était défini nulle part. Il s'agit des états de Luca's elle-même, **à ne pas confondre avec les 8 « modes AURA »** d'`IDEAS.md` (Working, Gaming, Meeting…), qui sont des contextes d'activité de Cyril et relèvent de S5.
 
@@ -127,6 +158,9 @@ Tant que ces deux points ne sont pas tranchés, `security/` reste au niveau 1 �
 - **Ollama en double instance** : l'appli tray Ollama relance automatiquement un serveur si on tue le process en CLI. Résultat : deux instances sur le port 11434, chacune avec un jeu de modèles différent, causant des 404 "model not found" alors que le modèle existe bel et bien. **Solution appliquée** : tuer `ollama.exe` ET `ollama app.exe`, puis relancer uniquement via `ollama serve` en CLI. **À faire avant de clore Phase 2** : vérifier dans les paramètres Ollama si le démarrage automatique avec Windows est activé, et le désactiver si besoin pour éviter que le problème revienne à chaque redémarrage du PC.
 - **SQLite et threads FastAPI** : `OrionCore()` est recréé à chaque requête `/chat` plutôt que partagé en singleton, pour éviter les erreurs de thread SQLite. Fonctionne car tout l'état vit dans le fichier `.db`, pas en mémoire Python. À garder en tête si on introduit du code qui suppose un état Python persistant entre requêtes.
 - **Toujours vérifier l'existence d'un backup avant suppression** : lors du nettoyage Phase 0, les vrais dossiers `core/` et `ui/` ont été supprimés par erreur (confusion avec les fantômes `Fichier core/`/`Fichier ui/`, noms très proches). Récupérés via un zip de backup antérieur (`OrionProject/OrionAI.zip` du 26/07). Réflexe à garder : zipper le dossier projet avant tout nettoyage manuel.
+- **Les fixtures vides valident des comportements qui cassent sur des données réelles** (leçon du 01/08/2026, quatre correctifs successifs annoncés « fonctionnels » sur une application cassée). `_FakeMemory.load_history()` rendait `[]` en dur : tous les tests vision tournaient donc sur une conversation neuve, où le bloc d'observation se retrouvait **mécaniquement** collé à la question. En usage réel, avec 100 messages d'historique, il arrivait en 4ᵉ position sur 91 et se faisait noyer — le modèle répondait à une vieille question. Le protocole de test était faux, pas le code testé.
+  **Règle** : pour toute fonction qui dépend du **volume** ou de la **position** des données, au moins un test doit tourner sur un état **chargé** — historique long, base non vide, cache peuplé. Un test sur état vide ne prouve rien sur ces deux propriétés. Et vérifier qu'un nouveau test **tombe bien sur l'ancien code** avant de le déclarer probant (ici : `assert 92 < 2`).
+  Les angles morts de la même famille, à surveiller : base neuve, cache froid, liste à un seul élément, premier lancement.
 
 ---
 

@@ -142,10 +142,18 @@ def test_both_sources_are_labelled_distinctly() -> None:
     )
 
 
-def test_text_only_mentions_the_missing_visual() -> None:
+def test_text_only_tells_the_model_not_to_speculate() -> None:
+    """
+    C'est le cas NORMAL en v1.0 : le VLM est coupé (config.VLM_ENABLED),
+    llava fabriquant des messages d'erreur absents de l'écran. La consigne
+    ne doit donc pas annoncer une panne — le modèle se dédirait alors
+    qu'il a bien le texte — mais interdire la spéculation sur ce qu'on ne
+    lui donne plus : l'application et la disposition.
+    """
     block = _block("Error 404", "")
     assert "Error 404" in block
-    assert "contexte visuel n'a pas pu" in block
+    assert "texte seul" in block
+    assert "spécule pas" in block
 
 
 def test_visual_only_keeps_the_previous_behaviour() -> None:
