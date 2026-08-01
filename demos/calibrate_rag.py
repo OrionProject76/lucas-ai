@@ -31,6 +31,7 @@
 
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -150,30 +151,64 @@ def main() -> int:
         f"   ({len(irrelevant)} mesures)"
     )
 
-    if worst_relevant >= best_irrelevant:
-        # Cas honnête : aucune valeur ne sépare les deux populations.
-        print(
-            "\n⚠️  Les deux populations se CHEVAUCHENT — aucun seuil ne peut\n"
-            "    les séparer. Ce n'est pas un réglage à trouver :\n"
-            f"      pire cas pertinent  {worst_relevant:.3f}  « {worst_question[:50]} »\n"
-            f"      meilleur hors sujet {best_irrelevant:.3f}  « {best_question}   »\n"
-            "    Soit une question témoin touche vraiment un document indexé\n"
-            "    (à retirer d'OFF_TOPIC), soit les documents sont trop\n"
-            "    hétérogènes pour un seuil unique. Garder la valeur actuelle."
-        )
-        return 1
+    # ── Choix du seuil ────────────────────────────────────────────────
+    #
+    # ⚠️ Ne PAS se contenter de min/max. Sur un corpus réel les deux
+    # populations se chevauchent presque toujours un peu, et une seule
+    # question pertinente mal formulée suffit alors à bloquer la mesure —
+    # mesuré : 39 pertinents sur 40 sous le meilleur hors-sujet, et le
+    # 40e faisait échouer tout le calibrage.
+    #
+    # Ce qui compte n'est pas une séparation parfaite mais le COMPROMIS :
+    # combien d'extraits utiles on garde, combien de hors-sujet on
+    # bloque. Le hors-sujet pèse plus lourd — c'est lui qui a noyé le
+    # bloc vision et fait répondre à côté.
+    relevant_values = [d for d, _ in relevant]
+    irrelevant_values = [d for d, _ in irrelevant]
 
-    suggested = round((worst_relevant + best_irrelevant) / 2, 2)
-    margin = best_irrelevant - worst_relevant
+    def score(threshold: float) -> tuple[float, float]:
+        gardes = sum(d <= threshold for d in relevant_values) / len(relevant_values)
+        bloques = sum(d > threshold for d in irrelevant_values) / len(irrelevant_values)
+        return gardes, bloques
 
+    candidats = sorted({round(d, 3) for d in relevant_values + irrelevant_values})
+    # Un hors-sujet qui passe coûte deux fois un extrait utile perdu.
+    best = max(candidats, key=lambda t: (score(t)[0] + 2 * score(t)[1], -t))
+    gardes, bloques = score(best)
+
+    print("\ncompromis selon le seuil :")
+    for t in candidats:
+        if t < best - 0.06 or t > best + 0.06:
+            continue
+        g, b = score(t)
+        marque = "  <<<" if t == best else ""
+        print(f"  {t:.3f}  garde {g:5.0%} des pertinents, bloque {b:5.0%} des hors-sujet{marque}")
+
+    # ⚠️ Arrondi vers le BAS, jamais au plus proche. Mesuré : le meilleur
+    # seuil valait 0,336 et le premier hors-sujet 0,341 — arrondir à 0,34
+    # laissait un millième de marge, donc rien. Un arrondi qui rend le
+    # seuil plus permissif que ce qu'on vient de mesurer annule la mesure.
+    suggested = math.floor(best * 100) / 100
     print(
-        f"\nseuil proposé : {suggested}   (marge {margin:.3f})"
+        f"\nseuil proposé : {suggested}"
+        f"\n  garde {gardes:.0%} des extraits utiles"
+        f"\n  bloque {bloques:.0%} des questions hors sujet"
         f"\nvaleur actuelle : {RAG_MAX_DISTANCE}"
     )
-    if margin < 0.05:
+
+    if bloques < 1.0:
+        rescapes = sorted(d for d in irrelevant_values if d <= best)
         print(
-            "⚠️  Marge étroite : le seuil tiendra mal si de nouveaux documents\n"
-            "    sont indexés. Relancer ce script après chaque ajout important."
+            f"\n⚠️  {len(rescapes)} question(s) hors sujet passe(nt) encore ce seuil "
+            f"({', '.join(f'{d:.3f}' for d in rescapes)}).\n"
+            "    Le RAG injectera parfois un extrait sans rapport. Le premier\n"
+            "    filtre reste core/intent.py, qui empêche la plupart de ces\n"
+            "    questions d'atteindre le RAG."
+        )
+    if gardes < 0.9:
+        print(
+            f"\n⚠️  {1 - gardes:.0%} des extraits utiles sont écartés : Luca's\n"
+            "    répondra « je ne trouve rien » sur des questions légitimes."
         )
 
     print(f"\nÀ reporter dans config.py :\n    RAG_MAX_DISTANCE: float = {suggested}")

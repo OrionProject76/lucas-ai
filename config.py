@@ -223,28 +223,34 @@ DOCUMENTS_DIR = "data/documents"
 # des textes — un seuil absolu y aurait été un nombre magique intenable.
 # Le cosinus est borné [0, 2] et indépendant de la longueur.
 #
-# Calibré sur la base réelle :
-#     pertinent   0,174  0,290  0,416
-#     hors sujet  0,449  0,458  0,479  0,487
-# ⚠️ Marge étroite, mesurée sur 2 chunks d'un document d'exemple.
+# Recalibré le 01/08/2026 par demos/calibrate_rag.py, sur 40 extraits de
+# la documentation du projet (CLAUDE.md, ROADMAP.md, VISION_LONG_TERME.md,
+# IDEAS.md) — 76 Ko de prose française hétérogène.
 #
-# ⚠️ VALEUR PROBABLEMENT TROP PERMISSIVE. Vérifié sur un corpus de test
-# plus réaliste (trois documents distincts : congés, assurance, matériel) :
-#     pertinent   0,236 … 0,346
-#     hors sujet  0,396 … 0,474   ← quatre d'entre elles passeraient à 0,45
-# Le seuil qui sépare correctement ces deux populations est ~0,37. La
-# valeur n'est PAS changée ici parce que ces documents sont fabriqués :
-# c'est sur les vrais documents de Cyril que la mesure compte.
+#     seuil   extraits utiles gardés   hors-sujet bloqués
+#     0,34            90 %                  100 %      <- retenu
+#     0,35            95 %                   75 %
+#     0,37           100 %                   25 %
 #
-# Pour recalibrer, une fois de vrais documents indexés :
-#     venv\Scripts\python.exe demos\calibrate_rag.py
-# Le script rédige lui-même les questions de contrôle depuis les extraits
-# indexés, mesure les deux populations et propose la valeur à reporter ici.
+# L'ancienne valeur de 0,45 venait de DEUX extraits d'un document
+# d'exemple. Elle ne bloquait plus rien : à ce niveau les huit questions
+# témoins passaient toutes. C'est ce qui a permis à un extrait sur
+# l'intelligence artificielle d'être injecté à la place de l'écran.
+#
+# ⚠️ VALEUR PROVISOIRE — mesurée sur la documentation du PROJET, faute de
+# documents personnels indexés. À refaire sur les vrais :
+#     1. les déposer dans data/documents/
+#     2. venv\Scripts\python.exe -m memory.index_documents
+#     3. venv\Scripts\python.exe demos\calibrate_rag.py
+#
+# ⚠️ La mesure bouge un peu d'une exécution à l'autre : les questions de
+# contrôle sont rédigées par le LLM local, qui n'est pas à température 0.
+# Lire la table de compromis, pas seulement le nombre proposé.
 #
 # Ce seuil reste le SECOND verrou : le premier est core/intent.py, qui
 # empêche la plupart des questions hors sujet d'atteindre le RAG — c'est
 # pourquoi une valeur imparfaite dégrade sans casser.
-RAG_MAX_DISTANCE: float = 0.45
+RAG_MAX_DISTANCE: float = 0.34
 
 # --- Intention : écran, documents, ou ni l'un ni l'autre ---
 # Les listes de mots-clés couvraient 50 % des formulations réelles et ne
