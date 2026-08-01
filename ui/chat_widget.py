@@ -1,11 +1,13 @@
 import sys
-from PySide6.QtWidgets import QTextEdit, QWidget, QPushButton  # Ajout de QPushButton
-from PySide6.QtCore import QApplication  # Ajout de QApplication
+
+from PySide6.QtWidgets import QApplication, QPushButton, QTextEdit
+
+from modules.voice_manager import VoiceManager
+
 
 class ChatWidget:
     def __init__(self, parent=None):
         self.parent = parent
-        from modules.voice_manager import VoiceManager  # Importation de VoiceManager
         self.chat_area = self.create_chat_area()
 
     def create_chat_area(self):
@@ -24,7 +26,7 @@ class ChatWidget:
         self.parent.addWidget(self.chat_area)
 
     def add_orion_button(self, text):
-        """Ajoute un bouton '🔊 Lire' à côté de chaque message d'Orion"""
+        """Ajoute un bouton '🔊 Lire' à côté de chaque message de Luca's"""
         button = QPushButton("🔊", self.chat_area)
         button.setStyleSheet("""
             background-color: transparent;
@@ -37,14 +39,14 @@ class ChatWidget:
         return button
 
     def play_orion_audio(self, text):
-        """Lecture du message d'Orion"""
+        """Lecture du message de Luca's"""
         vm = VoiceManager()
         audio_path = vm.synthesize(text)
         if audio_path:
             vm.play_audio(audio_path)
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)  # Correction de l'appel à QApplication
+    app = QApplication(sys.argv)
     chat_widget = ChatWidget()
     chat_widget.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

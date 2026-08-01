@@ -1,7 +1,7 @@
-# ORION AI — Contexte Projet pour Claude Code
+# LUCA'S — Contexte Projet pour Claude Code
 
 ## 🎯 Vision
-Orion AI est un système d'exploitation cognitif — une couche d'intelligence vivante entre l'utilisateur et Windows 11. Windows devient invisible ; Orion devient l'interface.
+Luca's est un système d'exploitation cognitif — une couche d'intelligence vivante entre l'utilisateur et Windows 11. Windows devient invisible ; Luca's devient l'interface.
 
 ## 🏛️ Architecture (5 couches)
 ```
@@ -219,7 +219,7 @@ C:/OrionAI/
 │   ├── main_window.py         # Fenêtre principale
 │   ├── chat_widget.py         # Widget chat streaming
 │   ├── avatar_widget.py       # Avatar 2D QPainter
-│   └── barre_orion.py         # Barre remplaçant taskbar
+│   └── barre_orion.py         # Barre Luca's remplaçant la taskbar
 ├── godot/                     # Couche 5 — Interface 3D (Godot)
 │   ├── project.godot
 │   ├── scenes/
@@ -307,7 +307,7 @@ C:/OrionAI/
 2. **S2** : Mémoire + World Model + RAG
 3. **S3** : Interface Godot (avatar 3D)
 4. **S4** : Voix (TTS continu + STT)
-5. **S5** : Modes AURA + Barre Orion
+5. **S5** : Modes AURA + Barre Luca's
 6. **S6** : OS Controller + Automation
 7. **S7** : Polish + Mobile Bridge
 8. **S8** : Package + Release v1.0

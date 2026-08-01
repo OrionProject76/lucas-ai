@@ -148,4 +148,4 @@ if __name__ == "__main__":
     vm = VoiceManager()
     print("Voix edge disponibles:", vm.list_voices())
     print("Modèle Piper disponible:", vm.piper.is_available())
-    vm.speak("Bonjour Cyril, je suis Orion. Comment puis-je vous aider aujourd'hui ?")
+    vm.speak("Bonjour Cyril, je suis Luca's. Comment puis-je vous aider aujourd'hui ?")

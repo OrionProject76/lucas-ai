@@ -78,7 +78,24 @@ Sécurité validée : **liste blanche et confirmation pour toute action système
 
 ---
 
-## 6. Renommage Luca's — différé, pas oublié
+## 6. Renommage Luca's — partie visible faite le 01/08/2026
+
+**Fait** : tout ce que Cyril voit affiche désormais « Luca's » — `SYSTEM_PROMPT`
+et `WINDOW_TITLE` dans `config.py`, titre de fenêtre, libellé de l'interlocuteur
+dans le chat, placeholder de saisie, infobulles TTS, message « réfléchit… »,
+titres et prose de `CLAUDE.md` et `README_INSTALL.md`.
+
+**Volontairement inchangé** : tous les noms techniques — `OrionCore`,
+`core/orion_core.py`, `orion_daemon.py`, `Orion3D/`, `memory/orion_memory.db`,
+le chemin `C:\OrionAI`, l'organisation GitHub `OrionProject76`. Les renommer
+casserait imports et chemins pour un gain nul.
+
+**Leçon de cette session** : une première tentative par expression régulière
+sur `\borion\b` a transformé `self.orion` en `self.luca's` — erreur de syntaxe
+immédiate. Un renommage se fait par remplacements exacts, chaîne par chaîne,
+jamais par motif générique sur du code.
+
+### Ce qui reste (ancien contenu de cette section)
 
 Renommage acté par Cyril le 29-30/07/2026. À faire une fois S2 stabilisé :
 - Titre fenêtre PySide6, prompts système du LLM, messages TTS

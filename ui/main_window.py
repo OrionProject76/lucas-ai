@@ -1,4 +1,4 @@
-# ui/main_window.py — interface Orion AI
+# ui/main_window.py — interface Luca's
 # Avatar animé + TTS auto + Streaming fluide + HUD dark
 
 from PySide6.QtWidgets import (
@@ -195,7 +195,7 @@ class MainWindow(QWidget):
         right_layout.setSpacing(12)
 
         # Titre
-        title = QLabel("◈ ORION AI ◈")
+        title = QLabel("◈ LUCA'S ◈")
         title.setObjectName("title")
         title.setAlignment(Qt.AlignCenter)
 
@@ -213,7 +213,7 @@ class MainWindow(QWidget):
         input_layout = QHBoxLayout()
 
         self.input_field = QLineEdit()
-        self.input_field.setPlaceholderText("Parle à Orion...")
+        self.input_field.setPlaceholderText("Parle à Luca's...")
         self.input_field.returnPressed.connect(self.send_message)
         self.input_field.textChanged.connect(self._on_typing)
 
@@ -232,7 +232,7 @@ class MainWindow(QWidget):
         self.tts_button.setObjectName("tts")
         self.tts_button.setCheckable(True)
         self.tts_button.setFixedWidth(40)
-        self.tts_button.setToolTip("TTS Auto — Orion lit ses réponses")
+        self.tts_button.setToolTip("TTS Auto — Luca's lit ses réponses")
         self.tts_button.clicked.connect(self.toggle_tts)
 
         input_layout.addWidget(self.input_field, stretch=1)
@@ -285,7 +285,7 @@ class MainWindow(QWidget):
             self._append(role, message)
 
     def _append(self, role: str, message: str):
-        speaker = "Cyril" if role == "user" else "Orion"
+        speaker = "Cyril" if role == "user" else "Luca's"
         color = "#00D4FF" if role == "user" else "#E8EAED"
         self.chat_history.append(
             f'<span style="color:{color};"><b>{speaker} :</b></span> {message}'
@@ -316,7 +316,7 @@ class MainWindow(QWidget):
         self.status_label.setVisible(True)
 
         self.chat_history.append(
-            '<span style="color:#E8EAED;"><b>Orion :</b></span> '
+            '<span style="color:#E8EAED;"><b>Luca&#39;s :</b></span> '
         )
 
         # Avatar en mode réflexion
@@ -331,7 +331,7 @@ class MainWindow(QWidget):
         self.worker.start()
 
     def _on_started(self):
-        self.status_label.setText("💭 Orion réfléchit...")
+        self.status_label.setText("💭 Luca's réfléchit...")
         self.status_label.setObjectName("status status_thinking")
 
     def _on_token(self, token: str):
@@ -367,7 +367,7 @@ class MainWindow(QWidget):
         self.tts_auto = checked
         self.tts_button.setText("🔊" if checked else "🔇")
         self.tts_button.setToolTip(
-            "TTS Auto ON — Orion parle" if checked else "TTS Auto OFF"
+            "TTS Auto ON — Luca's parle" if checked else "TTS Auto OFF"
         )
 
     def _speak(self, text: str):

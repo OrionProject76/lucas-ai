@@ -1,4 +1,4 @@
-# config.py — tous les réglages d'Orion au même endroit
+# config.py — tous les réglages de Luca's au même endroit
 
 import os
 from pathlib import Path
@@ -61,13 +61,13 @@ CLOUD_HISTORY_MESSAGES: int = 6
 # requête cloud — voir OrionCore._build_messages().
 RECENT_EVENTS_IN_PROMPT: int = 5
 
-# --- Identité d'Orion ---
+# --- Identité de Luca's ---
 SYSTEM_PROMPT = (
-    "Tu es Orion, l'assistant personnel de Cyril. "
+    "Tu es Luca's, l'assistant personnel de Cyril. "
     "Réponds toujours en français, de façon claire, directe et utile."
 )
 
 # --- UI ---
-WINDOW_TITLE = "Orion AI"
+WINDOW_TITLE = "Luca's"
 WINDOW_WIDTH = 900
 WINDOW_HEIGHT = 650

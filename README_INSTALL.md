@@ -1,4 +1,4 @@
-# 🌌 ORION AI — Installation
+# 🌌 LUCA'S — Installation
 
 Ce document couvre l'installation complète : l'application principale
 (interface + API) et, en option, le daemon 24/7.
@@ -15,7 +15,7 @@ Ce document couvre l'installation complète : l'application principale
 |---|---|
 | `main.py` | Point d'entrée de l'interface PySide6 |
 | `api/server.py` | API FastAPI (REST + WebSocket) — mobile et Godot |
-| `core/` | Cerveau : routage local/cloud, mémoire, World Model |
+| `core/` | Cerveau de Luca's : routage local/cloud, mémoire, World Model |
 | `modules/` | RAG, vision, voix, web, finance |
 | `orion_daemon.py` | Daemon 24/7 optionnel (tâches de fond) |
 | `Orion3D/` | Frontend Godot 4 (avatar holographique) |
@@ -74,7 +74,7 @@ copy .env.example .env
 ```
 
 Le `.env` n'est jamais versionné. La seule variable actuelle,
-`OPENAI_API_KEY`, est **optionnelle** : laissée vide, Orion reste en 100 %
+`OPENAI_API_KEY`, est **optionnelle** : laissée vide, Luca's reste en 100 %
 local via Ollama. Voir `CLAUDE.md` règle 3 pour l'architecture hybride.
 
 ### Étape 5 : Préparer Ollama
@@ -99,7 +99,7 @@ ollama list
 
 ---
 
-## ▶️ Lancer Orion
+## ▶️ Lancer Luca's
 
 Avec le venv activé et Ollama démarré :
 
@@ -125,7 +125,7 @@ python -c "import config, core.orion_core, main; print('imports OK')"
 ## 🌙 Daemon 24/7 (optionnel)
 
 Le daemon tourne en arrière-plan pour les tâches de fond (captures d'écran,
-rapports). Il n'est pas nécessaire pour utiliser Orion.
+rapports). Il n'est pas nécessaire pour utiliser Luca's.
 
 ```powershell
 pip install -r requirements_daemon.txt
