@@ -69,6 +69,22 @@ HALO_PALETTES = {
 # Amplitude de la respiration, en pixels de rayon.
 BREATH_AMPLITUDE = 2.2
 
+# Durée d'un fondu entre deux modes, en frames à 20 fps.
+# 8 frames ≈ 400 ms : assez lent pour se voir, assez court pour que le
+# témoin WATCHING soit franc. Un basculement instantané de couleur donne
+# l'impression d'un défaut d'affichage plutôt que d'un changement d'état.
+TRANSITION_FRAMES = 8
+
+# Ce que Luca's affiche sous son visage. Les noms d'état sont techniques ;
+# Cyril doit lire ce qu'elle fait, pas une constante.
+STATE_LABELS = {
+    IDLE: "prête",
+    THINKING: "réfléchit",
+    SPEAKING: "parle",
+    WATCHING: "regarde",
+    LISTENING: "écoute",
+}
+
 
 class AvatarWidget(QWidget):
     def __init__(self, parent=None):
@@ -94,6 +110,10 @@ class AvatarWidget(QWidget):
         # Rien ne doit jamais être parfaitement immobile (inspiration
         # Astra) — un avatar figé donne l'impression d'un programme planté.
         self.breath_phase = 0.0
+        # Fondu entre deux modes : l'état d'où l'on vient, et l'avancement
+        # de 0 à 1. À 1, la transition est terminée.
+        self.previous_state = IDLE
+        self.transition = 1.0
 
         # Timer animation globale (60fps)
         self.anim_timer = QTimer(self)
@@ -117,6 +137,10 @@ class AvatarWidget(QWidget):
         """
         if state not in PRESENCE_STATES:
             state = IDLE
+        if state != self.state:
+            # On mémorise d'où l'on vient pour fondre les deux palettes.
+            self.previous_state = self.state
+            self.transition = 0.0
         self.state = state
         self.update()
 
@@ -138,23 +162,68 @@ class AvatarWidget(QWidget):
         """Rayon du visage, respiration comprise."""
         return 45.0 + math.sin(self.breath_phase) * BREATH_AMPLITUDE
 
-    def _halo_gradient(self, center: QPointF, radius: float) -> QRadialGradient:
+    @staticmethod
+    def _ease(t: float) -> float:
         """
-        Dégradé du halo pour l'état courant.
+        Adoucit un fondu linéaire (ease-in-out).
 
-        Un état inconnu retombe sur la palette IDLE : sans arrêt de
-        couleur, Qt dessinait un halo transparent et l'avatar semblait
-        amputé.
+        Une interpolation brute démarre et s'arrête net ; l'œil le
+        perçoit comme une saccade même sur 400 ms.
         """
+        return t * t * (3.0 - 2.0 * t)
+
+    def current_palette(self) -> list[tuple]:
+        """
+        Palette du halo, fondue entre l'état précédent et l'actuel.
+
+        Un état inconnu retombe sur IDLE : sans arrêt de couleur, Qt
+        dessine un halo transparent et l'avatar semble amputé.
+        """
+        target = HALO_PALETTES.get(self.state, HALO_PALETTES[IDLE])
+        if self.transition >= 1.0:
+            return target
+
+        source = HALO_PALETTES.get(self.previous_state, HALO_PALETTES[IDLE])
+        t = self._ease(self.transition)
+        return [
+            tuple(a + (b - a) * t for a, b in zip(stop_from, stop_to))
+            for stop_from, stop_to in zip(source, target)
+        ]
+
+    def border_color(self) -> QColor:
+        """Contour du visage, fondu entre l'ancien et le nouveau mode."""
+        cyan = QColor(0, 212, 255)
+        target = WATCHING_COLOR if self.state == WATCHING else cyan
+        if self.transition >= 1.0:
+            return QColor(target.red(), target.green(), target.blue(), 150)
+
+        source = WATCHING_COLOR if self.previous_state == WATCHING else cyan
+        t = self._ease(self.transition)
+        return QColor(
+            int(source.red() + (target.red() - source.red()) * t),
+            int(source.green() + (target.green() - source.green()) * t),
+            int(source.blue() + (target.blue() - source.blue()) * t),
+            150,
+        )
+
+    def _halo_gradient(self, center: QPointF, radius: float) -> QRadialGradient:
+        """Dégradé du halo pour l'instant courant, fondu compris."""
         gradient = QRadialGradient(center, radius)
-        for position, r, g, b, alpha in HALO_PALETTES.get(self.state, HALO_PALETTES[IDLE]):
-            gradient.setColorAt(position, QColor(r, g, b, alpha))
+        for position, r, g, b, alpha in self.current_palette():
+            gradient.setColorAt(
+                min(1.0, max(0.0, position)),
+                QColor(int(r), int(g), int(b), int(alpha)),
+            )
         return gradient
 
     def update_animation(self):
         # La respiration avance toujours, y compris dans les états qui ne
         # touchent pas au reste.
         self.breath_phase = (self.breath_phase + 0.08) % (2 * math.pi)
+
+        # Avancement du fondu entre deux modes.
+        if self.transition < 1.0:
+            self.transition = min(1.0, self.transition + 1.0 / TRANSITION_FRAMES)
 
         # Glow pulsation
         if self.state == IDLE:
@@ -223,9 +292,10 @@ class AvatarWidget(QWidget):
 
         painter.setBrush(QBrush(body_gradient))
         # Contour ambre en mode WATCHING : le visage entier change de
-        # couleur, on ne peut pas le manquer du coin de l'œil.
-        border = WATCHING_COLOR if self.state == WATCHING else QColor(0, 212, 255)
-        painter.setPen(QPen(QColor(border.red(), border.green(), border.blue(), 150), 2))
+        # couleur, on ne peut pas le manquer du coin de l'œil. Le contour
+        # suit le même fondu que le halo, sinon il claquerait tout seul
+        # pendant que le reste se fond doucement.
+        painter.setPen(QPen(self.border_color(), 2))
         painter.drawEllipse(center, radius, radius)
 
         # Yeux
@@ -309,7 +379,11 @@ class AvatarWidget(QWidget):
         # Label état
         painter.setPen(QPen(QColor(0, 212, 255, 150), 1))
         painter.setFont(QFont("Consolas", 7))
-        painter.drawText(50, 130, 40, 15, Qt.AlignCenter, self.state)
+        # Libellé lisible plutôt que le nom de la constante : Cyril doit
+        # lire ce que Luca's fait, pas « WATCHING ».
+        painter.drawText(
+            40, 130, 60, 15, Qt.AlignCenter, STATE_LABELS.get(self.state, "")
+        )
 
 
 if __name__ == "__main__":

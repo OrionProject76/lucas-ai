@@ -255,6 +255,111 @@ def test_breath_phase_stays_bounded(avatar) -> None:
         assert 0 <= avatar.breath_phase < 2 * 3.14159265 + 0.1
 
 
+# ── Fondu entre modes ─────────────────────────────────────────────────
+
+def test_changing_state_starts_a_transition(avatar) -> None:
+    """
+    Un basculement instantané de couleur donne l'impression d'un défaut
+    d'affichage plutôt que d'un changement d'état.
+    """
+    avatar.set_state(IDLE)
+    avatar.transition = 1.0
+    avatar.set_state(WATCHING)
+
+    assert avatar.transition == 0.0
+    assert avatar.previous_state == IDLE
+
+
+def test_setting_the_same_state_does_not_restart_a_transition(avatar) -> None:
+    """Sinon un rafraîchissement répété figerait l'avatar en plein fondu."""
+    avatar.set_state(THINKING)
+    for _ in range(20):
+        avatar.update_animation()
+    assert avatar.transition == 1.0
+
+    avatar.set_state(THINKING)
+    assert avatar.transition == 1.0
+
+
+def test_transition_completes_and_stops(avatar) -> None:
+    from ui.avatar_widget import TRANSITION_FRAMES
+
+    avatar.set_state(WATCHING)
+    for _ in range(TRANSITION_FRAMES + 2):
+        avatar.update_animation()
+
+    assert avatar.transition == 1.0, "le fondu doit se terminer"
+
+
+def test_palette_is_between_the_two_states_mid_transition(avatar) -> None:
+    """Au milieu du fondu, la couleur ne doit être ni l'une ni l'autre."""
+    from ui.avatar_widget import HALO_PALETTES
+
+    avatar.set_state(IDLE)
+    avatar.transition = 1.0
+    avatar.set_state(WATCHING)
+    avatar.transition = 0.5
+
+    blended = avatar.current_palette()
+    assert blended != HALO_PALETTES[IDLE]
+    assert blended != HALO_PALETTES[WATCHING]
+    # Le rouge doit avoir progressé de l'IDLE (0) vers le WATCHING (255).
+    assert 0 < blended[0][1] < 255
+
+
+def test_border_follows_the_same_fade(avatar) -> None:
+    """
+    Sans ça le contour claquerait tout seul pendant que le halo se fond
+    doucement — plus voyant qu'une transition franche.
+    """
+    avatar.set_state(IDLE)
+    avatar.transition = 1.0
+    cyan = avatar.border_color()
+
+    avatar.set_state(WATCHING)
+    avatar.transition = 0.5
+    middle = avatar.border_color()
+
+    avatar.transition = 1.0
+    amber = avatar.border_color()
+
+    assert cyan.red() < middle.red() < amber.red()
+
+
+def test_easing_is_smooth_at_both_ends(avatar) -> None:
+    """
+    Une interpolation linéaire démarre et s'arrête net ; l'œil le perçoit
+    comme une saccade même sur 400 ms.
+    """
+    ease = avatar._ease
+    assert ease(0.0) == 0.0
+    assert ease(1.0) == 1.0
+    assert ease(0.5) == pytest.approx(0.5)
+    # Départ plus lent que le milieu : c'est ce qui adoucit l'amorce.
+    assert ease(0.1) < 0.1
+
+
+def test_every_state_renders_mid_transition(avatar) -> None:
+    """Le rendu doit tenir à n'importe quel instant du fondu."""
+    for state in PRESENCE_STATES:
+        avatar.set_state(state)
+        for progress in (0.0, 0.25, 0.5, 0.75, 1.0):
+            avatar.transition = progress
+            avatar.repaint()
+
+
+# ── Libellé ───────────────────────────────────────────────────────────
+
+def test_every_state_has_a_readable_label() -> None:
+    """« WATCHING » sous le visage ne dit rien à Cyril."""
+    from ui.avatar_widget import STATE_LABELS
+
+    assert set(STATE_LABELS) == set(PRESENCE_STATES)
+    for label in STATE_LABELS.values():
+        assert label.islower(), "un libellé, pas une constante"
+        assert label.isalpha() or " " in label
+
+
 # ── Animation ─────────────────────────────────────────────────────────
 
 def test_idle_glow_breathes_within_bounds(avatar) -> None:
