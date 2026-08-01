@@ -144,16 +144,31 @@ class ContextWorker(QThread):
     def __init__(self, text: str):
         super().__init__()
         self.text = text
+        self._cancelled = False
+
+    def cancel(self):
+        """
+        Abandonne le résultat en cours.
+
+        La construction du contexte ne s'interrompt pas au milieu — une
+        analyse VLM déjà lancée va à son terme. Mais si Cyril appuie sur
+        Stop, sa réponse ne doit pas surgir vingt secondes plus tard dans
+        une interface qu'il croyait libérée.
+        """
+        self._cancelled = True
 
     def run(self):
         core = None
         try:
             core = OrionCore()
-            self.ready.emit(core.prepare(self.text))
+            messages = core.prepare(self.text)
+            if not self._cancelled:
+                self.ready.emit(messages)
         except Exception as e:  # noqa: BLE001 — une erreur de contexte
             # doit devenir un message dans le chat, jamais une exception
             # qui remonte dans la boucle Qt et fait tomber la fenêtre.
-            self.error.emit(f"[Erreur] Préparation du contexte impossible : {e}")
+            if not self._cancelled:
+                self.error.emit(f"[Erreur] Préparation du contexte impossible : {e}")
         finally:
             if core is not None:
                 core.close()
@@ -201,6 +216,7 @@ class MainWindow(QWidget):
         self.orion = OrionCore()
         self.worker = None
         self.tts_worker = None
+        self.context_worker = None
         self.tts_auto = False
         self.last_orion_response = ""
 
@@ -522,9 +538,28 @@ class MainWindow(QWidget):
 
     # ── Stop & Unlock ──
     def stop_generation(self):
-        if self.worker and self.worker.isRunning():
+        """
+        Interrompt ce qui est en cours, quelle que soit l'étape.
+
+        Le bouton Stop est visible dès l'envoi, y compris pendant la
+        construction du contexte — c'est justement la phase la plus
+        longue, jusqu'à 25 s au premier chargement de llava. Il ne
+        traitait que le worker LLM : appuyer sur Stop pendant l'attente
+        la plus pénible ne faisait rien.
+        """
+        interrupted = False
+
+        if self.context_worker is not None and self.context_worker.isRunning():
+            self.context_worker.cancel()
+            interrupted = True
+
+        if self.worker is not None and self.worker.isRunning():
             self.worker.stop()
+            interrupted = True
+
+        if interrupted:
             self._append("assistant", "[Génération interrompue]")
+            self.status_label.setVisible(False)
             self._set_avatar_state("IDLE")
             self._unlock_input()
 
@@ -537,9 +572,16 @@ class MainWindow(QWidget):
 
     # ── Fermeture ──
     def closeEvent(self, event):
-        if self.worker and self.worker.isRunning():
+        # Le ContextWorker peut tenir 25 s sur une analyse VLM. Sans
+        # attente, Qt détruit l'objet QThread pendant que le thread
+        # tourne encore — « QThread: Destroyed while thread is still
+        # running », et l'application peut tomber à la fermeture.
+        if self.context_worker is not None and self.context_worker.isRunning():
+            self.context_worker.cancel()
+            self.context_worker.wait(30000)
+        if self.worker is not None and self.worker.isRunning():
             self.worker.stop()
-        if self.tts_worker and self.tts_worker.isRunning():
+        if self.tts_worker is not None and self.tts_worker.isRunning():
             self.tts_worker.wait(2000)
         self.orion.close()
         event.accept()

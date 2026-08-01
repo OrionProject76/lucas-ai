@@ -149,6 +149,99 @@ def test_avatar_speaks_only_once_the_sound_starts() -> None:
     assert '"SPEAKING"' in on_start
 
 
+def test_cancelled_context_never_emits(monkeypatch) -> None:
+    """
+    Une analyse VLM déjà lancée va à son terme. Mais si Cyril a appuyé
+    sur Stop, sa réponse ne doit pas surgir vingt secondes plus tard dans
+    une interface qu'il croyait libérée.
+    """
+    class _SlowCore:
+        def prepare(self, text):
+            return [{"role": "user", "content": text}]
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("ui.main_window.OrionCore", _SlowCore)
+
+    worker = ContextWorker("bonjour")
+    received: list = []
+    worker.ready.connect(received.append)
+    worker.cancel()
+    worker.run()
+
+    assert received == [], "un contexte annulé ne doit pas remonter"
+
+
+def test_cancelled_context_swallows_errors(monkeypatch) -> None:
+    """Une erreur sur un travail abandonné n'a pas à polluer le chat."""
+    class _BrokenCore:
+        def prepare(self, text):
+            raise RuntimeError("boum")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("ui.main_window.OrionCore", _BrokenCore)
+
+    worker = ContextWorker("bonjour")
+    errors: list = []
+    worker.error.connect(errors.append)
+    worker.cancel()
+    worker.run()
+
+    assert errors == []
+
+
+def test_stop_handles_the_context_phase() -> None:
+    """
+    Le bouton Stop est visible dès l'envoi, y compris pendant les 25 s de
+    chargement de llava. Il ne traitait que le worker LLM : appuyer
+    pendant l'attente la plus pénible ne faisait rien.
+    """
+    import inspect
+
+    from ui import main_window
+
+    source = inspect.getsource(main_window.MainWindow.stop_generation)
+    assert "context_worker" in source
+    assert "cancel()" in source
+
+
+def test_close_waits_for_the_context_worker() -> None:
+    """
+    Sans attente, Qt détruit l'objet QThread pendant que le thread tourne
+    encore — « Destroyed while thread is still running ».
+    """
+    import inspect
+
+    from ui import main_window
+
+    source = inspect.getsource(main_window.MainWindow.closeEvent)
+    assert "context_worker" in source
+    assert "wait(" in source
+
+
+def test_workers_are_initialised(app_window) -> None:
+    """closeEvent lit context_worker : il doit exister dès le départ."""
+    assert app_window.context_worker is None
+    assert app_window.worker is None
+    assert app_window.tts_worker is None
+
+
+@pytest.fixture
+def app_window():
+    from PySide6.QtWidgets import QApplication
+
+    from ui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    yield window
+    window.close()
+    del app
+
+
 def test_no_composite_object_name_remains() -> None:
     """Garde anti-régression sur le piège Qt."""
     import inspect
