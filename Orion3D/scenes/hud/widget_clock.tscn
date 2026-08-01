@@ -1,0 +1,23 @@
+[gd_scene load_steps=2 format=3 uid="uid://clock001"]
+
+[ext_resource type="Script" path="res://scenes/hud/widget_clock.gd" id="1_clock"]
+
+[node name="ClockWidget" type="VBoxContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_clock")
+
+[node name="Time" type="Label" parent="."]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "00:00:00"
+horizontal_alignment = 1
+
+[node name="Date" type="Label" parent="."]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "01 Jan 2026"
+horizontal_alignment = 1

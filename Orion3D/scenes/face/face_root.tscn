@@ -1,0 +1,92 @@
+[gd_scene load_steps=8 format=3 uid="uid://face001"]
+
+[ext_resource type="Script" path="res://scenes/face/face_controller.gd" id="1_ctrl"]
+[ext_resource type="Shader" path="res://shaders/hologram.gdshader" id="2_holo"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMat_head"]
+render_priority = 0
+shader = ExtResource("2_holo")
+shader_parameter/base_color = Color(0, 0.5, 0.9, 0.15)
+shader_parameter/glow_color = Color(0, 1, 1, 1)
+shader_parameter/rim_color = Color(0.2, 0.9, 1, 1)
+shader_parameter/scanline_count = 120.0
+shader_parameter/scanline_speed = 3.0
+shader_parameter/fresnel_power = 2.5
+shader_parameter/glitch_intensity = 0.1
+shader_parameter/time_scale = 1.5
+shader_parameter/pulse_speed = 2.5
+shader_parameter/wireframe_intensity = 0.8
+
+[sub_resource type="SphereMesh" id="SphereMesh_head"]
+radius = 2.5
+height = 4.0
+radial_segments = 64
+rings = 48
+
+[sub_resource type="ShaderMaterial" id="ShaderMat_eye"]
+render_priority = 1
+shader = ExtResource("2_holo")
+shader_parameter/base_color = Color(0, 1, 1, 0.9)
+shader_parameter/glow_color = Color(0.8, 1, 1, 1)
+shader_parameter/rim_color = Color(1, 1, 1, 1)
+shader_parameter/scanline_count = 0.0
+shader_parameter/scanline_speed = 0.0
+shader_parameter/fresnel_power = 0.8
+shader_parameter/glitch_intensity = 0.0
+shader_parameter/time_scale = 3.0
+shader_parameter/pulse_speed = 5.0
+shader_parameter/wireframe_intensity = 0.0
+
+[sub_resource type="SphereMesh" id="SphereMesh_eye"]
+radius = 0.45
+height = 0.9
+radial_segments = 32
+rings = 24
+
+[sub_resource type="BoxMesh" id="BoxMesh_mouth"]
+size = Vector3(1.2, 0.3, 0.25)
+
+[sub_resource type="ShaderMaterial" id="ShaderMat_mouth"]
+render_priority = 1
+shader = ExtResource("2_holo")
+shader_parameter/base_color = Color(0, 0.9, 1, 0.7)
+shader_parameter/glow_color = Color(0.3, 1, 0.9, 1)
+shader_parameter/rim_color = Color(0, 1, 0.8, 1)
+shader_parameter/scanline_count = 30.0
+shader_parameter/scanline_speed = 6.0
+shader_parameter/fresnel_power = 1.5
+shader_parameter/glitch_intensity = 0.0
+shader_parameter/time_scale = 4.0
+shader_parameter/pulse_speed = 8.0
+shader_parameter/wireframe_intensity = 0.0
+
+[node name="FaceRoot" type="Node3D"]
+script = ExtResource("1_ctrl")
+
+[node name="Head" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.85, 0, 0, 0, 1, 0, 0, 0)
+mesh = SubResource("SphereMesh_head")
+surface_material_override/0 = SubResource("ShaderMat_head")
+
+[node name="EyeLeft" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.95, 0.55, 2.05)
+mesh = SubResource("SphereMesh_eye")
+surface_material_override/0 = SubResource("ShaderMat_eye")
+
+[node name="EyeRight" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.95, 0.55, 2.05)
+mesh = SubResource("SphereMesh_eye")
+surface_material_override/0 = SubResource("ShaderMat_eye")
+
+[node name="Mouth" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.65, 2.2)
+mesh = SubResource("BoxMesh_mouth")
+surface_material_override/0 = SubResource("ShaderMat_mouth")
+
+[node name="BlinkTimer" type="Timer" parent="."]
+wait_time = 3.5
+autostart = true
+
+[node name="SpeakTimer" type="Timer" parent="."]
+wait_time = 0.05
+autostart = true

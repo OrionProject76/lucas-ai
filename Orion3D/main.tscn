@@ -1,0 +1,48 @@
+[gd_scene format=3 uid="uid://main001"]
+
+[ext_resource type="Script" uid="uid://cvlfqfevtnkca" path="res://main.gd" id="1_main"]
+[ext_resource type="PackedScene" uid="uid://face001" path="res://scenes/face/face_root.tscn" id="2_face"]
+[ext_resource type="PackedScene" uid="uid://hud001" path="res://scenes/hud/hud_canvas.tscn" id="3_hud"]
+[ext_resource type="Script" uid="uid://diu836ef8elsi" path="res://scripts/auto_hide.gd" id="5_autohide"]
+[ext_resource type="Script" uid="uid://bpknp0ener38v" path="res://scripts/audio_visualizer.gd" id="6_audio"]
+
+[sub_resource type="Environment" id="Environment_001"]
+background_mode = 3
+tonemap_mode = 3
+glow_enabled = true
+glow_levels/1 = 1.0
+glow_levels/2 = 1.0
+glow_levels/3 = 1.0
+glow_levels/4 = 1.0
+glow_levels/5 = 1.0
+glow_levels/6 = 0.8
+glow_levels/7 = 0.5
+glow_intensity = 2.0
+glow_strength = 2.0
+glow_bloom = 0.3
+glow_hdr_luminance_cap = 8.0
+fog_enabled = true
+fog_mode = 1
+fog_light_color = Color(0, 0.15, 0.25, 1)
+fog_density = 0.015
+
+[node name="Main" type="Node3D" unique_id=1416088118]
+script = ExtResource("1_main")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1986077986]
+environment = SubResource("Environment_001")
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=1014584209]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6)
+fov = 35.0
+
+[node name="FaceRoot" parent="." unique_id=16368670 instance=ExtResource("2_face")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.040694237, 0, 0)
+
+[node name="HUD" parent="." unique_id=1973286798 instance=ExtResource("3_hud")]
+
+[node name="AutoHide" type="Node" parent="." unique_id=955101135]
+script = ExtResource("5_autohide")
+
+[node name="AudioVisualizer" type="Node" parent="." unique_id=624942840]
+script = ExtResource("6_audio")

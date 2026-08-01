@@ -1,0 +1,44 @@
+# Dépendances du Daemon Orion (24/7 background tasks)
+# Installation : pip install -r requirements_daemon.txt
+
+# ─── Base ──────────────────────────────────
+schedule>=1.2.0          # Planning des tâches cron-like
+
+# ─── Capture écran ───────────────────────────
+Pillow>=10.0.0           # Manipulation images
+pyautogui>=0.9.54        # Screenshot
+pywin32>=306             # Hooks Windows (fenêtres, processus)
+psutil>=5.9.0            # Info système (CPU, RAM, processus)
+pywinauto>=0.6.8         # Automation UI Windows (URL navigateur)
+
+# ─── Audio ───────────────────────────────────
+pyaudio>=0.2.13          # Capture micro
+webrtcvad>=2.0.10        # Voice Activity Detection
+openai-whisper>=20231117 # STT Whisper local
+numpy>=1.24.0            # Traitement audio
+
+# ─── Webcam & Vision ───────────────────────
+opencv-python>=4.8.0     # Capture webcam, traitement image
+
+# ─── Input ───────────────────────────────────
+pynput>=1.7.6            # Hooks clavier/souris globaux
+
+# ─── WebSocket & Communication ─────────────
+websockets>=12.0         # Serveur/client WebSocket
+
+# ─── Base de données ───────────────────────
+chromadb>=0.4.0          # Vector DB pour RAG
+sentence-transformers>=2.2.0  # Embeddings (fallback si Ollama down)
+
+# ─── TTS ────────────────────────────────────
+piper-tts>=1.2.0         # TTS local rapide
+sounddevice>=0.4.6       # Lecture audio
+
+# ─── Tests & Qualité ───────────────────────
+pytest>=7.4.0            # Tests unitaires
+pytest-mock>=3.11.0      # Mock pour tests
+pytest-cov>=4.1.0        # Coverage tests
+
+# ─── Utils ──────────────────────────────────
+python-dotenv>=1.0.0     # Variables d'environnement
+requests>=2.31.0         # HTTP client

@@ -1,0 +1,109 @@
+# justfile — Commandes Orion AI
+# Installation : winget install Casey.Just
+# Usage : just <commande>
+
+set shell := ["powershell.exe", "-c"]
+
+# ─── LANCEMENT ───────────────────────────────────────────
+
+# Lancer tout (Ollama + FastAPI + Daemon)
+all:
+    echo "🌌 Démarrage complet Orion..."
+    Start-Process powershell -ArgumentList "-c ollama serve" -WindowStyle Hidden
+    Start-Sleep 2
+    Start-Process powershell -ArgumentList "-c uvicorn main:app --reload --host 0.0.0.0 --port 8000" -WindowStyle Hidden
+    Start-Sleep 2
+    pythonw orion_daemon.py
+
+# Lancer Ollama
+ollama:
+    ollama serve
+
+# Lancer FastAPI
+serve:
+    uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# Lancer le daemon (arrière-plan Windows)
+daemon:
+    pythonw orion_daemon.py
+
+# Lancer le daemon en mode visible (debug)
+daemon-debug:
+    python orion_daemon.py
+
+# ─── DÉVELOPPEMENT ───────────────────────────────────────
+
+# Tests auto
+test:
+    pytest tests/ -v --cov=orion --cov-report=term-missing
+
+# Tests rapides (sans coverage)
+test-quick:
+    pytest tests/ -v
+
+# Linting
+lint:
+    ruff check orion/ tests/
+    ruff format orion/ tests/
+
+# Type checking
+mypy:
+    mypy orion/ --ignore-missing-imports
+
+# Vérification complète (lint + test + type)
+check: lint test mypy
+
+# ─── GIT ─────────────────────────────────────────────────
+
+# Commit rapide avec message
+git-commit msg:
+    git add .
+    git commit -m "{{msg}}"
+
+# Push
+git-push:
+    git push origin main
+
+# Nouvelle branche feature
+git-feature name:
+    git checkout -b feature/{{name}}
+
+# ─── ORION SPÉCIFIQUE ────────────────────────────────────
+
+# Entraînement LoRA manuel
+train:
+    python training/train_lora.py --data data/conversations/
+
+# Indexation RAG manuelle
+index:
+    python memory/index_documents.py
+
+# Cleanup manuel
+clean:
+    python scripts/cleanup.py
+
+# Rapport matinal manuel
+report:
+    python -c "from orion_daemon import OrionDaemon; d=OrionDaemon(); d.generate_morning_report()"
+
+# Voir les logs du daemon
+logs:
+    Get-Content data/logs/daemon.log -Tail 50 -Wait
+
+# Voir le rapport du jour
+report-today:
+    Get-Content data/reports/report_(Get-Date -Format yyyyMMdd).txt
+
+# ─── INSTALLATION ────────────────────────────────────────
+
+# Installer les dépendances
+install:
+    pip install -r requirements.txt
+    pip install -r requirements_daemon.txt
+
+# Vérifier l'environnement
+doctor:
+    python --version
+    ollama --version
+    uvicorn --version
+    echo "✅ Environnement OK"

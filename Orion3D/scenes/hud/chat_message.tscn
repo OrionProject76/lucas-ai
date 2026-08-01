@@ -1,0 +1,16 @@
+[gd_scene load_steps=1 format=3]
+
+[node name="ChatMessage" type="HBoxContainer"]
+offset_right = 300.0
+offset_bottom = 30.0
+
+[node name="Icon" type="Label" parent="."]
+layout_mode = 2
+text = ">"
+
+[node name="Text" type="RichTextLabel" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+bbcode_enabled = true
+fit_content = true
+scroll_active = false

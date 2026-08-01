@@ -1,0 +1,26 @@
+[gd_scene load_steps=2 format=3 uid="uid://chat001"]
+
+[ext_resource type="Script" path="res://scenes/hud/widget_chat.gd" id="1_chat"]
+
+[node name="ChatWidget" type="VBoxContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_chat")
+
+[node name="Title" type="Label" parent="."]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "CONVERSATION"
+horizontal_alignment = 1
+
+[node name="Scroll" type="ScrollContainer" parent="."]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Messages" type="VBoxContainer" parent="Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
