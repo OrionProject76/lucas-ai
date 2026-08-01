@@ -1,11 +1,16 @@
 date,libelle,montant,categorie
-2022-01-01,Paiement de loyer,1000,Logement
-2022-01-05,Achat de nourriture,50,Alimentation
-2022-01-10,Paiement d'électricité,150,Logement
-2022-01-15,Achat de carburant,20,Transport
-2022-01-20,Paiement de loyer,1000,Logement
-2022-01-25,Achat de nourriture,50,Alimentation
-2022-01-30,Paiement d'électricité,150,Logement
-2022-02-01,Achat de carburant,20,Transport
-2022-02-05,Paiement de loyer,1000,Logement
-2022-02-10,Achat de nourriture,50,Alimentation
+2026-01-02,Virement salaire,2400.00,Revenus
+2026-01-03,Paiement de loyer,-1000.00,Logement
+2026-01-05,CARREFOUR MARKET,-84.30,
+2026-01-08,EDF facture electricite,-92.15,
+2026-01-12,TOTAL ENERGIES carburant,-61.40,
+2026-01-14,Netflix abonnement,-13.49,
+2026-01-18,PHARMACIE DU CENTRE,-23.80,
+2026-01-22,SNCF Connect billet,-45.00,
+2026-01-25,Boulangerie Martin,-12.60,
+2026-01-28,VIR SEPA GHRTX 4471,-150.00,
+2026-02-02,Virement salaire,2400.00,Revenus
+2026-02-03,Paiement de loyer,-1000.00,Logement
+2026-02-06,LIDL,-67.90,
+2026-02-11,Spotify Premium,-11.99,
+2026-02-15,Restaurant Le Comptoir,-38.50,

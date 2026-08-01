@@ -40,6 +40,12 @@ modules/data/
 # Modèles de voix Piper (.onnx, ~60-75 Mo pièce) et sorties audio locales
 data/voices/
 data/output_piper.wav
+
+# Relevés bancaires réels de Cyril — ne doivent JAMAIS être versionnés.
+# Seul data/sample_transactions.csv (données fictives) est suivi.
+data/finance/
+*.ofx
+*.qif
 data/logs/
 data/screenshots/
 data/screenshot.png
