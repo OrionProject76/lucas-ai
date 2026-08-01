@@ -7,6 +7,8 @@ from config import (
     RECENT_EVENTS_IN_PROMPT,
     SYSTEM_PROMPT,
     VISION_ENABLED,
+    VISION_HISTORY_MESSAGES,
+    VLM_MAX_CHARS,
     VLM_MODEL,
 )
 from core.cloud_llm import ask_cloud
@@ -59,38 +61,81 @@ class OrionCore:
             if events_context:
                 messages.append({"role": "system", "content": events_context})
 
-        # Vision : Luca's regarde l'écran uniquement sur demande explicite.
-        # Jamais vers le cloud — l'image reste locale, mais sa description
-        # (« une fenêtre affichant un solde de 3200 € ») en dirait autant.
-        # route() force déjà le local sur ces questions ; garde redondante
-        # assumée, comme pour le RAG.
+        # La vision est décidée AVANT de charger l'historique : quand elle
+        # se déclenche, l'historique doit être raccourci (voir plus bas).
+        vision_context = ""
         if not is_cloud and VISION_ENABLED and should_use_vision(user_message):
             vision_context = self._describe_screen(user_message)
-            if vision_context:
-                messages.append({"role": "system", "content": vision_context})
-
-        # RAG : uniquement si le routeur juge la question pertinente pour
-        # les documents personnels. Évite de noyer le contexte du LLM
-        # avec des extraits inutiles sur une question générale.
-        # Jamais vers le cloud : les documents personnels restent locaux.
-        # route() force déjà le local dans ce cas — garde redondante assumée,
-        # deux verrous valent mieux qu'un sur un chemin qui sort de la machine.
-        # get_context() rend une chaîne VIDE quand aucun extrait n'est
-        # assez proche : on n'injecte alors rien du tout. Auparavant il
-        # rendait « Aucun document pertinent trouvé. », qui partait dans le
-        # prompt pour ne rien dire — ou pire, un extrait hors sujet annoncé
-        # comme pertinent, qui noyait le bloc vision juste au-dessus.
-        if not is_cloud and should_use_rag(user_message):
-            rag_context = RAGManager().get_context(user_message)
-            if rag_context:
-                messages.append({"role": "system", "content": rag_context})
 
         history = self.memory.load_history()
         if is_cloud:
             history = history[-CLOUD_HISTORY_MESSAGES:]
 
+        # ⚠️ ORDRE CRITIQUE — l'historique passe AVANT l'observation.
+        #
+        # Ces blocs étaient injectés juste après le prompt système, donc
+        # avant tout l'historique. Sur une base fraîche ça ne se voyait pas :
+        # l'historique était vide, l'observation se retrouvait collée à la
+        # question et tout marchait. En usage réel, avec 90 messages
+        # accumulés, le bloc vision arrivait en 4e position sur 91 — le
+        # modèle voyait l'écran comme du contexte ancien, puis 87 tours de
+        # conversation sans rapport, puis la question. Il répondait alors
+        # sur une VIEILLE question de l'historique.
+        #
+        # C'est ce décalage qui a fait passer quatre campagnes de tests
+        # pendant que l'application restait cassée : les tests utilisaient
+        # une base temporaire vide.
+        #
+        # La question courante est le dernier message de l'historique
+        # (prepare() vient de l'enregistrer). On l'isole pour glisser
+        # l'observation JUSTE AVANT elle, là où elle pèse le plus.
+        current_question = None
+        if history and history[-1][0] == "user":
+            current_question = history[-1]
+            history = history[:-1]
+
+        # ⚠️ SECONDE MOITIÉ DU MÊME BUG. Remettre le bloc au bon endroit
+        # ne suffisait pas : avec 100 messages d'historique, Luca's
+        # répondait encore « décris-moi ton écran » alors que le texte lu
+        # était juste au-dessus de la question.
+        #
+        # La cause n'est pas la taille de la fenêtre de contexte. La base
+        # contenait douze réponses « pourriez-vous me donner plus de
+        # contexte » — des tentatives ratées précédentes. Cent messages de
+        # ce motif enseignent au modèle le réflexe même qu'on corrige. Il
+        # imitait sa propre mauvaise habitude.
+        #
+        # Mesuré : 0/9 à 100 messages, 9/9 à 6. Voir config.py.
+        if vision_context and not is_cloud:
+            history = history[-VISION_HISTORY_MESSAGES:]
+
         for role, content in history:
             messages.append({"role": role, "content": content})
+
+        # Vision : Luca's regarde l'écran uniquement sur demande explicite.
+        # Jamais vers le cloud — l'image reste locale, mais sa description
+        # (« une fenêtre affichant un solde de 3200 € ») en dirait autant.
+        # route() force déjà le local sur ces questions ; garde redondante
+        # assumée, comme pour le RAG.
+        if vision_context:
+            messages.append({"role": "system", "content": vision_context})
+
+        # RAG : uniquement si le routeur juge la question pertinente pour
+        # les documents personnels. Jamais vers le cloud : les documents
+        # personnels restent locaux. route() force déjà le local dans ce
+        # cas — garde redondante assumée, deux verrous valent mieux qu'un
+        # sur un chemin qui sort de la machine.
+        # get_context() rend une chaîne VIDE quand aucun extrait n'est
+        # assez proche : on n'injecte alors rien du tout.
+        if not is_cloud and should_use_rag(user_message):
+            rag_context = RAGManager().get_context(user_message)
+            if rag_context:
+                messages.append({"role": "system", "content": rag_context})
+
+        if current_question is not None:
+            messages.append(
+                {"role": current_question[0], "content": current_question[1]}
+            )
         return messages
 
     @staticmethod
@@ -183,7 +228,9 @@ class OrionCore:
 
         if not description or description.startswith("Erreur"):
             return ""
-        return description.strip()
+        # Borné comme l'OCR l'est déjà : llava part parfois en description
+        # de 10 000 caractères, qui noie le texte réellement lu.
+        return description.strip()[:VLM_MAX_CHARS]
 
     @staticmethod
     def _compose_vision_block(screen_text: str, visual: str) -> str:

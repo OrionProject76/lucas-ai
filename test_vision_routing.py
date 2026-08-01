@@ -75,11 +75,26 @@ def test_vision_beats_a_cloud_keyword() -> None:
 # ── Injection dans le prompt ──────────────────────────────────────────
 
 class _FakeMemory:
-    def __init__(self) -> None:
+    """
+    ⚠️ `history` est un paramètre depuis le 01/08/2026, et il ne doit
+    plus jamais redevenir une constante vide.
+
+    Cette classe rendait `[]` en dur. Tous les tests vision tournaient
+    donc sur une conversation neuve, où le bloc vision se retrouvait
+    mécaniquement collé à la question — et passaient. En usage réel, avec
+    90 messages accumulés, le bloc arrivait en 4e position sur 91 et le
+    modèle répondait à une vieille question de l'historique.
+
+    Quatre campagnes de tests ont validé une application cassée à cause
+    de ce seul `return []`.
+    """
+
+    def __init__(self, history=None) -> None:
         self.events: list[tuple[str, str]] = []
+        self._history = list(history or [])
 
     def load_history(self):
-        return []
+        return list(self._history)
 
     def load_recent_events(self, limit=5):
         return []
@@ -390,6 +405,141 @@ def test_empty_description_is_not_injected(core, monkeypatch) -> None:
     _fake_vision(monkeypatch, "")
     messages = core._build_messages("regarde mon écran", "local")
     assert all(m["content"].strip() for m in messages)
+
+
+# ── Position dans le prompt, avec un historique réel ──────────────────
+#
+# Le bug qui a résisté à quatre campagnes de tests. Tout le reste
+# fonctionnait — déclencheur, OCR, VLM, construction du bloc — mais le
+# bloc était injecté AVANT l'historique. Sur une base neuve ça ne se
+# voyait pas ; avec 90 messages accumulés, l'observation de l'écran
+# devenait du contexte ancien et le modèle répondait à côté.
+
+def _long_history(turns: int = 45):
+    """Une conversation déjà bien remplie, comme celle de Cyril."""
+    history = []
+    for i in range(turns):
+        history.append(("user", f"vieille question numéro {i}"))
+        history.append(("assistant", f"vieille réponse numéro {i}"))
+    return history
+
+
+@pytest.fixture
+def core_with_history(monkeypatch):
+    monkeypatch.setattr(orion_core, "get_snapshot", dict)
+    monkeypatch.setattr(
+        orion_core, "format_for_prompt",
+        lambda snapshot, include_window=True: "[système]",
+    )
+    instance = OrionCore.__new__(OrionCore)
+    instance.memory = _FakeMemory(
+        history=_long_history() + [("user", "c'est écrit quoi ?")]
+    )
+    return instance
+
+
+def test_vision_block_sits_just_before_the_question(core_with_history, monkeypatch):
+    """
+    LE test qui manquait. L'observation de l'écran doit être le dernier
+    contexte que le modèle lise avant la question — pas le premier.
+    """
+    _fake_vision(monkeypatch, "un éditeur de texte")
+    messages = core_with_history._build_messages("c'est écrit quoi ?", "local")
+
+    positions = [i for i, m in enumerate(messages) if VISION_MARKER in m["content"]]
+    assert positions, "le bloc vision doit être présent"
+
+    vision_at = positions[0]
+    assert messages[-1]["content"] == "c'est écrit quoi ?", (
+        "la question courante doit rester le dernier message"
+    )
+    assert vision_at == len(messages) - 2, (
+        f"bloc vision en position {vision_at} sur {len(messages)} — il doit être "
+        "immédiatement avant la question, sinon l'historique le noie"
+    )
+
+
+def test_history_comes_before_the_observation(core_with_history, monkeypatch):
+    """
+    L'ordre inverse est celui qui a cassé l'application : 4 messages
+    système dont la vision, puis 87 messages d'historique par-dessus.
+    """
+    _fake_vision(monkeypatch, "un éditeur de texte")
+    messages = core_with_history._build_messages("c'est écrit quoi ?", "local")
+
+    vision_at = next(i for i, m in enumerate(messages) if VISION_MARKER in m["content"])
+    last_old = max(
+        i for i, m in enumerate(messages)
+        if m["content"].startswith(("vieille question", "vieille réponse"))
+    )
+    assert last_old < vision_at, (
+        "tout l'historique doit précéder l'observation de l'écran"
+    )
+
+
+def test_the_current_question_is_not_duplicated(core_with_history, monkeypatch):
+    """
+    La question est isolée de l'historique pour glisser l'observation
+    avant elle. Elle ne doit pas pour autant apparaître deux fois.
+    """
+    _fake_vision(monkeypatch, "un éditeur de texte")
+    messages = core_with_history._build_messages("c'est écrit quoi ?", "local")
+
+    assert sum(m["content"] == "c'est écrit quoi ?" for m in messages) == 1
+
+
+def test_the_question_is_kept_when_vision_is_off(core_with_history, monkeypatch):
+    """
+    L'isolement de la question ne doit pas la faire disparaître quand
+    aucun bloc n'est injecté — c'est le cas de la grande majorité des
+    messages.
+    """
+    messages = core_with_history._build_messages("quelle heure il est", "local")
+    assert messages[-1]["content"] == "c'est écrit quoi ?"
+
+
+def test_history_is_shortened_when_vision_fires(core_with_history, monkeypatch):
+    """
+    La seconde moitié du bug. Le bloc bien placé ne suffisait pas : avec
+    100 messages d'historique — dont douze réponses « pourriez-vous me
+    donner plus de contexte » — le modèle imitait sa propre mauvaise
+    habitude. Mesuré 0/9 à 100 messages, 9/9 à 6.
+    """
+    from config import VISION_HISTORY_MESSAGES
+
+    _fake_vision(monkeypatch, "un éditeur de texte")
+    messages = core_with_history._build_messages("c'est écrit quoi ?", "local")
+
+    old = [m for m in messages if m["content"].startswith(("vieille question", "vieille réponse"))]
+    assert len(old) <= VISION_HISTORY_MESSAGES, (
+        f"{len(old)} messages d'historique joints alors que la vision est "
+        f"active — au-delà de {VISION_HISTORY_MESSAGES}, l'observation est noyée"
+    )
+
+
+def test_history_is_kept_whole_without_vision(core_with_history):
+    """
+    Le raccourcissement ne vaut QUE pour la vision. Une conversation
+    ordinaire garde sa mémoire longue — c'est tout l'intérêt du projet.
+    """
+    messages = core_with_history._build_messages("quelle heure il est", "local")
+
+    old = [m for m in messages if m["content"].startswith(("vieille question", "vieille réponse"))]
+    assert len(old) == 90, f"historique tronqué à {len(old)} sans raison"
+
+
+def test_the_vlm_description_is_capped(core_with_history, monkeypatch):
+    """
+    Mesuré en usage réel : llava a rendu 10 270 caractères pour 1 761
+    caractères réellement lus à l'écran. L'OCR était borné, pas lui.
+    """
+    from config import VLM_MAX_CHARS
+
+    _fake_vision(monkeypatch, "bla " * 5000)
+    messages = core_with_history._build_messages("c'est écrit quoi ?", "local")
+
+    block = next(m for m in messages if VISION_MARKER in m["content"])
+    assert block["content"].count("bla") <= VLM_MAX_CHARS
 
 
 if __name__ == "__main__":

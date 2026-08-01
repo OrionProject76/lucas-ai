@@ -47,12 +47,20 @@ OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 
 # --- Voix (TTS) ---
 # Deux moteurs, un routeur : core.router.route_voice() décide.
+# Choix de Cyril, 01/08/2026, après écoute comparée (demos/demo_voices.py).
 EDGE_TTS_VOICE = "fr-FR-HenriNeural"   # voix cloud Microsoft (défaut)
-PIPER_VOICE = "fr_FR-upmc-medium"      # voix locale, masculine comme Henri
+PIPER_VOICE = "fr_FR-siwis-medium"     # voix locale retenue
 PIPER_VOICES_DIR = "data/voices"       # modèles .onnx (non versionnés)
 
-# Voix Piper également téléchargée, pour comparer à l'oreille :
-# "fr_FR-siwis-medium" (féminine)
+# Alternatives retenues, à basculer sans rien retélécharger :
+#   EDGE_TTS_VOICE = "fr-FR-DeniseNeural"   (féminine, cloud)
+#   PIPER_VOICE    = "fr_FR-upmc-medium"    (masculine, locale)
+#
+# ⚠️ Les deux voix Piper ne se ressemblent pas : siwis est féminine,
+# Henri (edge) est masculine. Le moteur change selon la sensibilité du
+# contenu (route_voice), donc la voix change aussi en cours d'usage.
+# C'est audible et volontaire — la bascule vers le local s'entend, ce qui
+# est plutôt une bonne chose. Pour une voix constante, prendre upmc.
 
 # ⚠️ SÉCURITÉ — laisser à False sauf décision consciente.
 # À True, si Piper est indisponible (modèle manquant, erreur de chargement),
@@ -65,6 +73,25 @@ TTS_ALLOW_CLOUD_ON_SENSITIVE: bool = False
 # Modèle vision local, servi par Ollama. « llava » est installé sur cette
 # machine ; internvl2 est envisagé en v1.1 (voir CLAUDE.md, tableau LLM).
 VLM_MODEL = "llava"
+
+# ⚠️ LIMITE CONNUE — llava FABRIQUE du contenu. Observé en conditions
+# réelles le 01/08/2026, trois fois sur trois captures :
+#   • « Error: unable to connect to local socket path /var/run/docker.sock »
+#   • « mount: mounting /dev/sda6 on /media failed: Invalid argument »
+#   • « Je ne peux pas aider avec la description de l'image »
+# Aucune de ces phrases n'était à l'écran. Le modèle produit des messages
+# d'erreur plausibles et les présente avec assurance.
+#
+# C'est pourquoi _compose_vision_block() étiquette explicitement le VLM
+# comme « indicatif, peut se tromper » face à l'OCR « transcription
+# exacte, fiable ». Le contenu vient de l'OCR ; le VLM ne sert qu'à
+# situer. Ne pas inverser cette hiérarchie sans changer de modèle.
+#
+# ⚠️ LIMITE CONNUE — qwen2.5 dérive en chinois sur contexte long. Observé
+# une fois, avec un bloc vision de 12 447 caractères et 91 messages
+# d'historique. Non reproduit depuis que les deux sont bornés
+# (VLM_MAX_CHARS, VISION_HISTORY_MESSAGES). Comportement du modèle, pas
+# bug applicatif : à ne pas poursuivre indéfiniment.
 
 # ⚠️ Une capture d'écran peut contenir un relevé bancaire ou un mot de
 # passe affiché. Elle ne quitte jamais la machine (Ollama local), et une
@@ -85,6 +112,15 @@ OCR_ENABLED: bool = True
 OCR_MAX_CHARS: int = 2000
 
 OCR_LANGUAGES = ["fr", "en"]
+
+# ⚠️ Le VLM n'était borné par RIEN, alors que l'OCR l'était. Mesuré en
+# usage réel sur « c'est écrit quoi ? » : llava a rendu 10 270 caractères
+# de description, pour 1 761 caractères de texte réellement lu. Le bloc
+# vision pesait 12 447 caractères — du bavardage qui noie l'observation
+# utile et pousse qwen2.5 hors de sa fenêtre confortable.
+# Le contexte visuel sert à SITUER (quelle application, quelle
+# disposition) ; c'est l'OCR qui porte le contenu.
+VLM_MAX_CHARS: int = 1200
 
 # --- Voix : transcription (STT) ---
 # « base » ≈ 150 Mo, suffisant pour la v1.0 ; « small » ≈ 500 Mo, plus
@@ -200,6 +236,23 @@ CLOUD_HISTORY_MESSAGES: int = 6
 # contexte au LLM, pas de lui déverser un journal. Jamais joint à une
 # requête cloud — voir OrionCore._build_messages().
 RECENT_EVENTS_IN_PROMPT: int = 5
+
+# Historique joint quand la VISION se déclenche. Mesuré sur la base réelle
+# de Cyril (100 messages), en injectant un texte d'écran sans ambiguïté et
+# en comptant les réponses qui le citent, 3 tirages par question :
+#     100 messages  ->  0/9   Luca's demande « décris-moi ton écran »
+#      16 messages  ->  9/9
+#      10 messages  ->  7/9
+#       6 messages  ->  9/9
+# La cause n'est pas la fenêtre de contexte : l'historique contenait 12
+# réponses « pourriez-vous me donner plus de contexte ». Cent messages de
+# ce motif sont un exemple d'apprentissage qui enseigne au modèle le
+# réflexe exact qu'on cherche à supprimer.
+# ⚠️ Vérifié aussi : ajouter un rappel APRÈS la question ne corrige rien
+# (0/9 à 100 messages). C'est la longueur seule qui décide.
+# Quand Cyril interroge son écran, l'écran est le sujet ; quelques tours
+# suffisent à garder le fil de la conversation.
+VISION_HISTORY_MESSAGES: int = 6
 
 # --- Identité de Luca's ---
 SYSTEM_PROMPT = (
