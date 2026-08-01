@@ -29,7 +29,12 @@ Orion3D/.godot/
 export_presets.cfg
 
 # --- Données générées (jamais de données perso dans le dépôt) ---
+# Les bases SQLite contiennent les conversations et événements de Cyril :
+# le code du module est versionné, jamais son contenu.
+*.db
+*.sqlite3
 data/chromadb/
+modules/data/
 data/logs/
 data/screenshots/
 data/screenshot.png
