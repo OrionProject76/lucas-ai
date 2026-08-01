@@ -1,0 +1,349 @@
+# test_security.py — capteurs Guardian et Privacy Shield
+#
+# Deux propriétés tenues pour non négociables et testées comme telles :
+#   1. Observation seule — aucun process tué, aucune connexion coupée.
+#   2. Aucun appel réseau sortant — les capteurs ne parlent à personne.
+#
+# psutil est mocké partout : les tests ne dépendent pas des process
+# réellement lancés sur la machine.
+
+from __future__ import annotations
+
+import inspect
+from types import SimpleNamespace
+
+import psutil
+import pytest
+
+from security import CRITICAL, INFO, WARNING, Guardian, PrivacyShield, format_report
+from security.guardian import LOOKALIKE_NAMES
+from security.privacy_shield import _is_external, summarize_exposure
+from security.types import Finding, sort_findings
+
+# ── Garde-fous structurels ────────────────────────────────────────────
+
+def test_sensors_never_act() -> None:
+    """
+    Observation seule : aucun capteur ne doit pouvoir tuer un process ni
+    fermer une socket. Donner ce pouvoir à Luca's est une décision
+    distincte, à valider par Cyril (VISION_LONG_TERME.md §4.1).
+    """
+    from security import guardian, privacy_shield
+
+    forbidden = ("kill(", "terminate(", "shutdown(", "close()", "suspend(")
+    for module in (guardian, privacy_shield):
+        source = inspect.getsource(module)
+        for call in forbidden:
+            assert call not in source, f"{module.__name__} ne doit pas appeler {call}"
+
+
+def test_sensors_make_no_outbound_call() -> None:
+    """
+    Envoyer la liste des process ou des connexions de Cyril à un service
+    tiers serait exactement la fuite qu'on cherche à empêcher.
+    """
+    from security import guardian, privacy_shield
+
+    forbidden = ("requests.", "urllib", "http://", "https://", "socket.create_connection")
+    for module in (guardian, privacy_shield):
+        source = inspect.getsource(module)
+        for call in forbidden:
+            assert call not in source, f"{module.__name__} ne doit rien émettre ({call})"
+
+
+# ── Guardian : usurpation de nom système ──────────────────────────────
+
+def test_svchost_outside_system32_is_critical() -> None:
+    finding = Guardian._check_system_impersonation(
+        "svchost.exe", r"C:\Users\PC\AppData\Local\Temp\svchost.exe"
+    )
+    assert finding is not None
+    assert finding.severity == CRITICAL
+    assert finding.kind == "process_impersonation"
+
+
+def test_real_svchost_is_not_flagged() -> None:
+    assert Guardian._check_system_impersonation(
+        "svchost.exe", r"C:\Windows\System32\svchost.exe"
+    ) is None
+
+
+def test_syswow64_svchost_is_legitimate() -> None:
+    """Les binaires 32 bits vivent ailleurs — ne pas générer de faux positif."""
+    assert Guardian._check_system_impersonation(
+        "svchost.exe", r"C:\Windows\SysWOW64\svchost.exe"
+    ) is None
+
+
+def test_case_differences_do_not_create_false_positives() -> None:
+    assert Guardian._check_system_impersonation(
+        "SVCHOST.EXE", r"C:\WINDOWS\SYSTEM32\SVCHOST.EXE"
+    ) is None
+
+
+def test_unknown_process_is_not_flagged() -> None:
+    assert Guardian._check_system_impersonation(
+        "mon_appli.exe", r"C:\Program Files\MonAppli\mon_appli.exe"
+    ) is None
+
+
+def test_process_without_path_is_not_flagged() -> None:
+    """
+    Un chemin illisible (droits insuffisants) est banal sous Windows.
+    En faire une alerte noierait les vrais signaux.
+    """
+    assert Guardian._check_system_impersonation("svchost.exe", "") is None
+
+
+# ── Guardian : noms sosies ────────────────────────────────────────────
+
+@pytest.mark.parametrize("fake", sorted(LOOKALIKE_NAMES))
+def test_lookalike_names_are_all_detected(fake: str) -> None:
+    finding = Guardian._check_lookalike_name(fake, r"C:\Temp\x.exe")
+    assert finding is not None
+    assert finding.severity == CRITICAL
+
+
+def test_homoglyph_with_capital_i_is_detected() -> None:
+    """
+    « expIorer.exe » avec un I majuscule se lit comme « explorer.exe » à
+    l'écran. Les clés du dictionnaire doivent donc être en minuscules,
+    sinon .lower() détruit le signal qu'on cherche.
+    """
+    finding = Guardian._check_lookalike_name("expIorer.exe", r"C:\Temp\x.exe")
+    assert finding is not None
+    assert finding.evidence["imite"] == "explorer.exe"
+
+
+def test_lookalike_keys_are_all_lowercase() -> None:
+    """Garde-fou : une clé avec une majuscule ne matcherait jamais."""
+    assert all(key == key.lower() for key in LOOKALIKE_NAMES)
+
+
+def test_legitimate_name_is_not_a_lookalike() -> None:
+    assert Guardian._check_lookalike_name("chrome.exe", r"C:\Program Files\chrome.exe") is None
+
+
+# ── Guardian : répertoires volatils ───────────────────────────────────
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        r"C:\Users\PC\AppData\Local\Temp\setup.exe",
+        r"C:\Users\PC\Downloads\jeu.exe",
+        r"C:\$Recycle.Bin\S-1-5-21\truc.exe",
+    ],
+)
+def test_volatile_locations_are_flagged(path: str) -> None:
+    finding = Guardian._check_volatile_location("truc.exe", path)
+    assert finding is not None
+    assert finding.severity == WARNING
+
+
+def test_program_files_is_not_volatile() -> None:
+    assert Guardian._check_volatile_location(
+        "app.exe", r"C:\Program Files\App\app.exe"
+    ) is None
+
+
+# ── Guardian : balayage complet ───────────────────────────────────────
+
+def test_scan_skips_inaccessible_processes(monkeypatch) -> None:
+    """Un process protégé ne doit ni planter le scan ni générer d'alerte."""
+
+    class _Denied:
+        @property
+        def info(self):
+            raise psutil.AccessDenied(pid=4)
+
+    good = SimpleNamespace(
+        info={"name": "svch0st.exe", "exe": r"C:\Temp\svch0st.exe", "pid": 1234}
+    )
+    monkeypatch.setattr(psutil, "process_iter", lambda attrs=None: [_Denied(), good])
+
+    findings = Guardian().scan()
+    assert len(findings) == 1
+    assert findings[0].evidence["pid"] == 1234
+
+
+def test_scan_logs_only_non_trivial_findings(monkeypatch) -> None:
+    events: list[tuple[str, str]] = []
+    procs = [
+        SimpleNamespace(info={"name": "svchost.exe", "exe": r"C:\Temp\svchost.exe", "pid": 1}),
+    ]
+    monkeypatch.setattr(psutil, "process_iter", lambda attrs=None: procs)
+
+    Guardian(log_event=lambda t, d="": events.append((t, d))).scan()
+    assert [t for t, _ in events] == ["security_process_impersonation"]
+
+
+# ── Privacy Shield : classification des adresses ──────────────────────
+
+@pytest.mark.parametrize(
+    "ip, external",
+    [
+        ("8.8.8.8", True),
+        ("192.168.1.11", False),
+        ("10.0.0.5", False),
+        ("127.0.0.1", False),
+        ("169.254.1.1", False),
+        ("pas-une-ip", False),
+    ],
+)
+def test_external_address_classification(ip: str, external: bool) -> None:
+    assert _is_external(ip) is external
+
+
+# ── Privacy Shield : heuristiques ─────────────────────────────────────
+
+def test_temp_process_talking_outside_is_flagged() -> None:
+    finding = PrivacyShield._check_volatile_process_online(
+        "x.exe", r"C:\Users\PC\AppData\Local\Temp\x.exe", "8.8.8.8:443"
+    )
+    assert finding is not None
+    assert finding.severity == WARNING
+
+
+def test_normal_process_talking_outside_is_not_flagged() -> None:
+    """Un navigateur qui sort est banal : ne pas crier au loup."""
+    assert PrivacyShield._check_volatile_process_online(
+        "chrome.exe", r"C:\Program Files\Google\Chrome\chrome.exe", "8.8.8.8:443"
+    ) is None
+
+
+def test_expected_listening_ports_are_silent() -> None:
+    """Ollama (11434) et l'API de Luca's (8000) sont ouverts volontairement."""
+    laddr = SimpleNamespace(ip="0.0.0.0", port=11434)
+    assert PrivacyShield._check_wide_open_listener("ollama.exe", laddr, "") is None
+
+
+def test_unexpected_wide_open_listener_is_reported() -> None:
+    laddr = SimpleNamespace(ip="0.0.0.0", port=4444)
+    finding = PrivacyShield._check_wide_open_listener(
+        "inconnu.exe", laddr, r"C:\Users\PC\Downloads\inconnu.exe"
+    )
+    assert finding is not None
+    assert finding.severity == INFO
+
+
+def test_windows_services_are_not_reported() -> None:
+    """
+    Appris du premier balayage réel : svchost et services.exe écoutent
+    légitimement sur 0.0.0.0. Les signaler noyait tout le rapport.
+    """
+    laddr = SimpleNamespace(ip="0.0.0.0", port=5040)
+    assert PrivacyShield._check_wide_open_listener(
+        "svchost.exe", laddr, r"C:\Windows\System32\svchost.exe"
+    ) is None
+
+
+def test_ephemeral_ports_are_not_reported() -> None:
+    """Un port ≥ 49152 est attribué par Windows, pas choisi par le service."""
+    laddr = SimpleNamespace(ip="0.0.0.0", port=49666)
+    assert PrivacyShield._check_wide_open_listener(
+        "inconnu.exe", laddr, r"C:\Users\PC\Downloads\inconnu.exe"
+    ) is None
+
+
+def test_impersonating_binary_still_reported_despite_system_name() -> None:
+    """
+    Le filtre « binaire système » repose sur le CHEMIN, pas le nom : un
+    faux svchost.exe hors System32 reste signalé.
+    """
+    laddr = SimpleNamespace(ip="0.0.0.0", port=4444)
+    finding = PrivacyShield._check_wide_open_listener(
+        "svchost.exe", laddr, r"C:\Users\PC\AppData\Local\Temp\svchost.exe"
+    )
+    assert finding is not None
+
+
+def test_kernel_pseudo_process_is_ignored(monkeypatch) -> None:
+    """
+    « System » PID 4 porte le partage de fichiers Windows (port 445) et
+    n'a pas de chemin lisible. L'exclusion exige le nom ET le PID réservé,
+    pour qu'un imposteur nommé « System » ne passe pas au travers.
+    """
+    conn = SimpleNamespace(
+        pid=4,
+        status=psutil.CONN_LISTEN,
+        laddr=SimpleNamespace(ip="0.0.0.0", port=445),
+        raddr=None,
+    )
+    monkeypatch.setattr(psutil, "net_connections", lambda kind=None: [conn])
+    monkeypatch.setattr(PrivacyShield, "_describe_process", staticmethod(lambda pid: ("System", "")))
+    assert PrivacyShield().scan() == []
+
+
+def test_impostor_named_system_is_not_ignored(monkeypatch) -> None:
+    """Même nom, autre PID : l'exclusion ne doit pas s'appliquer."""
+    conn = SimpleNamespace(
+        pid=9999,
+        status=psutil.CONN_LISTEN,
+        laddr=SimpleNamespace(ip="0.0.0.0", port=4444),
+        raddr=None,
+    )
+    monkeypatch.setattr(psutil, "net_connections", lambda kind=None: [conn])
+    monkeypatch.setattr(
+        PrivacyShield, "_describe_process",
+        staticmethod(lambda pid: ("System", r"C:\Temp\System.exe")),
+    )
+    assert len(PrivacyShield().scan()) == 1
+
+
+def test_access_denied_is_reported_not_crashed(monkeypatch) -> None:
+    def denied(kind=None):
+        raise psutil.AccessDenied(pid=None)
+
+    monkeypatch.setattr(psutil, "net_connections", denied)
+    findings = PrivacyShield().scan()
+    assert len(findings) == 1
+    assert findings[0].kind == "scan_unavailable"
+
+
+def test_duplicate_findings_are_collapsed() -> None:
+    """Un process ouvre des dizaines de sockets : une ligne suffit."""
+    duplicates = [
+        Finding(WARNING, "volatile_process_online", "x", {"process": "x.exe", "port": None}),
+        Finding(WARNING, "volatile_process_online", "x", {"process": "x.exe", "port": None}),
+    ]
+    assert len(PrivacyShield._deduplicate(duplicates)) == 1
+
+
+def test_summarize_exposure_survives_access_denied(monkeypatch) -> None:
+    def denied(kind=None):
+        raise psutil.AccessDenied(pid=None)
+
+    monkeypatch.setattr(psutil, "net_connections", denied)
+    assert summarize_exposure() == {"disponible": False}
+
+
+# ── Rapport ───────────────────────────────────────────────────────────
+
+def test_empty_report_is_reassuring_not_empty() -> None:
+    assert "Aucun signal" in format_report([])
+
+
+def test_report_states_that_nothing_was_done() -> None:
+    """Cyril doit toujours savoir qu'aucune action n'a été prise."""
+    report = format_report([Finding(CRITICAL, "x", "quelque chose", {"pid": 1})])
+    assert "Observation seule" in report
+
+
+def test_findings_are_sorted_most_severe_first() -> None:
+    findings = [
+        Finding(INFO, "a", "info"),
+        Finding(CRITICAL, "b", "critique"),
+        Finding(WARNING, "c", "attention"),
+    ]
+    assert [f.severity for f in sort_findings(findings)] == [CRITICAL, WARNING, INFO]
+
+
+def test_event_details_are_truncated() -> None:
+    """La table system_events ne doit pas devenir un dépotoir."""
+    finding = Finding(CRITICAL, "x", "y" * 500, {"chemin": "z" * 500})
+    _, details = finding.as_event()
+    assert len(details) <= 200
+
+
+if __name__ == "__main__":
+    raise SystemExit(pytest.main([__file__, "-v"]))
