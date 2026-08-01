@@ -1,9 +1,15 @@
 # core/orion_core.py — le chef d'orchestre
 
-from config import CLOUD_HISTORY_MESSAGES, RECENT_EVENTS_IN_PROMPT, SYSTEM_PROMPT
+from config import (
+    CLOUD_HISTORY_MESSAGES,
+    RECENT_EVENTS_IN_PROMPT,
+    SYSTEM_PROMPT,
+    VISION_ENABLED,
+    VLM_MODEL,
+)
 from core.cloud_llm import ask_cloud
 from core.local_llm import ask_local
-from core.router import route, should_use_rag
+from core.router import route, should_use_rag, should_use_vision
 from core.world_model import (
     format_events_for_prompt,
     format_for_prompt,
@@ -51,6 +57,16 @@ class OrionCore:
             if events_context:
                 messages.append({"role": "system", "content": events_context})
 
+        # Vision : Luca's regarde l'écran uniquement sur demande explicite.
+        # Jamais vers le cloud — l'image reste locale, mais sa description
+        # (« une fenêtre affichant un solde de 3200 € ») en dirait autant.
+        # route() force déjà le local sur ces questions ; garde redondante
+        # assumée, comme pour le RAG.
+        if not is_cloud and VISION_ENABLED and should_use_vision(user_message):
+            vision_context = self._describe_screen(user_message)
+            if vision_context:
+                messages.append({"role": "system", "content": vision_context})
+
         # RAG : uniquement si le routeur juge la question pertinente pour
         # les documents personnels. Évite de noyer le contexte du LLM
         # avec des extraits inutiles sur une question générale.
@@ -68,6 +84,29 @@ class OrionCore:
         for role, content in history:
             messages.append({"role": role, "content": content})
         return messages
+
+    def _describe_screen(self, user_message: str) -> str:
+        """
+        Capture l'écran et le fait décrire par le VLM local.
+
+        Retourne une chaîne vide en cas d'échec plutôt que de propager :
+        une vision indisponible doit dégrader la réponse, pas empêcher
+        Luca's de répondre du tout.
+        """
+        try:
+            from modules.vision_manager import VisionManager
+
+            description = VisionManager(model=VLM_MODEL).see_and_describe()
+        except Exception as e:  # noqa: BLE001 — voir docstring
+            self.log_event("vision_failed", str(e)[:200])
+            return ""
+
+        if not description or description.startswith("Erreur"):
+            self.log_event("vision_failed", description[:200])
+            return ""
+
+        self.log_event("vision_used", user_message[:80])
+        return f"[Écran de Cyril, décrit à l'instant : {description}]"
 
     def ask(self, user_message: str) -> str:
         self.memory.save_message("user", user_message)

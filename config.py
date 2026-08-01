@@ -46,6 +46,18 @@ PIPER_VOICES_DIR = "data/voices"       # modèles .onnx (non versionnés)
 # Voir CLAUDE.md règle 3, section TTS.
 TTS_ALLOW_CLOUD_ON_SENSITIVE: bool = False
 
+# --- Vision : analyse de l'écran (VLM) ---
+# Modèle vision local, servi par Ollama. « llava » est installé sur cette
+# machine ; internvl2 est envisagé en v1.1 (voir CLAUDE.md, tableau LLM).
+VLM_MODEL = "llava"
+
+# ⚠️ Une capture d'écran peut contenir un relevé bancaire ou un mot de
+# passe affiché. Elle ne quitte jamais la machine (Ollama local), et une
+# question qui déclenche la vision est forcée en LOCAL par route() :
+# sinon la description de l'écran partirait au cloud même si l'image
+# reste ici. Voir CLAUDE.md règle 3.
+VISION_ENABLED: bool = True
+
 # --- Voix : transcription (STT) ---
 # « base » ≈ 150 Mo, suffisant pour la v1.0 ; « small » ≈ 500 Mo, plus
 # précis, envisagé en v1.1 (mission_10_stt_engine.md).

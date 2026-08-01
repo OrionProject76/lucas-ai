@@ -51,8 +51,9 @@ def route(text: str) -> str:
       1. donnée sensible détectée  -> local, même si un mot-clé cloud est
          présent (« analyse mon portfolio » reste local)
       2. question sur les documents personnels (RAG) -> local
-      3. question complexe (mot-clé cloud) -> cloud
-      4. tout le reste -> local
+      3. question sur le contenu de l'écran -> local
+      4. question complexe (mot-clé cloud) -> cloud
+      5. tout le reste -> local
 
     Voir CLAUDE.md règle 3 pour la règle projet correspondante.
     """
@@ -60,11 +61,40 @@ def route(text: str) -> str:
         return "local"
     if should_use_rag(text):
         return "local"
+    # L'image ne part jamais au cloud, mais sa DESCRIPTION en dirait tout
+    # autant : « une fenêtre de banque affichant un solde de 3200 € ».
+    if should_use_vision(text):
+        return "local"
 
     text_lower = text.lower()
     if any(keyword in text_lower for keyword in KEYWORDS_CLOUD):
         return "cloud"
     return "local"
+
+
+# Mots-clés qui signalent que la question porte sur ce qui est affiché à
+# l'écran. Volontairement spécifiques : « regarde » seul déclencherait sur
+# « regarde si tu peux m'aider », et capturer l'écran à chaque message
+# coûterait plusieurs secondes de VLM pour rien.
+KEYWORDS_VISION = [
+    "à l'écran", "a l'écran", "sur mon écran", "mon écran",
+    "que vois-tu", "qu'est-ce que tu vois", "tu vois quoi",
+    "regarde mon écran", "regarde ça", "regarde cette",
+    "cette erreur", "ce message d'erreur", "cette fenêtre",
+    "sous les yeux", "capture d'écran", "screenshot",
+]
+
+
+def should_use_vision(text: str) -> bool:
+    """
+    Décide si Luca's doit regarder l'écran avant de répondre.
+
+    Même approche que should_use_rag() : mots-clés, pas de classification
+    LLM. Une capture + analyse VLM coûte plusieurs secondes, on ne la
+    déclenche donc que sur une demande explicite.
+    """
+    text_lower = text.lower()
+    return any(keyword in text_lower for keyword in KEYWORDS_VISION)
 
 
 def route_voice(answer: str, question: str = "") -> str:
