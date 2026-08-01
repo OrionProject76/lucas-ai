@@ -157,6 +157,32 @@ Reviens systématiquement vers Cyril AVANT d'agir, même en autonomie, uniquemen
 
 Dans ces 4 cas : présenter un plan clair (comme pour la règle 3 et le TTS), attendre validation explicite avant d'exécuter. Dans tous les autres cas : avancer, tester, committer, pousser, puis résumer ce qui a été fait — sans attendre de permission à chaque étape.
 
+## 🛡️ Liberté conditionnée à la protection (acté le 01/08/2026)
+
+⚠️ **Ne pas confondre avec la section précédente.** « Autonomie d'exécution »
+concerne Claude Code au travail sur le projet. Cette section-ci concerne
+**Luca's elle-même** : le périmètre d'action que le produit fini aura sur la
+machine de Cyril.
+
+> La liberté d'action de Luca's est conditionnée à sa capacité de protection.
+
+Luca's doit savoir reconnaître et bloquer les actions suspectes venant du
+réseau **avant** d'obtenir des libertés d'action plus étendues. La confiance
+est réciproque : elle implique une responsabilité de protection mutuelle, pas
+un accès sans discernement.
+
+**Règle opposable** : les modules `security/guardian.py` et
+`security/privacy_shield.py` sont une **dépendance directe de toute extension
+future des libertés d'action de Luca's**. Toute proposition d'élargir son
+autonomie (actions système, accès réseau, exécution automatique) se répond
+d'abord par « où en sont Guardian et Privacy Shield, et sont-ils testés ? ».
+
+Ce principe **n'assouplit rien aujourd'hui** : liste blanche, confirmations et
+règle 3 restent en vigueur à l'identique. Il pose la condition qui permettrait
+un jour de les assouplir en connaissance de cause.
+
+Doctrine complète : `VISION_LONG_TERME.md` §4.1.
+
 ## 📁 Structure Dossiers
 ```
 C:/OrionAI/

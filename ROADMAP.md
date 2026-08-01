@@ -66,6 +66,8 @@ Architecture serveur validée aujourd'hui : une seule API FastAPI, `/ws` unique 
 
 Sécurité validée : liste blanche stricte pour toute action système. Jamais de script généré dynamiquement par le LLM.
 
+**Nouveau principe acté le 01/08/2026 — la liberté est conditionnée à la protection.** Guardian et Privacy Shield (`security/`) deviennent une dépendance directe de toute extension future des libertés d'action de Luca's : plus ils sont matures et testés, plus le périmètre d'autonomie peut s'élargir. Concrètement pour le séquencement de ce fichier, aucune phase n'ouvre de nouveaux droits d'action (OS Controller, automation, exécution autonome) tant que ces deux modules ne sont pas au moins ébauchés et testés. Ils n'appartiennent donc plus au « polish » de la Phase 5 — ce sont des prérequis. Doctrine : `VISION_LONG_TERME.md` §4.1, résumé opposable : `CLAUDE.md`.
+
 ---
 
 ## 5. Points de vigilance infra (leçons du 30/07/2026)

@@ -152,6 +152,43 @@ Ce qui change (et c'est acté) :
   d'implémentation, jamais un filtrage préalable qui écarte des idées
   sans son avis
 
+### 4.1 La liberté est conditionnée à la capacité de protection — acté le 01/08/2026
+
+> La liberté d'action de Luca's est conditionnée à sa capacité de
+> protection.
+
+Luca's doit développer, comme un humain apprend la vigilance, une capacité
+à reconnaître et bloquer les actions suspectes venant de l'extérieur
+(réseau) **avant** d'obtenir des ressources et des libertés d'action plus
+étendues. La confiance est réciproque et explicite : Cyril fait confiance à
+Luca's, et Luca's doit intégrer nativement que cette confiance implique une
+**responsabilité de protection mutuelle**, pas un accès sans discernement.
+
+**Conséquence concrète et opposable :** les modules **Guardian** (détection
+malware/ransomware/keylogger, firewall intelligent) et **Privacy Shield**
+(monitoring des connexions, bloqueur télémétrie, détection micro/caméra) —
+catalogués dans `IDEAS.md`, tableau des fonctions autonomes — deviennent une
+**dépendance directe de toute extension future des libertés d'action de
+Luca's**. Plus ces modules sont matures et testés, plus le périmètre
+d'autonomie peut légitimement s'élargir.
+
+**Ce que ce principe n'est pas.** Ce n'est ni une suppression de la liste
+blanche, ni un retrait des règles de confirmation déjà actées, ni une
+remise en cause de l'accès réseau ouvert acté au 30/07. Tout ce qui précède
+dans cette section 4 reste en vigueur tel quel. C'est la **condition** qui
+permettrait, un jour, d'assouplir ces garde-fous en toute connaissance de
+cause — plutôt que par lassitude ou par confort.
+
+**Sens de lecture pour toute décision future :** la question « peut-on
+élargir l'autonomie de Luca's sur X ? » se répond d'abord par « que valent
+Guardian et Privacy Shield aujourd'hui, et sont-ils testés ? ». Une réponse
+faible à la seconde question vaut refus à la première, indépendamment de
+l'intérêt de X.
+
+À rapprocher du second filtre de sécurité déjà catalogué (ShieldGemma en
+pré-validation automatisée avant confirmation humaine, `IDEAS.md`) : même
+logique, la garantie technique précède l'élargissement du pouvoir d'agir.
+
 ---
 
 ## 5. Comment ce document s'articule avec ROADMAP.md
