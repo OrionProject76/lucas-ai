@@ -4,7 +4,17 @@ import re
 
 import requests
 
-from config import CHUNK_OVERLAP, CHUNK_SIZE, OLLAMA_HOST, RAG_MAX_DISTANCE
+from config import (
+    CHUNK_OVERLAP,
+    CHUNK_SIZE,
+    DATE_SEARCH_MAX_CANDIDATES,
+    OLLAMA_HOST,
+    RAG_MAX_DISTANCE,
+    RAG_MAX_DISTANCE_DATED,
+)
+# ⚠️ core.dates est importé PARESSEUSEMENT dans les méthodes : core/__init__
+# charge OrionCore, qui charge ce module — un import en tête d'ici ferme la
+# boucle. Même motif que core/router.py avec core.intent.
 
 try:
     from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
@@ -74,7 +84,10 @@ class RAGManager:
     #   1 — découpage brut tous les 500 caractères
     #   2 — découpage par paragraphes, avec recouvrement
     #   3 — nom du fichier ajouté en tête de chaque morceau (01/08/2026)
-    _FORMAT_VERSION = 3
+    #   4 — métadonnée « periods » pour la recherche hybride (01/08/2026)
+    #   5 — PDF extraits en mode « layout » : les documents en colonnes
+    #       (bulletins, factures) gardent l'association libellé → valeur
+    _FORMAT_VERSION = 5
 
     def _open_collection(self):
         """
@@ -254,6 +267,16 @@ class RAGManager:
             f"[Document : {doc_id}]\n{morceau}" for morceau in self._chunk_text(text)
         ]
 
+        # Périodes du document, pour la recherche hybride. Extraites du
+        # NOM comme du contenu : chez Cyril, c'est le nom qui porte
+        # l'information la plus fiable (« bulletin-de-paie-du-010725 »),
+        # le contenu d'un PDF de paie étant souvent en morceaux.
+        # Stockées en chaîne : ChromaDB n'accepte pas de liste en
+        # métadonnée, et le filtrage se fait donc en Python.
+        from core.dates import extract_periods
+
+        periodes = ",".join(sorted(extract_periods(f"{doc_id}\n{text}")))
+
         if self.use_chroma and self.collection:
             if self._already_indexed(doc_id, digest):
                 return False
@@ -267,7 +290,7 @@ class RAGManager:
             self.collection.add(
                 documents=chunks,
                 metadatas=[
-                    {"source": doc_id, "chunk": i, "sha": digest}
+                    {"source": doc_id, "chunk": i, "sha": digest, "periods": periodes}
                     for i in range(len(chunks))
                 ],
                 ids=[f"{doc_id}_{i}" for i in range(len(chunks))],
@@ -299,21 +322,85 @@ class RAGManager:
         ce que la base contient réellement).
         """
         if self.use_chroma and self.collection:
+            # ── Recherche hybride ─────────────────────────────────────
+            #
+            # ⚠️ Quand la question nomme une période, le sémantique seul
+            # se trompe de document. Mesuré : « salaire net en juillet
+            # 2025 » remontait les bulletins de février, avril et janvier
+            # 2026, alors que celui de juillet 2025 est bien indexé. Pour
+            # un modèle d'embeddings, deux dates de bulletin de paie sont
+            # sémantiquement voisines — le mois demandé est exactement
+            # l'information qu'il écrase.
+            #
+            # On élargit donc le filet, puis on filtre sur la date en
+            # Python. L'ordre sémantique est conservé à l'intérieur des
+            # documents retenus : la date décide QUI est éligible, le
+            # sémantique décide de l'ordre.
+            from core.dates import extract_query_period
+            from core.dates import matches as matches_period
+
+            periode = extract_query_period(query)
+            # ⚠️ Quand une période est nommée, on interroge TOUTE la base,
+            # pas un top-N élargi. Mesuré : avec 30 candidats sur 275, un
+            # seul morceau de juillet 2025 passait le filtre — celui des
+            # congés — et le morceau portant « NET SOCIAL 1625.68 »
+            # restait invisible alors qu'il est 2e parmi ceux de juillet.
+            # Le filtre par date est le critère principal ; le sémantique
+            # ne doit pas trancher avant lui.
+            demande = (
+                min(self.collection.count(), DATE_SEARCH_MAX_CANDIDATES)
+                if periode
+                else top_k
+            )
+
             results = self.collection.query(
                 query_texts=[query],
-                n_results=top_k,
-                include=["documents", "distances"],
+                n_results=demande,
+                include=["documents", "distances", "metadatas"],
             )
             documents = (results.get("documents") or [[]])[0]
             distances = (results.get("distances") or [[]])[0]
+            metadatas = (results.get("metadatas") or [[]])[0] or [{}] * len(documents)
 
-            if max_distance is None or not distances:
-                return list(documents)
-            return [
-                doc
-                for doc, distance in zip(documents, distances)
-                if distance <= max_distance
+            retenus = [
+                (doc, distance)
+                for doc, distance, meta in zip(documents, distances, metadatas)
+                if periode is None or matches_period(periode, meta.get("periods", ""))
             ]
+
+            # ⚠️ Si AUCUN document ne couvre la période, on ne se rabat
+            # PAS sur les meilleurs résultats sémantiques : ce serait
+            # exactement le bug d'origine, et Luca's répondrait sur un
+            # autre mois sans le dire. Mieux vaut « je n'ai rien pour
+            # juillet 2025 » qu'une réponse sur février 2026.
+            if periode and not retenus:
+                return []
+
+            retenus = retenus[:top_k]
+            if max_distance is None:
+                return [doc for doc, _ in retenus]
+
+            # ⚠️ Le seuil est ASSOUPLI quand une période a filtré.
+            #
+            # Les deux verrous n'ont pas le même rôle. Le seuil sert à
+            # écarter un document hors sujet ; le filtre par date a déjà
+            # fait ce travail, et mieux — « juillet 2025 » ne laisse
+            # passer que le bulletin de juillet 2025. Lui appliquer en
+            # plus un seuil serré revient à jeter la bonne réponse.
+            #
+            # Mesuré : après passage des PDF en mode « layout », le
+            # morceau portant « NET A PAYER ... | 1647.68 » sort 1er des
+            # morceaux de juillet 2025, à 0,365 — au-dessus du seuil
+            # général de 0,33, donc rejeté. Luca's recevait le bon
+            # document, le bon extrait, et n'en voyait rien.
+            #
+            # Le risque résiduel est d'injecter un extrait peu pertinent
+            # DU BON document ; c'est sans commune mesure avec un extrait
+            # du mauvais mois, que le filtre continue d'interdire.
+            if periode:
+                max_distance = RAG_MAX_DISTANCE_DATED
+
+            return [doc for doc, distance in retenus if distance <= max_distance]
 
         # Fallback : recherche texte simple. Pas de distance ici — une
         # sous-chaîne trouvée est une correspondance exacte, donc pertinente.

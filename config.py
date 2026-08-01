@@ -211,6 +211,38 @@ CHUNK_OVERLAP: int = 150
 # Dossier où déposer les documents à indexer. Voir memory/index_documents.py.
 DOCUMENTS_DIR = "data/documents"
 
+# --- RAG : recherche hybride par date ---
+# ⚠️ Quand la question nomme une période, la recherche vectorielle seule
+# se trompe de document : « salaire net en juillet 2025 » remontait les
+# bulletins de février, avril et janvier 2026, alors que celui de juillet
+# 2025 est bien indexé. Pour un modèle d'embeddings, deux dates de
+# bulletin de paie sont sémantiquement voisines.
+#
+# Quand une période est nommée, on interroge TOUTE la base puis on filtre
+# sur la date, au lieu d'élargir un top-N.
+#
+# ⚠️ Un premier essai élargissait ×10 (30 candidats sur 275) : un seul
+# morceau de juillet 2025 passait le filtre — celui des congés — et le
+# morceau portant « NET SOCIAL 1625.68 » restait invisible, alors qu'il
+# est 2e parmi ceux de juillet. Le filtre par date est le critère
+# principal ; le sémantique ne doit pas trancher avant lui.
+#
+# La borne existe pour qu'une base de plusieurs dizaines de milliers de
+# morceaux ne fasse pas exploser le temps de réponse. Le coût reste un
+# seul appel à ChromaDB.
+DATE_SEARCH_MAX_CANDIDATES: int = 2000
+
+# ⚠️ Seuil ASSOUPLI quand une période a déjà filtré les candidats.
+# Les deux verrous n'ont pas le même rôle : le seuil écarte un document
+# hors sujet, mais le filtre par date a déjà fait ce travail, et mieux —
+# « juillet 2025 » ne laisse passer que le bulletin de juillet 2025.
+# Mesuré : le morceau portant « NET A PAYER ... | 1647.68 » sort 1er des
+# morceaux de juillet 2025, à 0,365, donc au-dessus du seuil général de
+# 0,33 — Luca's recevait le bon document et n'en voyait rien.
+# Le risque résiduel est un extrait peu pertinent DU BON document, sans
+# commune mesure avec un extrait du mauvais mois.
+RAG_MAX_DISTANCE_DATED: float = 0.50
+
 # --- RAG : seuil de pertinence ---
 # ⚠️ Une recherche vectorielle ne renvoie JAMAIS « rien » : ChromaDB rend
 # toujours ses n plus proches voisins, même si le plus proche parle d'autre
@@ -259,7 +291,7 @@ DOCUMENTS_DIR = "data/documents"
 # Ce seuil reste le SECOND verrou : le premier est core/intent.py, qui
 # empêche la plupart des questions hors sujet d'atteindre le RAG — c'est
 # pourquoi une valeur imparfaite dégrade sans casser.
-RAG_MAX_DISTANCE: float = 0.34
+RAG_MAX_DISTANCE: float = 0.33
 
 # --- Intention : écran, documents, ou ni l'un ni l'autre ---
 # Les listes de mots-clés couvraient 50 % des formulations réelles et ne

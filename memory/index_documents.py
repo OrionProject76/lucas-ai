@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import re
 import sys
 from pathlib import Path
 
@@ -153,6 +154,45 @@ class UnreadablePDF(Exception):
     """PDF illisible — chiffré, corrompu, ou sans couche texte."""
 
 
+def _extract_page(page) -> str:
+    """
+    Texte d'une page, en préservant l'association libellé → valeur.
+
+    ⚠️ C'EST LE POINT DÉCISIF POUR LES DOCUMENTS EN COLONNES — bulletins
+    de paie, factures, relevés. En extraction linéaire (le défaut),
+    pypdf rendait :
+
+        Cadre Net à payer NET A PAYER AVANT IMPOT SUR LE REVENU
+
+    …sans aucun montant : les valeurs, situées dans une autre colonne,
+    atterrissaient ailleurs dans le flux. Luca's recevait le bon document,
+    le bon extrait, et ne pouvait toujours pas répondre.
+
+    En mode « layout », la disposition spatiale est conservée :
+
+        NET A PAYER AVANT IMPOT SUR LE REVENU | Cadre Net à payer | 1647.68
+        MONTANT NET SOCIAL | 1625.68
+
+    Les suites d'espaces sont réduites à « | » : le mode layout aligne
+    par du remplissage (15 000 caractères contre 6 400), qui gonfle les
+    morceaux sans rien apporter, et un séparateur explicite survit mieux
+    au découpage et à l'embedding qu'une colonne d'espaces.
+    """
+    try:
+        texte = page.extract_text(extraction_mode="layout") or ""
+    except TypeError:
+        # pypdf < 4 ne connaît pas extraction_mode. Mieux vaut un texte
+        # dégradé que pas de texte du tout.
+        return page.extract_text() or ""
+
+    lignes = []
+    for ligne in texte.splitlines():
+        compacte = re.sub(r"[ \t]{2,}", " | ", ligne.strip())
+        if compacte:
+            lignes.append(compacte)
+    return "\n".join(lignes)
+
+
 def _read_pdf(path: Path) -> str:
     """
     Extrait le texte d'un PDF.
@@ -178,7 +218,7 @@ def _read_pdf(path: Path) -> str:
             except Exception as exc:  # noqa: BLE001
                 raise UnreadablePDF("PDF chiffré, mot de passe requis") from exc
 
-        pages = [page.extract_text() or "" for page in reader.pages]
+        pages = [_extract_page(page) for page in reader.pages]
     except UnreadablePDF:
         raise
     except Exception as exc:  # noqa: BLE001 — pypdf lève des types variés

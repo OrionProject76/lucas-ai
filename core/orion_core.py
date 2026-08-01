@@ -105,6 +105,38 @@ class OrionCore:
         rag_context = ""
         if not is_cloud and should_use_rag(user_message):
             rag_context = RAGManager().get_context(user_message)
+            if not rag_context:
+                # ⚠️ NE PAS SE TAIRE. Observé en conditions réelles : sur
+                # « mon salaire de juillet 2024 », dont Cyril n'a aucun
+                # bulletin, rien n'était injecté — et le modèle a
+                # FABRIQUÉ un nom de fichier
+                # (« bulletin-de-paie-du-010724-au-310724.pdf ») et un
+                # montant (1650,89 €), en imitant le format des deux
+                # réponses correctes qui précédaient dans l'historique.
+                # Une réponse inventée est indiscernable d'une vraie.
+                #
+                # Le silence laisse le modèle combler le vide. Il faut
+                # donc dire explicitement que la recherche a eu lieu et
+                # n'a rien donné.
+                # Nommer la période manquante plutôt qu'un refus générique :
+                # « aucun document pour juillet 2024 » est une information
+                # que le modèle peut restituer, là où « aucun document » le
+                # laisse chercher quoi dire — et donc inventer.
+                from core.dates import extract_query_period
+
+                periode = extract_query_period(user_message)
+                precision = f" pour la période demandée ({periode})" if periode else ""
+                rag_context = (
+                    f"RECHERCHE EFFECTUÉE DANS LES DOCUMENTS DE CYRIL : "
+                    f"AUCUN document ne correspond{precision}.\n\n"
+                    "Ta réponse doit être : tu n'as trouvé aucun document "
+                    "correspondant, et tu ne peux donc pas répondre.\n"
+                    "INTERDIT : citer un montant, une date, un nom de fichier, "
+                    "ou reprendre la forme d'une réponse précédente de cette "
+                    "conversation. Les réponses précédentes s'appuyaient sur "
+                    "des documents réels ; ici tu n'en as aucun, et un chiffre "
+                    "inventé serait indiscernable d'un vrai."
+                )
 
         # ⚠️ SECONDE MOITIÉ DU MÊME BUG, et elle vaut pour LES DEUX SOURCES.
         #
