@@ -112,7 +112,9 @@ def main() -> int:
         print(
             f"\nMoins de {MINIMUM_CHUNKS} chunks : la mesure ne serait pas plus\n"
             "fiable que celle qui a donné la valeur actuelle. Indexe de vrais\n"
-            "documents d'abord — RAGManager().add_document(chemin)."
+            "documents d'abord :\n"
+            "  1. les déposer dans data/documents/\n"
+            "  2. venv\\Scripts\\python.exe -m memory.index_documents"
         )
         return 1
 

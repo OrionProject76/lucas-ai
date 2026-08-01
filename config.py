@@ -196,6 +196,21 @@ RANSOMWARE_BURST_WINDOW_MINUTES: int = 5
 # Mesuré sur cette machine : ~9 200 fichiers parcourus en 1,4 s.
 RANSOMWARE_MAX_FILES_SCANNED: int = 30000
 
+# --- RAG : découpage des documents ---
+# ⚠️ Le découpage décide de la qualité de TOUTE la recherche : c'est le
+# morceau, pas le document, qui est comparé à la question.
+# L'ancienne version coupait tous les 500 caractères sans regarder le
+# contenu — au milieu d'un mot, d'une phrase, d'un montant. Le découpage
+# suit désormais les paragraphes.
+CHUNK_SIZE: int = 800
+
+# Recouvrement entre morceaux consécutifs : une réponse à cheval sur deux
+# paragraphes serait sinon coupée en deux moitiés dont aucune ne suffit.
+CHUNK_OVERLAP: int = 150
+
+# Dossier où déposer les documents à indexer. Voir memory/index_documents.py.
+DOCUMENTS_DIR = "data/documents"
+
 # --- RAG : seuil de pertinence ---
 # ⚠️ Une recherche vectorielle ne renvoie JAMAIS « rien » : ChromaDB rend
 # toujours ses n plus proches voisins, même si le plus proche parle d'autre

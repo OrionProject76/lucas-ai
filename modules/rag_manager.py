@@ -1,7 +1,10 @@
+import hashlib
 import os
+import re
+
 import requests
 
-from config import OLLAMA_HOST, RAG_MAX_DISTANCE
+from config import CHUNK_OVERLAP, CHUNK_SIZE, OLLAMA_HOST, RAG_MAX_DISTANCE
 
 try:
     from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
@@ -104,12 +107,99 @@ class RAGManager:
             )
         return collection
 
-    def _chunk_text(self, text, chunk_size=500):
-        """Découpe le texte en morceaux de chunk_size caractères"""
-        return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
+    # ── Idempotence ───────────────────────────────────────────────────
+
+    def _already_indexed(self, doc_id, digest) -> bool:
+        """Ce document est-il déjà en base, avec exactement ce contenu ?"""
+        existing = self.collection.get(where={"source": doc_id}, include=["metadatas"])
+        metadatas = existing.get("metadatas") or []
+        return bool(metadatas) and all(m.get("sha") == digest for m in metadatas)
+
+    def _forget(self, doc_id) -> int:
+        """Retire tous les morceaux d'un document. Retourne leur nombre."""
+        existing = self.collection.get(where={"source": doc_id})
+        ids = existing.get("ids") or []
+        if ids:
+            self.collection.delete(ids=ids)
+        return len(ids)
+
+    def remove_document(self, doc_id) -> int:
+        """
+        Désindexe un document.
+
+        Nécessaire parce qu'un fichier supprimé du disque reste sinon
+        consultable indéfiniment : la base ne le saurait jamais.
+        """
+        if self.use_chroma and self.collection:
+            return self._forget(doc_id)
+        before = len(self.chunks)
+        self.chunks = [c for c in self.chunks if c[0] != doc_id]
+        return before - len(self.chunks)
+
+    def indexed_documents(self) -> set:
+        """Noms des documents actuellement en base."""
+        if self.use_chroma and self.collection:
+            metadatas = self.collection.get(include=["metadatas"]).get("metadatas") or []
+            return {m.get("source") for m in metadatas if m.get("source")}
+        return {doc_id for doc_id, _, _ in self.chunks}
+
+    # ── Découpage ─────────────────────────────────────────────────────
+
+    def _chunk_text(self, text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
+        """
+        Découpe le texte en respectant les paragraphes.
+
+        L'ancienne version coupait tous les 500 caractères, sans regarder
+        le contenu — au milieu d'un mot, d'une phrase, d'un nombre. Un
+        extrait qui commence par « ...ent de 1 250 euros par mois » perd
+        de quoi il parle, et l'embedding avec lui : c'est la qualité de
+        la recherche entière qui en dépend.
+
+        Le recouvrement existe pour la même raison : une réponse à cheval
+        sur deux paragraphes serait sinon coupée en deux moitiés dont
+        aucune ne suffit à répondre.
+        """
+        paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+        chunks: list[str] = []
+        current = ""
+
+        for paragraph in paragraphs:
+            # Un paragraphe plus gros que la limite ne peut pas être gardé
+            # entier : on le coupe, faute de mieux.
+            if len(paragraph) > chunk_size:
+                if current:
+                    chunks.append(current)
+                    current = ""
+                for i in range(0, len(paragraph), chunk_size):
+                    chunks.append(paragraph[i:i + chunk_size])
+                continue
+
+            if not current:
+                current = paragraph
+            elif len(current) + 2 + len(paragraph) <= chunk_size:
+                current = f"{current}\n\n{paragraph}"
+            else:
+                chunks.append(current)
+                # Recouvrement : on repart avec la fin du morceau précédent.
+                tail = current[-overlap:] if overlap else ""
+                current = f"{tail}\n\n{paragraph}".strip() if tail else paragraph
+
+        if current:
+            chunks.append(current)
+        return chunks or [text[:chunk_size]] if text.strip() else []
 
     def add_document(self, filepath):
-        """Ajoute un document à la base de connaissances"""
+        """
+        Ajoute ou met à jour un document dans la base de connaissances.
+
+        Idempotent : réindexer un fichier inchangé ne fait rien, et
+        réindexer un fichier modifié remplace ses anciens morceaux au
+        lieu de s'y ajouter. Sans ça, relancer l'indexation doublait
+        silencieusement le contenu, et la recherche remontait deux fois
+        le même extrait.
+
+        Retourne True si quelque chose a été écrit, False sinon.
+        """
         if not os.path.exists(filepath):
             print(f"Fichier introuvable: {filepath}")
             return False
@@ -117,22 +207,47 @@ class RAGManager:
         with open(filepath, "r", encoding="utf-8") as f:
             text = f.read()
 
+        return self.add_text(text, os.path.basename(filepath))
+
+    def add_text(self, text, doc_id):
+        """
+        Indexe un texte déjà lu, sous le nom `doc_id`.
+
+        Séparé de add_document() pour que les formats qui ne se lisent
+        pas avec open() — PDF demain — passent par le même chemin
+        d'indexation, avec la même idempotence.
+        """
+        if not text.strip():
+            print(f"Document vide, ignoré: {doc_id}")
+            return False
+
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
         chunks = self._chunk_text(text)
-        doc_id = os.path.basename(filepath)
 
         if self.use_chroma and self.collection:
+            if self._already_indexed(doc_id, digest):
+                return False
+            # Le document a changé (ou est nouveau) : ses anciens morceaux
+            # partent d'abord. Un document raccourci laisserait sinon
+            # derrière lui des morceaux orphelins, toujours consultables.
+            self._forget(doc_id)
             # Plus besoin de calculer les embeddings manuellement — la
             # fonction d'embedding déclarée sur la collection (Ollama)
             # est appelée automatiquement par ChromaDB.
             self.collection.add(
                 documents=chunks,
-                metadatas=[{"source": doc_id, "chunk": i} for i in range(len(chunks))],
+                metadatas=[
+                    {"source": doc_id, "chunk": i, "sha": digest}
+                    for i in range(len(chunks))
+                ],
                 ids=[f"{doc_id}_{i}" for i in range(len(chunks))],
             )
         else:
+            self.chunks = [c for c in self.chunks if c[0] != doc_id]
             self.chunks.extend([(doc_id, i, chunk) for i, chunk in enumerate(chunks)])
 
-        self.documents.append(doc_id)
+        if doc_id not in self.documents:
+            self.documents.append(doc_id)
         print(f"Document ajouté: {doc_id} ({len(chunks)} chunks)")
         return True
 

@@ -65,3 +65,7 @@ tree_clean.txt
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Documents personnels indexes par le RAG — jamais versionnes
+data/documents/*
+!data/documents/README.md
