@@ -86,6 +86,14 @@ Prochains niveaux envisageables : suivi des hooks clavier (keylogger), historiqu
 
 ---
 
+## 5.1 Décisions de sécurité en attente (relevées le 01/08/2026)
+
+Deux surfaces de sortie n'ont aujourd'hui aucun garde-fou, contrairement au LLM cloud et au TTS. Elles demandent un arbitrage de Cyril, pas un choix d'implémentation.
+
+**L'API écoute sur `0.0.0.0:8000` sans authentification.** N'importe quel appareil du réseau local peut lire `GET /history` — l'intégralité des conversations —, `GET /system`, ou déclencher `POST /chat`. Pistes : jeton partagé dans le `.env`, écoute sur `127.0.0.1` par défaut, ou statu quo assumé.
+
+**`modules/web_search.py` envoie chaque requête à DuckDuckGo.** Aucun filtre de sensibilité. Réutiliser `is_sensitive()` tel quel sur-bloquerait : « quel est le meilleur crédit immobilier » est une recherche légitime que le mot-clé « crédit » ferait refuser. Pistes : blocage strict, avertissement journalisé sans blocage, ou liste de mots-clés spécifique à la recherche, plus étroite que celle du routeur.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026
 
 **Fait** : tout ce que Cyril voit affiche désormais « Luca's » — `SYSTEM_PROMPT`
