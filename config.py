@@ -223,23 +223,24 @@ DOCUMENTS_DIR = "data/documents"
 # des textes — un seuil absolu y aurait été un nombre magique intenable.
 # Le cosinus est borné [0, 2] et indépendant de la longueur.
 #
-# Calibré le 01/08/2026 sur les VRAIS documents de Cyril — 265 extraits,
-# 36 documents de C:/Users/PC/Documents (bulletins de paie, déclaration
-# de revenus, relevé de carrière, factures, CV, offres d'emploi).
+# Calibré le 01/08/2026 sur les VRAIS documents de Cyril — 275 extraits,
+# 39 documents de C:/Users/PC/Documents (bulletins de paie, déclaration
+# de revenus, relevé de carrière, factures, CV, offres d'emploi,
+# attestations .docx).
 #
 #     seuil   extraits utiles gardés   hors-sujet bloqués
-#     0,31            80 %                  100 %      <- retenu
-#     0,33            85 %                   75 %
-#     0,36            92 %                   62 %
-#     0,38           100 %                   25 %
+#     0,32            88 %                  100 %      <- retenu
+#     0,33            88 %                   88 %
+#     0,34            90 %                   75 %
+#     0,38            92 %                   25 %
 #
-# ⚠️ 20 % des extraits utiles sont écartés : sur certaines questions
+# ⚠️ 12 % des extraits utiles sont écartés : sur certaines questions
 # légitimes, Luca's répondra qu'elle ne trouve rien. C'est le prix pour
 # ne JAMAIS injecter un extrait hors sujet — et ce sens-là a été choisi
 # en connaissance de cause, parce que c'est un extrait hors sujet
 # (sample_document.txt sur l'intelligence artificielle) qui a noyé le
 # bloc vision et fait répondre à côté pendant quatre campagnes de tests.
-# Pour privilégier la couverture plutôt que la précision : 0,33.
+# Pour privilégier la couverture plutôt que la précision : 0,34.
 #
 # L'ancienne valeur de 0,45 venait de DEUX extraits d'un document
 # d'exemple. Elle ne bloquait plus rien : à ce niveau, les huit questions
@@ -253,7 +254,7 @@ DOCUMENTS_DIR = "data/documents"
 # Ce seuil reste le SECOND verrou : le premier est core/intent.py, qui
 # empêche la plupart des questions hors sujet d'atteindre le RAG — c'est
 # pourquoi une valeur imparfaite dégrade sans casser.
-RAG_MAX_DISTANCE: float = 0.31
+RAG_MAX_DISTANCE: float = 0.32
 
 # --- Intention : écran, documents, ou ni l'un ni l'autre ---
 # Les listes de mots-clés couvraient 50 % des formulations réelles et ne

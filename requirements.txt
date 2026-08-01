@@ -49,6 +49,11 @@ rapidocr-onnxruntime>=1.4.0
 # l'OCR (modules/ocr_engine.py, déjà là) est une piste v1.1.
 pypdf>=6.0.0
 
+# Lecture des .docx pour le RAG. Les paragraphes ET les tableaux sont
+# extraits : un formulaire ou une facture met l'essentiel de son
+# information dans un tableau, pas dans du texte courant.
+python-docx>=1.2.0
+
 # ─── Canal WebSocket & télémétrie ──────────
 # websockets : uvicorn s'en sert pour servir /ws — c'est la seule
 # implémentation installée, la retirer casserait le canal Godot.

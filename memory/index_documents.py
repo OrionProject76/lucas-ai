@@ -69,6 +69,16 @@ LOG_SUFFIXES_IN_NAME = ("_log", "-log", "_logs", "-logs", "_debug", "-debug")
 # rester utilisable sans elle.
 PDF_SUFFIXES = {".pdf"}
 
+# Le .docx demande python-docx (installé le 01/08/2026). Même logique que
+# pypdf : traité à part, import paresseux, le module reste utilisable sans.
+# ⚠️ Ne concerne PAS le .doc ancien, qui est un format binaire sans
+# rapport — il reste dans KNOWN_UNSUPPORTED.
+DOCX_SUFFIXES = {".docx"}
+
+# Défini une fois : la liste était répétée à trois endroits, et « .pdf »
+# avait déjà failli manquer dans l'un d'eux au moment de le brancher.
+SUPPORTED_SUFFIXES = TEXT_SUFFIXES | PDF_SUFFIXES | DOCX_SUFFIXES
+
 # ⚠️ Un PDF SCANNÉ ne contient aucune couche texte : pypdf en extrait une
 # chaîne vide ou quelques caractères parasites. C'est le cas le plus
 # courant pour un contrat reçu par la poste et photographié. En dessous
@@ -133,7 +143,6 @@ DOMINANCE_RATIO = 0.4
 # déposé qui n'apparaît jamais dans les réponses est un bug
 # incompréhensible du point de vue de Cyril.
 KNOWN_UNSUPPORTED = {
-    ".docx": "pip install python-docx",
     ".doc": "format ancien — réenregistrer en .docx ou .txt",
     ".odt": "réenregistrer en .txt",
     ".xlsx": "exporter en .csv",
@@ -184,6 +193,47 @@ def _read_pdf(path: Path) -> str:
     return texte
 
 
+class UnreadableDOCX(Exception):
+    """.docx illisible — corrompu, protégé, ou sans contenu textuel."""
+
+
+def _read_docx(path: Path) -> str:
+    """
+    Extrait le texte d'un .docx : paragraphes ET tableaux.
+
+    ⚠️ Les tableaux comptent autant que les paragraphes. Un formulaire,
+    une facture ou une demande d'autorisation d'absence mettent
+    l'essentiel de leur information dedans — dates, montants, noms. Ne
+    lire que `document.paragraphs`, comme le font la plupart des
+    exemples, laisserait ces documents vides ou presque.
+    """
+    try:
+        import docx
+    except ImportError as exc:
+        raise UnreadableDOCX("python-docx absent — pip install python-docx") from exc
+
+    try:
+        document = docx.Document(str(path))
+    except Exception as exc:  # noqa: BLE001 — python-docx lève des types variés
+        raise UnreadableDOCX(f"illisible ({type(exc).__name__})") from exc
+
+    blocs = [p.text.strip() for p in document.paragraphs if p.text.strip()]
+
+    for table in document.tables:
+        for row in table.rows:
+            cellules = [c.text.strip() for c in row.cells if c.text.strip()]
+            # Les cellules fusionnées se répètent d'une colonne à l'autre :
+            # sans déduplication, une ligne devient « Nom Nom Nom ».
+            uniques = list(dict.fromkeys(cellules))
+            if uniques:
+                blocs.append(" | ".join(uniques))
+
+    texte = "\n\n".join(blocs)
+    if not texte.strip():
+        raise UnreadableDOCX("aucun texte — document vide ou uniquement des images")
+    return texte
+
+
 def _read_text(path: Path) -> str | None:
     """
     Lit un fichier texte. Retourne None si l'encodage est illisible.
@@ -208,10 +258,18 @@ def _read(path: Path) -> tuple[str | None, str]:
     Retourne (texte, motif) — `motif` explique l'échec quand `texte` est
     None, pour que la sortie dise POURQUOI un fichier n'est pas indexé.
     """
-    if path.suffix.lower() in PDF_SUFFIXES:
+    suffix = path.suffix.lower()
+
+    if suffix in PDF_SUFFIXES:
         try:
             return _read_pdf(path), ""
         except UnreadablePDF as exc:
+            return None, str(exc)
+
+    if suffix in DOCX_SUFFIXES:
+        try:
+            return _read_docx(path), ""
+        except UnreadableDOCX as exc:
             return None, str(exc)
 
     texte = _read_text(path)
@@ -274,7 +332,7 @@ def _collect(
             continue
 
         suffix = path.suffix.lower()
-        if suffix not in TEXT_SUFFIXES and suffix not in PDF_SUFFIXES:
+        if suffix not in SUPPORTED_SUFFIXES:
             if suffix in KNOWN_UNSUPPORTED:
                 unsupported.setdefault(suffix, []).append(path.name)
             continue
@@ -349,7 +407,7 @@ def index_directory(
 
     if not fichiers:
         print(f"Aucun fichier indexable dans {directory}")
-        print(f"Formats lus : {', '.join(sorted(TEXT_SUFFIXES | PDF_SUFFIXES))}")
+        print(f"Formats lus : {', '.join(sorted(SUPPORTED_SUFFIXES))}")
         _explain_unsupported(non_geres)
         return 1
 

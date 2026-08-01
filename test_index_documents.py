@@ -129,15 +129,19 @@ def test_le_readme_du_dossier_n_est_pas_un_document(rag, dossier):
 
 def test_les_formats_non_geres_sont_signales(rag, dossier, capsys):
     """
-    Ignorés en silence, un .docx déposé qui n'apparaît jamais dans les
+    Ignorés en silence, un fichier déposé qui n'apparaît jamais dans les
     réponses serait incompréhensible du point de vue de Cyril.
+
+    Le .xlsx tient ce rôle depuis que le .docx est lu : ce test doit
+    porter sur un format RÉELLEMENT non géré, sinon il cesse de vérifier
+    ce qu'il annonce.
     """
-    (dossier / "rapport.docx").write_bytes(b"PK faux docx")
+    (dossier / "comptes.xlsx").write_bytes(b"PK faux xlsx")
     index_directory(dossier)
 
     sortie = capsys.readouterr().out
-    assert "rapport.docx" in sortie
-    assert "python-docx" in sortie
+    assert "comptes.xlsx" in sortie
+    assert "csv" in sortie
 
 
 # ── PDF ───────────────────────────────────────────────────────────────
@@ -386,6 +390,110 @@ def test_l_option_autoriser_secrets_existe_et_passe_outre(rag, dossier):
 
     index_directory(dossier, allow_secrets=True)
     assert "Mots de passe.csv" in rag.indexed_documents()
+
+
+# ── .docx ─────────────────────────────────────────────────────────────
+#
+# python-docx installé le 01/08/2026. Contrairement aux tests PDF, ceux-ci
+# fabriquent de VRAIS .docx : la bibliothèque sait aussi les écrire, donc
+# une doublure n'apporterait rien et masquerait les surprises du format.
+
+def _docx(path, paragraphes=(), tableaux=()):
+    import docx
+
+    document = docx.Document()
+    for texte in paragraphes:
+        document.add_paragraph(texte)
+    for lignes in tableaux:
+        table = document.add_table(rows=len(lignes), cols=len(lignes[0]))
+        for i, ligne in enumerate(lignes):
+            for j, cellule in enumerate(ligne):
+                table.rows[i].cells[j].text = cellule
+    document.save(str(path))
+    return path
+
+
+def test_un_docx_est_lu(rag, dossier):
+    _docx(dossier / "attestation.docx", ["Attestation de formation", "Delivree le 07/04/2026"])
+    index_directory(dossier)
+
+    assert "attestation.docx" in rag.indexed_documents()
+
+
+def test_le_contenu_des_tableaux_est_extrait(rag, dossier):
+    """
+    ⚠️ Un formulaire, une facture ou une demande d'absence mettent
+    l'essentiel de leur information dans des TABLEAUX — dates, montants,
+    noms. Ne lire que document.paragraphs, comme le font la plupart des
+    exemples, laisserait ces documents quasiment vides.
+    """
+    from memory.index_documents import _read
+
+    chemin = _docx(
+        dossier / "demande.docx",
+        paragraphes=["DEMANDE D'AUTORISATION D'ABSENCE"],
+        tableaux=[[["Date", "Motif"], ["07/04/2026", "Formation aide-soignant"]]],
+    )
+    texte, _ = _read(chemin)
+
+    assert "07/04/2026" in texte
+    assert "Formation aide-soignant" in texte
+
+
+def test_les_cellules_fusionnees_ne_sont_pas_repetees(rag, dossier):
+    """
+    Une cellule fusionnée se répète d'une colonne à l'autre : sans
+    déduplication, une ligne devient « Signature Signature Signature ».
+    """
+    from memory.index_documents import _read
+
+    chemin = _docx(
+        dossier / "signature.docx",
+        tableaux=[[["Signature du responsable"] * 3]],
+    )
+    texte, _ = _read(chemin)
+
+    assert texte.count("Signature du responsable") == 1
+
+
+def test_un_docx_vide_est_signale(rag, dossier, capsys):
+    _docx(dossier / "vide.docx")
+    index_directory(dossier)
+
+    assert "vide.docx" not in rag.indexed_documents()
+    assert "aucun texte" in capsys.readouterr().out
+
+
+def test_un_docx_corrompu_n_interrompt_pas_les_autres(rag, dossier):
+    (dossier / "casse.docx").write_bytes(b"PK\x03\x04 pas un vrai docx")
+    index_directory(dossier)
+
+    assert "casse.docx" not in rag.indexed_documents()
+    assert "assurance.md" in rag.indexed_documents()
+
+
+def test_le_doc_ancien_reste_signale_comme_non_gere(rag, dossier, capsys):
+    """
+    Le .doc binaire n'a rien à voir avec le .docx : python-docx ne le lit
+    pas, et il doit continuer à dire quoi faire.
+    """
+    (dossier / "ancien.doc").write_bytes(b"\xd0\xcf\x11\xe0 format binaire")
+    index_directory(dossier)
+
+    sortie = capsys.readouterr().out
+    assert "ancien.doc" in sortie
+    assert "réenregistrer" in sortie
+
+
+def test_python_docx_absent_ne_casse_pas_l_indexation(rag, dossier, monkeypatch, capsys):
+    import sys
+
+    _docx(dossier / "attestation.docx", ["du contenu"])
+    monkeypatch.setitem(sys.modules, "docx", None)
+    index_directory(dossier)
+
+    assert "pip install python-docx" in capsys.readouterr().out
+    assert "assurance.md" in rag.indexed_documents()
 
 
 # ── Journaux ──────────────────────────────────────────────────────────
