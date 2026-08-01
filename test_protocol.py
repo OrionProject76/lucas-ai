@@ -117,17 +117,35 @@ def test_every_emitted_type_is_handled_by_godot() -> None:
 
 
 @pytest.mark.skipif(not GODOT_CLIENT.is_file(), reason="client Godot absent")
-def test_godot_still_points_at_the_obsolete_bridge() -> None:
+def test_godot_talks_to_the_api_not_a_side_service() -> None:
     """
-    Constat, pas exigence : tant que websocket_client.gd pointe sur le
-    port 8765, l'avatar 3D parle à l'écho et non à Luca's. Ce test
-    documente l'écart restant et échouera — utilement — le jour où le
-    client sera basculé sur l'API, signalant qu'il faut le retirer.
+    Le client pointait sur le bridge d'écho (port 8765), qui
+    court-circuitait le routage, les gardes de sensibilité et la
+    mémoire. Il doit parler à l'API et à rien d'autre.
     """
     source = GODOT_CLIENT.read_text(encoding="utf-8")
-    assert "8765" in source, (
-        "le client Godot a été basculé sur l'API : ce test peut être supprimé"
-    )
+    assert "127.0.0.1:8000/ws" in source
+    assert "8765" not in source.replace("supprimé", "")
+
+
+@pytest.mark.skipif(not GODOT_CLIENT.is_file(), reason="client Godot absent")
+def test_godot_handles_the_avatar_state_messages() -> None:
+    """
+    « avatar_state » est le seul message d'état que l'API émet. Un type
+    non traité est ignoré SILENCIEUSEMENT par Godot : le visage resterait
+    inerte sans qu'aucune erreur n'apparaisse nulle part.
+    """
+    source = GODOT_CLIENT.read_text(encoding="utf-8")
+    handled = set(re.findall(r'^\s*"(\w+)":', source, re.MULTILINE))
+    assert "avatar_state" in handled
+
+
+def test_the_dead_bridge_is_gone() -> None:
+    """
+    Un service cassé laissé dans le dépôt ressemble à une alternative
+    valable. Celui-ci ne démarrait plus depuis websockets 12.
+    """
+    assert not Path("Orion3D/python_service/orion3d_bridge.py").exists()
 
 
 if __name__ == "__main__":

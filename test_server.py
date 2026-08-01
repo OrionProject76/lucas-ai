@@ -52,7 +52,9 @@ def test_status_confirms_the_server_runs(client) -> None:
 def test_system_returns_the_world_model_snapshot(client) -> None:
     response = client.get("/system")
     assert response.status_code == 200
-    assert set(response.json()) == {"cpu_percent", "ram_percent", "active_window"}
+    assert set(response.json()) == {
+        "cpu_percent", "ram_percent", "gpu_percent", "active_window",
+    }
 
 
 def test_chat_returns_the_answer(client, fake_core) -> None:

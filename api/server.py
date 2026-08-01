@@ -134,7 +134,11 @@ async def _push_system_state(websocket: WebSocket) -> None:
         try:
             snapshot = get_snapshot()
             await websocket.send_json(
-                protocol.system(snapshot["cpu_percent"], snapshot["ram_percent"])
+                protocol.system(
+                    snapshot["cpu_percent"],
+                    snapshot["ram_percent"],
+                    snapshot.get("gpu_percent", 0.0),
+                )
             )
         except Exception:  # noqa: BLE001 — déconnexion ou snapshot
             # indisponible : la boucle s'arrête, le chat continue.

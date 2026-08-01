@@ -21,8 +21,31 @@ def get_snapshot() -> dict:
     return {
         "cpu_percent": psutil.cpu_percent(interval=0.3),
         "ram_percent": psutil.virtual_memory().percent,
+        "gpu_percent": _get_gpu_load(),
         "active_window": _get_active_window_title(),
     }
+
+
+def _get_gpu_load() -> float:
+    """
+    Charge GPU en pourcentage, 0.0 si illisible.
+
+    Vaut la peine d'être suivie ici précisément parce que la RTX 5080 est
+    partagée entre Ollama et le rendu Godot (VISION_LONG_TERME.md §3) :
+    voir la carte grimper explique une réponse lente ou un chargement de
+    modèle, là où CPU et RAM ne diraient rien.
+
+    Reprise du service Orion3D supprimé, qui alimentait la jauge GPU du
+    HUD — sans elle, ce cadran serait resté à zéro pour toujours.
+    """
+    try:
+        import GPUtil
+
+        gpus = GPUtil.getGPUs()
+        return round(gpus[0].load * 100, 1) if gpus else 0.0
+    except Exception:  # noqa: BLE001 — pilote absent, machine sans GPU
+        # dédié : une jauge vide vaut mieux qu'un World Model en panne.
+        return 0.0
 
 
 def _get_active_window_title() -> str:

@@ -35,9 +35,13 @@ piper-tts>=1.6.0         # TTS local (modules/piper_engine.py) — voix à
 pygame>=2.6.0            # Lecture audio du TTS
 Pillow>=12.0.0           # Images pour le VLM (modules/vision_manager.py)
 
-# ─── Bridge Godot (Orion3D/python_service) ─
-websockets>=16.1.0       # Canal Python <-> Godot
-GPUtil>=1.4.0            # Télémétrie GPU affichée dans le HUD
+# ─── Canal WebSocket & télémétrie ──────────
+# websockets : uvicorn s'en sert pour servir /ws — c'est la seule
+# implémentation installée, la retirer casserait le canal Godot.
+websockets>=16.1.0
+# GPUtil : charge GPU du World Model. Reprise du service Orion3D
+# supprimé, qui alimentait la jauge GPU du HUD.
+GPUtil>=1.4.0
 
 # ─── Config ────────────────────────────────
 python-dotenv>=1.2.0     # Lecture du .env (config.py)
