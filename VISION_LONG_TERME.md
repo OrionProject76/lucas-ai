@@ -40,6 +40,9 @@ construis exactement ça, mais en vrai."*
   paragraphe)
 - Micro-expressions et éclairage réactifs à l'état émotionnel/sémantique
   de la réponse (ex : teinte orange ambrée si urgence système détectée)
+- Référence esthétique ajoutée le 01/08/2026 : **DeepMind Project Astra**
+  — à intégrer dès maintenant dans l'avatar QPainter et l'interface
+  Godot. Voir l'addendum en fin de document.
 
 ### Pilier 2 — Le Cerveau : cognition modulaire
 - Architecture modulaire (perception, exécution, raisonnement séparés en
@@ -116,6 +119,14 @@ WebSocket scaffoldé) et laisse plus de VRAM disponible pour Ollama.
 Cette décision n'est pas gravée dans le marbre pour l'éternité — elle
 est révisable, mais seulement après validation explicite de Cyril, pas
 par glissement silencieux d'un document externe.
+
+> **Perception continue — non activée.** L'inspiration Project Astra
+> ajoutée le 01/08/2026 comporte un second volet : Luca's verrait l'écran
+> en permanence, et non sur demande explicite comme aujourd'hui. Ce volet
+> est **délibérément hors périmètre actuel**, pour trois raisons —
+> confidentialité, coût GPU, et cohérence avec §4.1. Détail dans
+> l'addendum en fin de document. À n'activer que par décision explicite,
+> jamais par glissement progressif.
 
 ---
 
@@ -209,3 +220,46 @@ documenté ici — jamais un abandon silencieux de l'ambition.
 
 *Document vivant — à réviser si la vision elle-même évolue, pas à
 chaque itération de code.*
+
+---
+
+# Addendum VISION_LONG_TERME.md — Session du 01/08/2026 — Inspirations visuelles
+
+À intégrer dans VISION_LONG_TERME.md, section 1 (Pilier 1 — Le Visuel) et
+section 3 (décisions moteur/architecture).
+
+---
+
+## Nouvelles inspirations confirmées (en plus de HER, I am Mother, Desktop
+## Pal, Lenovo AURA, Jarvis déjà documentées)
+
+**DeepMind Project Astra** — deux apports distincts, confirmés le
+01/08/2026 :
+
+1. **Style visuel/esthétique** — à intégrer dès maintenant dans le travail
+   sur l'avatar QPainter V3 et l'interface Godot (Phase 3 en cours).
+
+2. **Perception continue** — Luca's voit et comprend l'écran en
+   permanence, pas seulement sur demande explicite comme c'est le cas
+   aujourd'hui (`should_use_vision()`, déclenchement par mots-clés).
+
+   **Statut : vision long terme uniquement, PAS activé maintenant.**
+   Décision explicite de Cyril le 01/08/2026, après discussion des
+   implications :
+   - Vie privée : Luca's verrait en permanence tout ce qui s'affiche à
+     l'écran, pas seulement sur demande
+   - Coût GPU : capture + analyse VLM en continu, en parallèle d'Ollama
+   - Cohérence avec le principe déjà acté (`VISION_LONG_TERME.md` §4.1,
+     "la liberté est conditionnée à la protection") : la perception
+     continue est une extension de capacité qui devrait être précédée
+     d'un module `security/` plus mature qu'aujourd'hui (niveau 0,
+     observation seule)
+
+   Ce mode reste au catalogue (`IDEAS.md`, référence Layer 1 "capture
+   toutes les 2-5s") comme direction future, à activer explicitement
+   quand le socle sécurité le justifiera — pas par glissement progressif.
+
+**Autres modes mentionnés par Cyril à clarifier ultérieurement** : JARVIS
+et Desktop Pal sont déjà documentés comme inspirations. AURA correspond
+au système des 8 modes déjà défini (`IDEAS.md`, section 3). DEEPMIND se
+rattache à Astra (ci-dessus).
