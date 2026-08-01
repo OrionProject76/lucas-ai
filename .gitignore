@@ -37,6 +37,9 @@ export_presets.cfg
 *.sqlite3
 data/chromadb/
 modules/data/
+# Modèles de voix Piper (.onnx, ~60-75 Mo pièce) et sorties audio locales
+data/voices/
+data/output_piper.wav
 data/logs/
 data/screenshots/
 data/screenshot.png

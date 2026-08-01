@@ -1,55 +1,151 @@
+# modules/voice_manager.py — synthèse vocale à double moteur
+#
+# edge_tts (cloud Microsoft) par défaut pour la qualité de voix ;
+# Piper (local) forcé dès que le contenu est sensible.
+# La décision appartient à core.router.route_voice() — voir CLAUDE.md règle 3.
+
 import asyncio
+from collections.abc import Callable
+
 import edge_tts
-import os
+
+from config import EDGE_TTS_VOICE, TTS_ALLOW_CLOUD_ON_SENSITIVE
+from core.router import route_voice
+from modules.piper_engine import PiperEngine, PiperUnavailable
+
+# Message affiché à Cyril quand un texte sensible ne peut pas être prononcé.
+SENSITIVE_SKIPPED_MESSAGE = (
+    "[Voix] Contenu sensible et voix locale indisponible — non prononcé. "
+    "Le texte reste lisible ci-dessus."
+)
+
+# Longueur max d'un extrait loggué : la base d'événements ne doit pas
+# devenir une copie du contenu sensible qu'on refuse justement d'envoyer.
+LOG_EXCERPT_LENGTH = 80
+LOG_REASON_LENGTH = 60
+
 
 class VoiceManager:
-    def __init__(self, voice="fr-FR-HenriNeural"):
-        self.voice = voice
+    """
+    Point d'entrée unique du TTS. `speak()` route puis prononce.
+
+    `log_event` est injecté (et non importé) : modules/ ne doit pas importer
+    OrionCore, ça créerait un cycle. L'UI passe `orion.log_event`.
+    """
+
+    def __init__(
+        self,
+        voice: str | None = None,
+        log_event: Callable[[str, str], None] | None = None,
+    ) -> None:
+        self.voice = voice or EDGE_TTS_VOICE
         self.output_path = "data/output.mp3"
+        self.piper_output_path = "data/output_piper.wav"
+        self.log_event = log_event
+        self.piper = PiperEngine()
 
-    async def _synthesize_async(self, text, output_path=None):
-        """Génère un fichier audio à partir du texte"""
-        if output_path is None:
-            output_path = self.output_path
+    # ── Journalisation ────────────────────────────────────────────────
 
+    def _log(self, event_type: str, text: str, reason: str = "") -> None:
+        """
+        Enregistre un événement TTS : la raison, puis un extrait tronqué du
+        texte concerné. Les deux sont bornés séparément — sinon une raison
+        verbeuse mange tout le budget et l'extrait disparaît.
+        """
+        if self.log_event is None:
+            return
+
+        excerpt = text[:LOG_EXCERPT_LENGTH]
+        if len(text) > LOG_EXCERPT_LENGTH:
+            excerpt += "…"
+
+        details = f"{reason[:LOG_REASON_LENGTH]} | {excerpt}" if reason else excerpt
+        self.log_event(event_type, details)
+
+    # ── Moteurs ───────────────────────────────────────────────────────
+
+    async def _synthesize_edge_async(self, text: str, output_path: str) -> str:
         communicate = edge_tts.Communicate(text, self.voice)
         await communicate.save(output_path)
         return output_path
 
-    def synthesize(self, text, output_path=None):
-        """Version synchrone de la synthèse"""
-        return asyncio.run(self._synthesize_async(text, output_path))
+    def _synthesize_edge(self, text: str, output_path: str | None = None) -> str:
+        """Synthèse cloud (Microsoft). Le texte quitte la machine."""
+        output_path = output_path or self.output_path
+        return asyncio.run(self._synthesize_edge_async(text, output_path))
 
-    def play_audio(self, audio_path):
-        """Joue le fichier audio avec pygame"""
+    def _synthesize_piper(self, text: str, output_path: str | None = None) -> str:
+        """Synthèse locale. Lève PiperUnavailable si le modèle manque."""
+        return self.piper.synthesize(text, output_path or self.piper_output_path)
+
+    # ── API publique ──────────────────────────────────────────────────
+
+    def synthesize(self, text: str, output_path: str | None = None) -> str:
+        """
+        Synthèse sans routage — reste sur edge_tts, comme historiquement.
+        Conservée pour compatibilité (test_voice.py, appels directs).
+        Préférer speak(), qui applique la règle de sensibilité.
+        """
+        return self._synthesize_edge(text, output_path)
+
+    def play_audio(self, audio_path: str) -> bool:
+        """Joue le fichier audio avec pygame."""
         try:
             import pygame
+
             pygame.mixer.init()
             pygame.mixer.music.load(audio_path)
             pygame.mixer.music.play()
             while pygame.mixer.music.get_busy():
                 pygame.time.Clock().tick(10)
             return True
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — un souci audio ne doit
+            # jamais faire tomber le thread TTS ni l'UI.
             print(f"Erreur lecture audio: {e}")
             return False
 
-    def speak(self, text):
-        """Synthétise et joue le texte"""
-        print(f"Orion dit: {text}")
-        audio_path = self.synthesize(text)
+    def speak(self, text: str, question: str = "") -> str | None:
+        """
+        Route puis prononce. Retourne le chemin audio joué, ou None si rien
+        n'a été prononcé (contenu sensible + voix locale indisponible).
+
+        `question` sert au routage : une réponse anodine à une question
+        sensible reste sensible.
+        """
+        audio_path = self._synthesize_routed(text, question)
+        if audio_path is None:
+            return None
         self.play_audio(audio_path)
         return audio_path
 
-    def list_voices(self):
-        """Liste les voix françaises disponibles"""
+    def _synthesize_routed(self, text: str, question: str = "") -> str | None:
+        """Applique la règle de sensibilité et produit le fichier audio."""
+        if route_voice(text, question) != "local":
+            return self._synthesize_edge(text)
+
+        try:
+            return self._synthesize_piper(text)
+        except PiperUnavailable as exc:
+            if TTS_ALLOW_CLOUD_ON_SENSITIVE:
+                # Cyril a explicitement levé la garde dans config.py.
+                self._log("tts_cloud_on_sensitive", text, str(exc))
+                return self._synthesize_edge(text)
+
+            # Défaut : on ne prononce pas. Jamais de repli cloud sur du sensible.
+            self._log("tts_skipped_sensitive", text, str(exc))
+            return None
+
+    def list_voices(self) -> list[str]:
+        """Voix edge_tts françaises disponibles."""
         return [
             "fr-FR-HenriNeural",
             "fr-FR-DeniseNeural",
-            "fr-FR-EloiseNeural"
+            "fr-FR-EloiseNeural",
         ]
+
 
 if __name__ == "__main__":
     vm = VoiceManager()
-    print("Voix disponibles:", vm.list_voices())
+    print("Voix edge disponibles:", vm.list_voices())
+    print("Modèle Piper disponible:", vm.piper.is_available())
     vm.speak("Bonjour Cyril, je suis Orion. Comment puis-je vous aider aujourd'hui ?")

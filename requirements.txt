@@ -29,7 +29,9 @@ chromadb>=1.5.0          # Base vectorielle (modules/rag_manager.py)
 duckduckgo-search>=8.1.0 # Recherche web (modules/web_search.py)
 
 # ─── Voix & Vision ─────────────────────────
-edge-tts>=7.2.0          # TTS (modules/voice_manager.py)
+edge-tts>=7.2.0          # TTS cloud Microsoft (modules/voice_manager.py)
+piper-tts>=1.6.0         # TTS local (modules/piper_engine.py) — voix à
+                         # télécharger : python -m piper.download_voices
 pygame>=2.6.0            # Lecture audio du TTS
 Pillow>=12.0.0           # Images pour le VLM (modules/vision_manager.py)
 

@@ -72,6 +72,42 @@ un appel cloud direct ailleurs dans le code. Tests : `test_router.py`.
 Cohérent avec `VISION_LONG_TERME.md` §4 : « la sécurité vient du contrôle de
 *ce qui* est envoyé et *quand*, pas du canal utilisé ».
 
+#### La même règle s'applique à la voix (TTS) — ajouté le 01/08/2026
+
+Le TTS est une seconde surface de sortie : `edge_tts` envoie à Microsoft le
+texte à prononcer. Deux moteurs, un routeur, même principe que pour le LLM.
+
+| Moteur | Quand | Où va le texte |
+|---|---|---|
+| **edge_tts** (défaut) | Contenu sans marqueur sensible | Serveurs Microsoft |
+| **Piper** (forcé) | Contenu sensible ou question RAG | Reste sur la machine |
+
+⚠️ **Le défaut est inversé par rapport au routage LLM** : ici le cloud est le
+défaut, parce que la voix edge est nettement meilleure et que le TTS ne
+transmet que du texte déjà affiché à l'écran. Ce n'est pas un oubli.
+
+**Le routeur analyse la question ET la réponse.** « Quel est mon salaire ? » →
+« Il est de 3200 euros » : la réponse seule ne contient aucun mot-clé sensible
+et serait partie chez Microsoft. Implémentation : `route_voice()` dans
+`core/router.py`, qui réutilise `is_sensitive()` et `should_use_rag()`.
+
+**Si Piper est indisponible** (modèle `.onnx` absent, erreur de chargement) sur
+un contenu sensible : **rien n'est prononcé**. Le texte reste lisible à
+l'écran, un message le signale dans le chat, et l'événement
+`tts_skipped_sensitive` est enregistré en base. Jamais de repli vers le cloud
+par défaut.
+
+**Interrupteur `TTS_ALLOW_CLOUD_ON_SENSITIVE`** (`config.py`, défaut `False`) :
+à `True`, ce cas précis bascule sur edge_tts — donc **du texte sensible part
+chez Microsoft**. C'est une dérogation consciente, à activer par Cyril seul,
+tracée par l'événement `tts_cloud_on_sensitive`. Elle deviendra une boîte de
+dialogue de confirmation lors du chantier UI.
+
+Les extraits enregistrés en base sont tronqués à 80 caractères : la table
+d'événements ne doit pas devenir une copie du contenu qu'on refuse d'envoyer.
+
+Tests : `test_voice_router.py`.
+
 ### ⚠️ Précision sur la règle 12 — "multi-agents" (clarifié le 01/08/2026)
 
 La règle 12 interdit **une seule chose** : la **Swarm Intelligence**, c'est-à-dire

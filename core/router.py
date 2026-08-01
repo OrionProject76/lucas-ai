@@ -67,6 +67,29 @@ def route(text: str) -> str:
     return "local"
 
 
+def route_voice(answer: str, question: str = "") -> str:
+    """
+    Décide quel moteur TTS prononce la réponse : "local" (Piper) ou
+    "cloud" (edge_tts).
+
+    ⚠️ Le défaut est le CLOUD, à l'inverse de route(). Ce n'est pas une
+    erreur : edge_tts a la meilleure voix, et le TTS ne transmet que du
+    texte déjà affiché à l'écran. Le local est forcé dès qu'un contenu
+    sensible est détecté.
+
+    L'analyse porte sur la question ET la réponse : « quel est mon
+    salaire ? » → « il est de 3200 euros » ne contient aucun mot-clé
+    sensible dans la réponse seule, mais reste une donnée à ne pas
+    envoyer chez Microsoft.
+
+    Voir CLAUDE.md règle 3, section TTS.
+    """
+    combined = f"{question} {answer}"
+    if is_sensitive(combined) or should_use_rag(combined):
+        return "local"
+    return "cloud"
+
+
 def should_use_rag(text: str) -> bool:
     """
     Décide si on va chercher dans les documents personnels (RAG) avant

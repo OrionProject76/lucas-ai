@@ -30,6 +30,22 @@ OLLAMA_READ_TIMEOUT = 120     # secondes pour recevoir la réponse
 # Voir .env.example pour le modèle. Chaîne vide = cloud désactivé.
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 
+# --- Voix (TTS) ---
+# Deux moteurs, un routeur : core.router.route_voice() décide.
+EDGE_TTS_VOICE = "fr-FR-HenriNeural"   # voix cloud Microsoft (défaut)
+PIPER_VOICE = "fr_FR-upmc-medium"      # voix locale, masculine comme Henri
+PIPER_VOICES_DIR = "data/voices"       # modèles .onnx (non versionnés)
+
+# Voix Piper également téléchargée, pour comparer à l'oreille :
+# "fr_FR-siwis-medium" (féminine)
+
+# ⚠️ SÉCURITÉ — laisser à False sauf décision consciente.
+# À True, si Piper est indisponible (modèle manquant, erreur de chargement),
+# un texte SENSIBLE est prononcé par edge_tts, donc envoyé à Microsoft.
+# À False, ce texte n'est simplement pas prononcé et l'événement est loggué.
+# Voir CLAUDE.md règle 3, section TTS.
+TTS_ALLOW_CLOUD_ON_SENSITIVE: bool = False
+
 # --- Mémoire ---
 DB_PATH = "memory/orion_memory.db"
 MAX_HISTORY_MESSAGES = 100      # garde les 100 derniers messages max
