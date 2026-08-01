@@ -121,7 +121,24 @@ class PersistenceWatch:
         return any(directory in lowered for directory in VOLATILE_DIRECTORIES)
 
     def scan(self) -> list[Finding]:
-        entries = _read_registry_autostarts() + _read_startup_folder()
+        """
+        Inventorie les points de démarrage.
+
+        Une lecture impossible est signalée, jamais propagée : le
+        moniteur enchaîne ce capteur avec celui du rançongiciel
+        (SecurityMonitor.scan_filesystem), et une exception ici ferait
+        perdre les résultats de l'autre.
+        """
+        try:
+            entries = _read_registry_autostarts() + _read_startup_folder()
+        except OSError as exc:
+            return [Finding(
+                severity=INFO,
+                kind="autostart_scan_unavailable",
+                summary=f"Points de démarrage non lisibles : {exc}",
+                evidence={},
+            )]
+
         findings: list[Finding] = []
 
         for source, name, command in entries:

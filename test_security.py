@@ -1,4 +1,4 @@
-# test_security.py — capteurs Guardian et Privacy Shield
+# test_security.py — capteurs de sécurité (paquet security/)
 #
 # Deux propriétés tenues pour non négociables et testées comme telles :
 #   1. Observation seule — aucun process tué, aucune connexion coupée.
@@ -32,16 +32,40 @@ from security.types import Finding, sort_findings
 
 # ── Garde-fous structurels ────────────────────────────────────────────
 
+def _security_modules():
+    """
+    Tous les modules du paquet security/, découverts dynamiquement.
+
+    Une liste écrite en dur aurait dérivé : persistence_watch, history et
+    monitor ont été ajoutés après les gardes ci-dessous et échappaient à
+    la vérification. Un module ajouté demain est couvert d'office.
+    """
+    import importlib
+    import pkgutil
+
+    import security
+
+    return [
+        importlib.import_module(f"security.{info.name}")
+        for info in pkgutil.iter_modules(security.__path__)
+    ]
+
+
+def test_the_whole_package_is_covered_by_the_guards() -> None:
+    """Garde-fou de la garde-fou : la découverte doit trouver les modules."""
+    names = {module.__name__.rsplit(".", 1)[-1] for module in _security_modules()}
+    assert {"guardian", "privacy_shield", "ransomware_watch", "persistence_watch",
+            "history", "monitor", "types"} <= names
+
+
 def test_sensors_never_act() -> None:
     """
     Observation seule : aucun capteur ne doit pouvoir tuer un process ni
     fermer une socket. Donner ce pouvoir à Luca's est une décision
     distincte, à valider par Cyril (VISION_LONG_TERME.md §4.1).
     """
-    from security import guardian, privacy_shield, ransomware_watch
-
-    forbidden = ("kill(", "terminate(", "shutdown(", "close()", "suspend(")
-    for module in (guardian, privacy_shield, ransomware_watch):
+    forbidden = ("kill(", "terminate(", "shutdown(", "suspend(", "close()")
+    for module in _security_modules():
         source = inspect.getsource(module)
         for call in forbidden:
             assert call not in source, f"{module.__name__} ne doit pas appeler {call}"
@@ -49,16 +73,23 @@ def test_sensors_never_act() -> None:
 
 def test_sensors_make_no_outbound_call() -> None:
     """
-    Envoyer la liste des process ou des connexions de Cyril à un service
-    tiers serait exactement la fuite qu'on cherche à empêcher.
+    Envoyer la liste des process, des connexions ou des points de
+    démarrage de Cyril à un service tiers serait exactement la fuite
+    qu'on cherche à empêcher.
     """
-    from security import guardian, privacy_shield, ransomware_watch
-
     forbidden = ("requests.", "urllib", "http://", "https://", "socket.create_connection")
-    for module in (guardian, privacy_shield, ransomware_watch):
+    for module in _security_modules():
         source = inspect.getsource(module)
         for call in forbidden:
             assert call not in source, f"{module.__name__} ne doit rien émettre ({call})"
+
+
+def test_no_module_writes_to_the_registry() -> None:
+    """Les capteurs lisent le registre Windows, ils n'y écrivent jamais."""
+    for module in _security_modules():
+        source = inspect.getsource(module)
+        for call in ("SetValue", "CreateKey", "DeleteKey", "DeleteValue"):
+            assert call not in source, f"{module.__name__} ne doit pas écrire ({call})"
 
 
 # ── Guardian : usurpation de nom système ──────────────────────────────
@@ -802,7 +833,12 @@ def test_persistence_watch_never_writes_to_the_registry() -> None:
         assert forbidden not in source
 
 
-def test_unreadable_registry_does_not_break_the_scan(monkeypatch, history) -> None:
+def test_unreadable_registry_degrades_instead_of_raising(monkeypatch, history) -> None:
+    """
+    Le moniteur enchaîne ce capteur avec celui du rançongiciel dans
+    scan_filesystem() : une exception ici ferait perdre les résultats de
+    l'autre. Le capteur signale son indisponibilité et rend la main.
+    """
     from security import persistence_watch as pw
 
     def denied():
@@ -811,8 +847,32 @@ def test_unreadable_registry_does_not_break_the_scan(monkeypatch, history) -> No
     monkeypatch.setattr(pw, "_read_registry_autostarts", denied)
     monkeypatch.setattr(pw, "_read_startup_folder", list)
 
-    with pytest.raises(OSError):
-        PersistenceWatch(history=history).scan()
+    findings = PersistenceWatch(history=history).scan()
+    assert [f.kind for f in findings] == ["autostart_scan_unavailable"]
+
+
+def test_one_broken_sensor_does_not_hide_the_others(monkeypatch, tmp_path) -> None:
+    """
+    Garde d'intégration : un capteur en échec ne doit pas emporter le
+    résultat des autres dans le même balayage.
+    """
+    from security import persistence_watch as pw
+    from security.monitor import SecurityMonitor
+
+    def denied():
+        raise OSError("registre illisible")
+
+    monkeypatch.setattr(pw, "_read_registry_autostarts", denied)
+    monkeypatch.setattr(pw, "_read_startup_folder", list)
+
+    monitor = SecurityMonitor(state_path=tmp_path / "state.json")
+    monkeypatch.setattr(
+        monitor.ransomware_watch, "scan",
+        lambda: [Finding(CRITICAL, "ransom_extension", "fichier chiffré", {"exemple": "x"})],
+    )
+
+    kinds = [f.kind for f in monitor.scan_filesystem()]
+    assert "ransom_extension" in kinds, "le signal du rançongiciel doit survivre"
 
 
 # ── Rapport ───────────────────────────────────────────────────────────
