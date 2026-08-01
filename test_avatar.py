@@ -220,6 +220,34 @@ def test_body_radius_oscillates_within_bounds(avatar) -> None:
     assert all(42 <= r <= 48 for r in radii), "amplitude trop forte"
 
 
+def test_scan_line_follows_the_breathing_radius() -> None:
+    """
+    La ligne de balayage suivait un rayon de 45 en dur. Depuis que le
+    visage respire, ça la faisait déborder ou rentrer au rythme de la
+    respiration.
+    """
+    import inspect
+
+    from ui import avatar_widget
+
+    source = inspect.getsource(avatar_widget.AvatarWidget.paintEvent)
+    assert "45.0**2" not in source
+    assert "radius**2" in source
+
+
+def test_no_state_string_literals_remain() -> None:
+    """
+    Les états sont des constantes : un littéral résiduel échapperait à
+    tout renommage et à la vérification de set_state().
+    """
+    import inspect
+
+    from ui import avatar_widget
+
+    source = inspect.getsource(avatar_widget)
+    assert 'self.state == "' not in source
+
+
 def test_breath_phase_stays_bounded(avatar) -> None:
     """Sans repli modulo, la phase croîtrait indéfiniment."""
     for _ in range(500):

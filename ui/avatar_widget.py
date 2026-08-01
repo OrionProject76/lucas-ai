@@ -125,7 +125,7 @@ class AvatarWidget(QWidget):
         self.update()
 
     def trigger_blink(self):
-        if self.state == "IDLE":
+        if self.state == IDLE:
             self.eye_blink = True
             self.blink_timer = 3
             QTimer.singleShot(150, self.end_blink)
@@ -157,15 +157,15 @@ class AvatarWidget(QWidget):
         self.breath_phase = (self.breath_phase + 0.08) % (2 * math.pi)
 
         # Glow pulsation
-        if self.state == "IDLE":
+        if self.state == IDLE:
             self.glow_intensity += 0.02 * self.glow_direction
             if self.glow_intensity >= 0.8:
                 self.glow_direction = -1
             elif self.glow_intensity <= 0.3:
                 self.glow_direction = 1
-        elif self.state == "LISTENING":
+        elif self.state == LISTENING:
             self.glow_intensity = 0.9 + 0.1 * random.random()
-        elif self.state == "THINKING":
+        elif self.state == THINKING:
             self.glow_intensity = 0.7 + 0.3 * random.random()
             # Particules
             if random.random() > 0.7:
@@ -180,7 +180,7 @@ class AvatarWidget(QWidget):
                 p['y'] -= p['speed']
                 p['life'] -= 0.05
             self.particles = [p for p in self.particles if p['life'] > 0]
-        elif self.state == "SPEAKING":
+        elif self.state == SPEAKING:
             self.mouth_open = 0.3 + 0.4 * abs(random.random() - 0.5) * 2
             self.glow_intensity = 0.6
         elif self.state == WATCHING:
@@ -292,12 +292,14 @@ class AvatarWidget(QWidget):
             scan_y = 28 + self.scan_offset
             painter.setPen(QPen(QColor(WATCHING_COLOR.red(), WATCHING_COLOR.green(), 0, 180), 2))
             # Largeur suivant la courbure du visage, pour que la ligne
-            # reste à l'intérieur du cercle.
-            half = max(0.0, (45.0**2 - (scan_y - 70.0) ** 2)) ** 0.5
+            # reste à l'intérieur du cercle. Le rayon respire depuis la
+            # V3 : utiliser 45 en dur ferait déborder ou rentrer la ligne
+            # au rythme de la respiration.
+            half = max(0.0, (radius**2 - (scan_y - 70.0) ** 2)) ** 0.5
             painter.drawLine(int(70 - half), int(scan_y), int(70 + half), int(scan_y))
 
         # Particules (état THINKING)
-        if self.state == "THINKING":
+        if self.state == THINKING:
             for p in self.particles:
                 alpha = int(p['life'] * 255)
                 painter.setBrush(QBrush(QColor(0, 212, 255, alpha)))
