@@ -157,6 +157,14 @@ Reviens systématiquement vers Cyril AVANT d'agir, même en autonomie, uniquemen
 
 Dans ces 4 cas : présenter un plan clair (comme pour la règle 3 et le TTS), attendre validation explicite avant d'exécuter. Dans tous les autres cas : avancer, tester, committer, pousser, puis résumer ce qui a été fait — sans attendre de permission à chaque étape.
 
+### Précision : l'expérience utilisateur relève de l'autonomie normale (acté le 01/08/2026)
+
+Toute amélioration d'expérience — fluidité, animations, transitions, messages plus clairs, cohérence visuelle, micro-interactions — fait partie du périmètre d'autonomie ordinaire. Pas de validation à demander pour ce type de détail.
+
+Cette précision ne retire rien aux 4 cas ci-dessus. Le confort et la fluidité n'en font simplement pas partie : ils ne touchent ni à la sécurité, ni à une règle, ni à l'architecture, et ne constituent pas une ambiguïté au sens du cas 4.
+
+Reste à distinguer : un changement **esthétique de fond** — remplacer le visage de l'avatar par une forme abstraite, changer la charte de couleurs — engage l'identité du produit et se discute. Adoucir une transition, corriger un tremblement, rendre un message d'attente compréhensible : non, c'est du travail normal.
+
 ## 🛡️ Liberté conditionnée à la protection (acté le 01/08/2026)
 
 ⚠️ **Ne pas confondre avec la section précédente.** « Autonomie d'exécution »
