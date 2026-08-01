@@ -13,8 +13,8 @@ La commande est **relançable sans risque** : un fichier inchangé est
 ignoré, un fichier modifié est réindexé, un fichier supprimé du dossier
 est retiré de la base.
 
-**Formats lus** : `.pdf`, `.txt`, `.md`, `.markdown`, `.rst`, `.csv`, `.json`,
-`.log`. Les `.docx` sont signalés mais pas encore lus — la
+**Formats lus** : `.pdf`, `.txt`, `.md`, `.markdown`, `.rst`, `.csv`, `.json`.
+Les `.docx` sont signalés mais pas encore lus — la
 commande dit quoi installer.
 
 ⚠️ Un PDF **scanné** (photographié, sans couche texte) est refusé avec un
@@ -29,3 +29,18 @@ Voir `CLAUDE.md` règle 3.
 
 Ce dossier n'est pas versionné (voir `.gitignore`) : ce sont tes
 documents, ils n'ont rien à faire sur GitHub.
+
+## Ce qui est refusé d'office
+
+**Les fichiers de secrets** — mots de passe exportés, kits de récupération,
+clés privées, codes de secours. En base vectorielle, des identifiants
+deviennent récupérables par une simple question, et Luca's les recopierait
+dans sa réponse. Le refus se fait sur le **nom** du fichier ; c'est un
+filet, pas une garantie. Ne range pas tes secrets dans un dossier indexé.
+
+**Les journaux** — `.log`, mais aussi `log.txt`, `debug_*.txt`, `output.txt`.
+Volumineux, répétitifs, sans valeur documentaire : un seul journal de 0,7 Mo
+occupait 76 % de la base et rendait 35 vrais documents introuvables.
+
+Un document légitimement volumineux qui écrase la base est **signalé**, pas
+retiré : à toi de décider.

@@ -388,19 +388,85 @@ def test_l_option_autoriser_secrets_existe_et_passe_outre(rag, dossier):
     assert "Mots de passe.csv" in rag.indexed_documents()
 
 
+# ── Journaux ──────────────────────────────────────────────────────────
+#
+# Le log.txt de Cyril produisait 818 morceaux sur 1083 — 76 % de la base.
+# La recherche ne remontait pratiquement que lui : 35 vrais documents
+# étaient devenus introuvables.
+
+@pytest.mark.parametrize(
+    "nom",
+    [
+        # ⚠️ Celui-ci est LE cas réel, et son extension est parfaitement
+        # lisible : retirer « .log » des formats acceptés ne l'aurait pas
+        # écarté. C'est son nom qui le disqualifie.
+        "log.txt",
+        "application.log",
+        "logs.txt",
+        "debug_2026.txt",
+        "error_log.txt",
+        "output.txt",
+        "journal.md",
+    ],
+)
+def test_les_journaux_sont_ignores(rag, dossier, nom):
+    (dossier / nom).write_text(
+        "\n\n".join(f"2026-08-01 INFO ligne {i}" for i in range(20)), encoding="utf-8"
+    )
+    index_directory(dossier)
+
+    assert nom not in rag.indexed_documents()
+
+
+@pytest.mark.parametrize(
+    "nom",
+    [
+        # « log » est une sous-chaîne de tous ceux-là : la comparaison
+        # doit porter sur le radical, pas sur une inclusion.
+        "catalogue.txt",
+        "blog.md",
+        "dialogue.txt",
+        "mon journal intime 2026.txt",
+    ],
+)
+def test_les_documents_qui_contiennent_log_restent_indexes(rag, dossier, nom):
+    (dossier / nom).write_text("Contenu parfaitement légitime.", encoding="utf-8")
+    index_directory(dossier)
+
+    assert nom in rag.indexed_documents()
+
+
+def test_les_journaux_ignores_sont_annonces(rag, dossier, capsys):
+    """
+    Ignorés en silence, Cyril chercherait pourquoi son fichier
+    n'apparaît jamais dans les réponses.
+    """
+    (dossier / "log.txt").write_text("2026-08-01 INFO demarrage", encoding="utf-8")
+    index_directory(dossier)
+
+    sortie = capsys.readouterr().out
+    assert "Journaux ignorés" in sortie
+    assert "log.txt" in sortie
+
+
 def test_un_document_qui_ecrase_la_base_est_signale(rag, dossier, capsys):
     """
     Un log.txt de 0,7 Mo a produit 818 morceaux sur 1086 — 75 % du total,
     noyant 38 vrais documents. Signalé, pas retiré d'office : c'est
     peut-être un document légitimement volumineux.
     """
-    gros = "\n\n".join(f"Paragraphe de journal numero {i}." for i in range(300))
-    (dossier / "journal.log").write_text(gros, encoding="utf-8")
+    # ⚠️ PAS un nom de journal : « journal.log » serait écarté en amont et
+    # ce test passerait sans jamais vérifier l'avertissement de dominance.
+    # C'est un document volumineux mais légitime qu'on veut ici — une
+    # thèse, un compte rendu de plusieurs centaines de pages.
+    gros = "\n\n".join(f"Chapitre {i} du memoire, avec son contenu." for i in range(300))
+    (dossier / "memoire_complet.txt").write_text(gros, encoding="utf-8")
     index_directory(dossier)
 
     sortie = capsys.readouterr().out
-    assert "journal.log" in sortie
+    assert "memoire_complet.txt" in sortie
     assert "% de la base" in sortie
+    assert "écrase les autres" in sortie
 
 
 # ── Sécurité ──────────────────────────────────────────────────────────

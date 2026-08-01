@@ -45,7 +45,23 @@ from config import DOCUMENTS_DIR  # noqa: E402
 from modules.rag_manager import RAGManager  # noqa: E402
 
 # Formats lus sans dépendance supplémentaire.
-TEXT_SUFFIXES = {".txt", ".md", ".markdown", ".rst", ".csv", ".json", ".log"}
+#
+# ⚠️ « .log » a été RETIRÉ le 01/08/2026. Un journal est volumineux,
+# répétitif et sans valeur documentaire : celui de Cyril produisait 818
+# morceaux sur 1083, soit 76 % de la base, et la recherche ne remontait
+# pratiquement que lui — 35 vrais documents devenus introuvables.
+TEXT_SUFFIXES = {".txt", ".md", ".markdown", ".rst", ".csv", ".json"}
+
+# ⚠️ L'extension ne suffit PAS. Le fichier en cause s'appelait « log.txt » :
+# retirer « .log » de la liste ci-dessus ne l'aurait pas écarté, et il
+# serait revenu au passage suivant. D'où ce second test, sur le nom.
+#
+# Comparé au RADICAL (nom sans extension), pas en sous-chaîne : « log »
+# dans « catalogue », « blog » ou « dialogue » ne doit rien déclencher.
+LOG_SUFFIXES = {".log"}
+LOG_STEMS = {"log", "logs", "journal", "debug", "trace", "output", "stdout", "stderr"}
+LOG_PREFIXES = ("log_", "log-", "logs_", "logs-", "debug_", "debug-", "trace_")
+LOG_SUFFIXES_IN_NAME = ("_log", "-log", "_logs", "-logs", "_debug", "-debug")
 
 # Le PDF demande pypdf (installé le 01/08/2026 à la demande de Cyril :
 # ses contrats et relevés sont dans ce format). Traité à part parce que
@@ -202,6 +218,24 @@ def _read(path: Path) -> tuple[str | None, str]:
     return (texte, "") if texte is not None else (None, "encodage illisible")
 
 
+def looks_like_a_log(path: Path) -> bool:
+    """
+    Ce fichier est-il un journal ?
+
+    Sur l'extension ET sur le radical du nom : le journal de Cyril
+    s'appelait « log.txt », donc l'extension seule l'aurait laissé passer.
+    """
+    if path.suffix.lower() in LOG_SUFFIXES:
+        return True
+
+    stem = path.stem.lower().strip()
+    return (
+        stem in LOG_STEMS
+        or stem.startswith(LOG_PREFIXES)
+        or stem.endswith(LOG_SUFFIXES_IN_NAME)
+    )
+
+
 def looks_like_secrets(name: str) -> bool:
     """
     Ce nom de fichier annonce-t-il des identifiants ?
@@ -219,16 +253,24 @@ def looks_like_secrets(name: str) -> bool:
 
 def _collect(
     directory: Path, allow_secrets: bool = False
-) -> tuple[list[Path], dict[str, list[str]], list[str]]:
-    """Fichiers indexables, formats non gérés, et secrets refusés."""
+) -> tuple[list[Path], dict[str, list[str]], list[str], list[str]]:
+    """Fichiers indexables, formats non gérés, secrets refusés, journaux."""
     indexable: list[Path] = []
     unsupported: dict[str, list[str]] = {}
     secrets: list[str] = []
+    logs: list[str] = []
 
     for path in sorted(directory.rglob("*")):
         if not path.is_file() or path.name.startswith("."):
             continue
         if path.name.lower() in EXCLUDED_NAMES:
+            continue
+
+        # ⚠️ Le test « journal » passe avant le test d'extension : un
+        # « log.txt » a une extension parfaitement lisible, c'est son nom
+        # qui le disqualifie.
+        if looks_like_a_log(path):
+            logs.append(path.name)
             continue
 
         suffix = path.suffix.lower()
@@ -237,15 +279,15 @@ def _collect(
                 unsupported.setdefault(suffix, []).append(path.name)
             continue
 
-        # ⚠️ Le refus passe AVANT tout le reste : un fichier de secrets ne
-        # doit pas être lu, même pour vérifier qu'il est lisible.
+        # ⚠️ Le refus passe AVANT la lecture : un fichier de secrets ne
+        # doit pas être ouvert, même pour vérifier qu'il est lisible.
         if not allow_secrets and looks_like_secrets(path.name):
             secrets.append(path.name)
             continue
 
         indexable.append(path)
 
-    return indexable, unsupported, secrets
+    return indexable, unsupported, secrets, logs
 
 
 def _explain_unsupported(unsupported: dict[str, list[str]]) -> None:
@@ -284,7 +326,9 @@ def index_directory(
             rag.remove_document(doc_id)
         print(f"Base vidée : {len(connus)} document(s) retiré(s).\n")
 
-    fichiers, non_geres, secrets = _collect(directory, allow_secrets=allow_secrets)
+    fichiers, non_geres, secrets, logs = _collect(
+        directory, allow_secrets=allow_secrets
+    )
 
     # ⚠️ Affiché AVANT l'indexation, et en tête : c'est ce que Cyril doit
     # voir même s'il ne lit que les premières lignes.
@@ -298,6 +342,10 @@ def index_directory(
             "    réponse. Déplacer ces fichiers hors du dossier indexé.\n"
             "    Passer outre (à vos risques) : --autoriser-secrets\n"
         )
+
+    if logs:
+        apercu = ", ".join(logs[:4]) + (f" (+{len(logs) - 4})" if len(logs) > 4 else "")
+        print(f"Journaux ignorés ({len(logs)}) : {apercu}\n")
 
     if not fichiers:
         print(f"Aucun fichier indexable dans {directory}")
