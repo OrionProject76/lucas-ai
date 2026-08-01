@@ -135,6 +135,23 @@ Le mot "agent" employé dans `VISION_LONG_TERME.md` (§2, Pilier 2 : « agent pe
 « agent exécuteur ») désigne des **modules** au sens ci-dessus, pas des LLM autonomes —
 la vision et la règle 12 ne se contredisent donc pas.
 
+## 🚀 Autonomie d'exécution (acté le 01/08/2026)
+
+Cyril fait confiance au jugement technique de Claude Code. À partir de maintenant, avance en autonomie sur :
+- L'implémentation de ce qui est déjà planifié dans ROADMAP.md et validé dans un plan approuvé
+- Les tests, corrections de bugs, refactoring qui ne changent pas le comportement observable
+- Les commits et push — commite et pousse automatiquement après chaque étape testée et fonctionnelle, sans demander "je pousse ?" à chaque fois
+- Les choix d'implémentation mineurs (nommage, structure de fichier, détails qui n'engagent pas Cyril)
+- La revue de code de l'existant, la détection d'incohérences entre la doc et le code
+
+Reviens systématiquement vers Cyril AVANT d'agir, même en autonomie, uniquement dans ces cas :
+1. Sécurité : tout ce qui touche à un accès réseau externe, l'envoi de données hors de la machine, ou une donnée sensible (finance, documents personnels, identité)
+2. Contradiction avec une règle de CLAUDE.md ou VISION_LONG_TERME.md — la règle ne se modifie jamais silencieusement
+3. Choix d'architecture engageant plusieurs semaines de travail ou difficile à défaire (ex : changement de moteur de rendu, de framework, de modèle LLM principal)
+4. Ambiguïté réelle entre plusieurs options qui changent le résultat final pour Cyril, sans réponse évidente
+
+Dans ces 4 cas : présenter un plan clair (comme pour la règle 3 et le TTS), attendre validation explicite avant d'exécuter. Dans tous les autres cas : avancer, tester, committer, pousser, puis résumer ce qui a été fait — sans attendre de permission à chaque étape.
+
 ## 📁 Structure Dossiers
 ```
 C:/OrionAI/
