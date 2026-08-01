@@ -11,6 +11,11 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# --- Secrets (le modèle .env.example reste versionné) ---
+.env
+.env.local
+!.env.example
+
 # --- Outils IA / éditeurs ---
 .aider*
 .vscode/

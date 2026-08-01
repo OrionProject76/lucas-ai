@@ -1,5 +1,18 @@
 # config.py — tous les réglages d'Orion au même endroit
 
+import os
+from pathlib import Path
+
+# Charge le fichier .env s'il existe (secrets locaux, jamais versionnés).
+# python-dotenv est optionnel : sans lui, les variables d'environnement
+# système restent lues normalement et l'app démarre quand même.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).parent / ".env")
+except ImportError:
+    pass
+
 # --- IA locale (Ollama) ---
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "qwen2.5"
@@ -12,7 +25,10 @@ OLLAMA_CONNECT_TIMEOUT = 10   # secondes pour se connecter à Ollama
 OLLAMA_READ_TIMEOUT = 120     # secondes pour recevoir la réponse
 
 # --- IA cloud (optionnel, désactivé pour l'instant) ---
-OPENAI_API_KEY = ""
+# Jamais de clé en dur ici : ce fichier est suivi par git.
+# La valeur vient de .env (ignoré par git) ou des variables d'environnement.
+# Voir .env.example pour le modèle. Chaîne vide = cloud désactivé.
+OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 
 # --- Mémoire ---
 DB_PATH = "memory/orion_memory.db"
