@@ -34,6 +34,12 @@ piper-tts>=1.6.0         # TTS local (modules/piper_engine.py) — voix à
                          # télécharger : python -m piper.download_voices
 pygame>=2.6.0            # Lecture audio du TTS
 Pillow>=12.0.0           # Images pour le VLM (modules/vision_manager.py)
+# OCR : llava ne sait pas lire un écran (redimensionnement interne vers
+# ~336 px, le texte devient illisible). RapidOCR extrait le texte exact
+# en CPU sur onnxruntime, déjà présent via chromadb et Piper.
+# easyocr, prévu par mission_01, est écarté : il tire torch (~2,5 Go) et
+# utilise le GPU — soit la contention avec Ollama qu'on cherche à éviter.
+rapidocr-onnxruntime>=1.4.0
 
 # ─── Canal WebSocket & télémétrie ──────────
 # websockets : uvicorn s'en sert pour servir /ws — c'est la seule

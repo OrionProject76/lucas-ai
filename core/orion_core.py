@@ -2,6 +2,8 @@
 
 from config import (
     CLOUD_HISTORY_MESSAGES,
+    OCR_ENABLED,
+    OCR_MAX_CHARS,
     RECENT_EVENTS_IN_PROMPT,
     SYSTEM_PROMPT,
     VISION_ENABLED,
@@ -123,37 +125,103 @@ class OrionCore:
             from modules.vision_manager import VisionManager
 
             vision = VisionManager(model=VLM_MODEL)
-            # On transmet la vraie question au VLM plutôt qu'un « décris
-            # cette image » générique. « C'est quoi cette erreur ? »
-            # obtient une réponse ciblée ; la description passe-partout
-            # obligerait le LLM principal à deviner ce qui compte dans un
-            # écran entier, et perdrait justement le détail demandé.
-            description = vision.analyze_image(
-                vision.capture_screen(), self._vision_prompt(user_message)
-            )
+            # Une seule capture, deux lectures : l'OCR pour le texte
+            # exact, le VLM pour le contexte visuel. Recapturer entre les
+            # deux donnerait deux écrans différents si Cyril change de
+            # fenêtre entre-temps.
+            screenshot = vision.capture_screen()
         except Exception as e:  # noqa: BLE001 — voir docstring
             self.log_event("vision_failed", str(e)[:200])
             return ""
 
-        if not description or description.startswith("Erreur"):
-            self.log_event("vision_failed", description[:200])
+        screen_text = self._read_screen_text(screenshot)
+        visual = self._describe_visual_context(vision, screenshot, user_message)
+
+        if not screen_text and not visual:
+            self.log_event("vision_failed", "ni OCR ni VLM exploitables")
             return ""
 
+        # ⚠️ On journalise l'usage, JAMAIS le contenu. Le texte OCR est du
+        # verbatim d'écran — mot de passe affiché, relevé ouvert. La table
+        # d'événements ne doit pas en devenir une copie.
         self.log_event("vision_used", user_message[:80])
-        # ⚠️ Le bloc doit DONNER UN ORDRE, pas seulement décrire. Rédigé
-        # comme un simple constat, qwen l'ignorait et répondait « je ne
-        # peux pas voir l'écran » — alors que la description était juste
-        # au-dessus dans son contexte. Un modèle de texte affirme par
-        # défaut qu'il n'a pas d'yeux ; il faut le contredire
-        # explicitement.
-        return (
-            "TU VIENS DE REGARDER L'ÉCRAN DE CYRIL. Voici ce que tu y as vu :\n"
-            f"{description}\n"
-            "Réponds à sa question en t'appuyant sur cette observation. "
-            "Ne dis JAMAIS que tu ne peux pas voir l'écran : tu viens de le "
-            "faire. Si l'observation est incomplète, dis ce que tu as vu et "
-            "ce qui te manque."
+        return self._compose_vision_block(screen_text, visual)
+
+    def _read_screen_text(self, screenshot: str) -> str:
+        """Texte exact lu à l'écran, ou chaîne vide si l'OCR n'a rien donné."""
+        if not OCR_ENABLED:
+            return ""
+
+        try:
+            from modules.ocr_engine import OCREngine
+
+            result = OCREngine().extract_text(screenshot)
+        except Exception as e:  # noqa: BLE001 — un OCR absent dégrade la
+            # réponse, il ne doit pas empêcher Luca's de répondre.
+            self.log_event("ocr_failed", str(e)[:120])
+            return ""
+
+        if result.is_empty:
+            return ""
+        return result.text[:OCR_MAX_CHARS]
+
+    def _describe_visual_context(self, vision, screenshot: str, user_message: str) -> str:
+        """Description du VLM, ou chaîne vide s'il a échoué."""
+        try:
+            description = vision.analyze_image(
+                screenshot, self._vision_prompt(user_message)
+            )
+        except Exception as e:  # noqa: BLE001
+            self.log_event("vision_failed", str(e)[:120])
+            return ""
+
+        if not description or description.startswith("Erreur"):
+            return ""
+        return description.strip()
+
+    @staticmethod
+    def _compose_vision_block(screen_text: str, visual: str) -> str:
+        """
+        Assemble le bloc injecté dans le prompt.
+
+        Le point décisif est la HIÉRARCHIE : sans elle, le LLM accorde la
+        même confiance à une transcription exacte et à une description
+        approximative, et invente un mélange des deux.
+
+        ⚠️ La phrase « ne dis JAMAIS que tu ne peux pas voir » est
+        conservée telle quelle : c'est elle qui a corrigé le refus de
+        qwen, qui répondait « je ne peux pas voir l'écran » alors que la
+        description était dans son contexte. La retirer ferait revenir le
+        bug.
+        """
+        parts = ["TU VIENS DE REGARDER L'ÉCRAN DE CYRIL."]
+
+        if screen_text:
+            parts.append(
+                "\nTexte lu à l'écran (transcription exacte, fiable) :\n"
+                f"{screen_text}"
+            )
+
+        if visual:
+            parts.append(
+                "\nContexte visuel (application et disposition — indicatif, "
+                f"peut se tromper) :\n{visual}"
+            )
+
+        if screen_text and not visual:
+            parts.append(
+                "\nLe contexte visuel n'a pas pu être établi : appuie-toi "
+                "sur le texte seul."
+            )
+
+        parts.append(
+            "\nAppuie-toi d'abord sur le texte exact pour tout ce qui est "
+            "écrit ; le contexte visuel sert à situer. Ne dis JAMAIS que tu "
+            "ne peux pas voir l'écran : tu viens de le faire. Si "
+            "l'observation est incomplète, dis ce que tu as vu et ce qui "
+            "te manque."
         )
+        return "\n".join(parts)
 
     def ask(self, user_message: str) -> str:
         self.memory.save_message("user", user_message)

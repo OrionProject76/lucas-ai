@@ -64,6 +64,19 @@ VLM_MODEL = "llava"
 # reste ici. Voir CLAUDE.md règle 3.
 VISION_ENABLED: bool = True
 
+# ── OCR : lecture du texte affiché ────────────────────────────────────
+# llava ne sait pas lire un écran (redimensionnement interne vers ~336 px,
+# le texte devient illisible). L'OCR extrait le texte exact en CPU, le VLM
+# garde le contexte visuel. Voir modules/ocr_engine.py.
+OCR_ENABLED: bool = True
+
+# Un écran 4K peut produire plusieurs milliers de caractères. Sans borne,
+# le texte de l'écran noierait le reste du prompt — historique, événements,
+# prompt système.
+OCR_MAX_CHARS: int = 2000
+
+OCR_LANGUAGES = ["fr", "en"]
+
 # --- Voix : transcription (STT) ---
 # « base » ≈ 150 Mo, suffisant pour la v1.0 ; « small » ≈ 500 Mo, plus
 # précis, envisagé en v1.1 (mission_10_stt_engine.md).

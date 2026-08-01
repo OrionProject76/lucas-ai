@@ -218,7 +218,138 @@ def test_injected_block_is_an_instruction_not_a_statement(core, monkeypatch) -> 
     messages = core._build_messages("regarde mon écran", "local")
     block = next(m["content"] for m in messages if VISION_MARKER in m["content"])
 
-    assert "Réponds à sa question" in block, "le bloc doit donner un ordre"
+    assert "Appuie-toi d'abord" in block, "le bloc doit donner un ordre"
+
+
+# ── Vision hybride : OCR + VLM ────────────────────────────────────────
+
+def _fake_ocr(monkeypatch, text: str, raises=None):
+    """Remplace le moteur OCR sans toucher au disque."""
+    from modules.ocr_engine import OCRResult
+
+    class _FakeOCREngine:
+        def extract_text(self, path):
+            if raises:
+                raise raises
+            return OCRResult(text=text, lines=text.splitlines())
+
+    monkeypatch.setattr("modules.ocr_engine.OCREngine", _FakeOCREngine)
+
+
+def test_ocr_text_reaches_the_prompt(core, monkeypatch) -> None:
+    _fake_vision(monkeypatch, "un terminal")
+    _fake_ocr(monkeypatch, "FileNotFoundError: config.json")
+
+    messages = core._build_messages("c'est quoi cette erreur à l'écran ?", "local")
+    block = next(m["content"] for m in messages if VISION_MARKER in m["content"])
+
+    assert "FileNotFoundError: config.json" in block
+    assert "un terminal" in block
+
+
+def test_ocr_failure_leaves_the_vlm_alone(core, monkeypatch) -> None:
+    """Comportement d'avant l'OCR : la vision doit rester utilisable."""
+    _fake_vision(monkeypatch, "un éditeur de code")
+    _fake_ocr(monkeypatch, "", raises=RuntimeError("moteur absent"))
+
+    messages = core._build_messages("regarde mon écran", "local")
+    block = next(m["content"] for m in messages if VISION_MARKER in m["content"])
+
+    assert "un éditeur de code" in block
+    assert "ocr_failed" in [t for t, _ in core.memory.events]
+
+
+def test_vlm_failure_leaves_the_ocr_alone(core, monkeypatch) -> None:
+    _fake_vision(monkeypatch, "Erreur analyse (modèle absent)")
+    _fake_ocr(monkeypatch, "Solde : 3200 euros")
+
+    messages = core._build_messages("regarde mon écran", "local")
+    block = next(m["content"] for m in messages if VISION_MARKER in m["content"])
+
+    assert "Solde : 3200 euros" in block
+    assert "contexte visuel n'a pas pu" in block
+
+
+def test_both_failing_produces_no_block(core, monkeypatch) -> None:
+    _fake_vision(monkeypatch, "Erreur analyse")
+    _fake_ocr(monkeypatch, "", raises=RuntimeError("absent"))
+
+    messages = core._build_messages("regarde mon écran", "local")
+
+    assert not any(VISION_MARKER in m["content"] for m in messages)
+    assert "vision_failed" in [t for t, _ in core.memory.events]
+
+
+def test_long_screen_text_is_truncated(core, monkeypatch) -> None:
+    """
+    Un écran 4K produit des milliers de caractères. Sans borne, le texte
+    de l'écran noierait l'historique et le prompt système.
+    """
+    from config import OCR_MAX_CHARS
+
+    _fake_vision(monkeypatch, "un terminal")
+    # Caractère absent du texte d'instruction, sinon le compte inclut
+    # les « x » de « exact » et le test ment.
+    _fake_ocr(monkeypatch, "ZZ" * OCR_MAX_CHARS)
+
+    messages = core._build_messages("regarde mon écran", "local")
+    block = next(m["content"] for m in messages if VISION_MARKER in m["content"])
+
+    assert block.count("Z") <= OCR_MAX_CHARS
+
+
+def test_screen_text_is_never_logged(core, monkeypatch) -> None:
+    """
+    Le texte OCR est du verbatim d'écran. La table d'événements ne doit
+    pas en devenir une copie — on journalise l'usage, jamais le contenu.
+    """
+    secret = "IBAN FR76 3000 4000 0512 3456 7890"
+    _fake_vision(monkeypatch, "un navigateur")
+    _fake_ocr(monkeypatch, secret)
+
+    core._build_messages("regarde mon écran", "local")
+
+    for _event_type, details in core.memory.events:
+        assert secret not in details
+
+
+def test_ocr_can_be_disabled(core, monkeypatch) -> None:
+    monkeypatch.setattr(orion_core, "OCR_ENABLED", False)
+    _fake_vision(monkeypatch, "un terminal")
+
+    def must_not_be_called():
+        raise AssertionError("OCR_ENABLED=False doit couper l'OCR")
+
+    monkeypatch.setattr("modules.ocr_engine.OCREngine", must_not_be_called)
+
+    messages = core._build_messages("regarde mon écran", "local")
+    block = next(m["content"] for m in messages if VISION_MARKER in m["content"])
+    assert "un terminal" in block
+
+
+def test_the_screen_is_captured_only_once(core, monkeypatch) -> None:
+    """
+    Recapturer entre l'OCR et le VLM donnerait deux écrans différents si
+    Cyril change de fenêtre entre-temps.
+    """
+    captures: list[str] = []
+
+    class _CountingVisionManager:
+        def __init__(self, model=None):
+            pass
+
+        def capture_screen(self, output_path=None):
+            captures.append("capture")
+            return "data/screenshot.png"
+
+        def analyze_image(self, path, prompt=None):
+            return "un terminal"
+
+    monkeypatch.setattr("modules.vision_manager.VisionManager", _CountingVisionManager)
+    _fake_ocr(monkeypatch, "du texte")
+
+    core._build_messages("regarde mon écran", "local")
+    assert len(captures) == 1
 
 
 # ── Dégradation ───────────────────────────────────────────────────────
@@ -227,8 +358,15 @@ def test_vlm_failure_does_not_block_the_answer(core, monkeypatch) -> None:
     """
     Une vision indisponible doit dégrader la réponse, pas empêcher
     Luca's de répondre.
+
+    Depuis l'arrivée de l'OCR, un VLM en panne ne supprime plus le bloc :
+    le texte lu à l'écran suffit. Il faut donc couper les DEUX sources
+    pour retrouver l'absence de bloc — c'est ce que vérifie
+    test_both_failing_produces_no_block.
     """
     _fake_vision(monkeypatch, "Erreur analyse (modèle llava peut-être non installé)")
+    _fake_ocr(monkeypatch, "", raises=RuntimeError("moteur absent"))
+
     messages = core._build_messages("regarde mon écran", "local")
 
     assert not any(VISION_MARKER in m["content"] for m in messages)
