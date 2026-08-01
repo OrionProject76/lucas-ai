@@ -23,6 +23,7 @@
 # vigilance avant qu'on lui confie les clés.
 
 from security.guardian import Guardian
+from security.monitor import SecurityMonitor
 from security.privacy_shield import PrivacyShield
 from security.ransomware_watch import RansomwareWatch
 from security.types import CRITICAL, INFO, WARNING, Finding, format_report
@@ -35,5 +36,6 @@ __all__ = [
     "Guardian",
     "PrivacyShield",
     "RansomwareWatch",
+    "SecurityMonitor",
     "format_report",
 ]

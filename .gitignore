@@ -41,6 +41,9 @@ modules/data/
 data/voices/
 data/output_piper.wav
 
+# État de la surveillance sécurité (empreintes des signaux déjà vus)
+data/security_state.json
+
 # Relevés bancaires réels de Cyril — ne doivent JAMAIS être versionnés.
 # Seul data/sample_transactions.csv (données fictives) est suivi.
 data/finance/

@@ -501,6 +501,116 @@ def test_findings_reach_the_event_log(watched) -> None:
     assert "security_ransom_extension" in [t for t, _ in events]
 
 
+# ── Surveillance continue : déduplication ─────────────────────────────
+
+@pytest.fixture
+def monitor(tmp_path):
+    from security.monitor import SecurityMonitor
+
+    events: list[tuple[str, str]] = []
+    mon = SecurityMonitor(
+        log_event=lambda t, d="": events.append((t, d)),
+        state_path=tmp_path / "state.json",
+    )
+    return mon, events
+
+
+def _finding(kind="x", pid=1, severity=CRITICAL) -> Finding:
+    return Finding(severity, kind, "quelque chose", {"process": "a.exe", "pid": pid})
+
+
+def test_a_new_finding_is_reported_once(monitor) -> None:
+    mon, events = monitor
+    assert len(mon._report_new([_finding()])) == 1
+    assert len(events) == 1
+
+
+def test_the_same_finding_is_not_reported_twice(monitor) -> None:
+    """
+    Le cœur du problème d'une surveillance continue : un signal permanent
+    et légitime rapporté toutes les 5 minutes chasserait tout le reste du
+    contexte de Luca's, et Cyril cesserait de lire les rapports.
+    """
+    mon, events = monitor
+    mon._report_new([_finding()])
+    assert mon._report_new([_finding()]) == []
+    assert len(events) == 1
+
+
+def test_pid_change_does_not_recreate_an_alert(monitor) -> None:
+    """Un programme redémarre et change de PID : ce n'est pas un fait nouveau."""
+    mon, _events = monitor
+    mon._report_new([_finding(pid=100)])
+    assert mon._report_new([_finding(pid=999)]) == []
+
+
+def test_a_genuinely_different_finding_is_reported(monitor) -> None:
+    mon, _events = monitor
+    mon._report_new([_finding(kind="a")])
+    assert len(mon._report_new([_finding(kind="b")])) == 1
+
+
+def test_state_survives_a_restart(tmp_path) -> None:
+    """Sans persistance, chaque redémarrage du daemon rejouerait tout."""
+    from security.monitor import SecurityMonitor
+
+    state = tmp_path / "state.json"
+    first = SecurityMonitor(state_path=state)
+    first._report_new([_finding()])
+
+    second = SecurityMonitor(state_path=state)
+    assert second._report_new([_finding()]) == []
+
+
+def test_forgotten_findings_are_reported_again(tmp_path, monkeypatch) -> None:
+    """
+    Un programme suspect qui disparaît puis revient trois jours plus tard
+    est une information, pas un doublon.
+    """
+    from security import monitor as mon_module
+    from security.monitor import SecurityMonitor
+
+    state = tmp_path / "state.json"
+    first = SecurityMonitor(state_path=state)
+    first._report_new([_finding()])
+
+    monkeypatch.setattr(mon_module, "FORGET_AFTER_SECONDS", -1)
+    second = SecurityMonitor(state_path=state)
+    assert len(second._report_new([_finding()])) == 1
+
+
+def test_info_findings_are_returned_but_not_logged(monitor) -> None:
+    """Un INFO mérite le rapport, pas une ligne en base à chaque fois."""
+    mon, events = monitor
+    fresh = mon._report_new([_finding(severity=INFO)])
+    assert len(fresh) == 1
+    assert events == []
+
+
+def test_corrupted_state_file_does_not_crash(tmp_path) -> None:
+    from security.monitor import SecurityMonitor
+
+    state = tmp_path / "state.json"
+    state.write_text("ceci n'est pas du json", encoding="utf-8")
+    assert SecurityMonitor(state_path=state)._seen == {}
+
+
+def test_forget_all_makes_everything_reportable(monitor) -> None:
+    mon, _events = monitor
+    mon._report_new([_finding()])
+    mon.forget_all()
+    assert len(mon._report_new([_finding()])) == 1
+
+
+def test_monitor_never_acts() -> None:
+    """Le moniteur n'agit pas davantage que les capteurs qu'il orchestre."""
+    from security import monitor as mon_module
+
+    source = inspect.getsource(mon_module)
+    for call in ("kill(", "terminate(", "shutdown(", "suspend("):
+        assert call not in source
+
+
 # ── Rapport ───────────────────────────────────────────────────────────
 
 def test_empty_report_is_reassuring_not_empty() -> None:

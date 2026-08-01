@@ -108,6 +108,7 @@ class OrionDaemon:
     def __init__(self):
         self.running = True
         self.tasks_completed_today = 0
+        self._monitor = None  # SecurityMonitor, chargé au premier balayage
         init_db()
         log("🌌 Orion Daemon initialisé.")
 
@@ -316,7 +317,66 @@ class OrionDaemon:
             log(f"❌ Exception tests: {e}")
             db_log_task("auto_tests", "failed", error=str(e))
 
-    # ── 7. Rapport matinal ──────────────────────────────────
+    # ── 7. Surveillance sécurité continue ───────────────────
+    #
+    # Observation seule : les capteurs détectent et rapportent, ils
+    # n'agissent jamais (VISION_LONG_TERME.md §4.1). Le moniteur ne
+    # signale que les nouveautés — un signal permanent et légitime ne
+    # doit pas revenir toutes les cinq minutes.
+
+    def _security_monitor(self):
+        """Créé à la demande : évite de charger security/ si inutilisé."""
+        if self._monitor is None:
+            from security import SecurityMonitor
+
+            self._monitor = SecurityMonitor(log_event=self._save_security_event)
+        return self._monitor
+
+    def _save_security_event(self, event_type: str, details: str = ""):
+        """
+        Les signaux vont dans memory/orion_memory.db, pas dans la base du
+        daemon : c'est cette table que Luca's injecte dans son contexte.
+        Un capteur dont personne ne lit les résultats ne sert à rien.
+        """
+        try:
+            from memory.memory_manager import MemoryManager
+
+            memory = MemoryManager()
+            memory.save_event(event_type, details)
+            memory.close()
+        except Exception as e:
+            log(f"⚠️ Événement sécurité non enregistré : {e}", "WARN")
+
+    def _run_security_scan(self, task_name: str, scan):
+        """Tronc commun des deux balayages : journalisation et garde-fous."""
+        db_log_task(task_name, "started")
+        try:
+            findings = scan()
+        except Exception as e:
+            log(f"❌ Balayage {task_name} en échec : {e}", "ERROR")
+            db_log_task(task_name, "failed", error=str(e))
+            return
+
+        if not findings:
+            db_log_task(task_name, "success", "Aucun signal nouveau")
+            return
+
+        # La gravité du capteur pilote le niveau de log : un signal INFO
+        # écrit en WARN ferait passer du bruit pour une alerte.
+        levels = {"info": "INFO", "warning": "WARN", "critical": "ERROR"}
+        for finding in findings:
+            log(f"🛡️ {finding.summary}", levels.get(finding.severity, "INFO"))
+        db_log_task(task_name, "success", f"{len(findings)} signal(s) nouveau(x)")
+
+    def security_scan_runtime(self):
+        """Process et connexions réseau — rapide."""
+        self._run_security_scan("security_runtime", self._security_monitor().scan_runtime)
+
+    def security_scan_filesystem(self):
+        """Fichiers : rançongiciel, appâts — plus lent, donc plus espacé."""
+        self._run_security_scan("security_filesystem", self._security_monitor().scan_filesystem)
+
+    # ── 8. Rapport matinal ──────────────────────────────────
     def generate_morning_report(self):
         """Génère un rapport résumé de la nuit."""
         log("📧 [TÂCHE] Génération rapport matinal...")
@@ -391,6 +451,11 @@ class OrionDaemon:
         schedule.every(5).minutes.do(self.log_emotion)
         schedule.every().hour.do(self.run_tests)
 
+        # Surveillance sécurité. Deux cadences : le runtime est peu coûteux,
+        # le balayage fichiers parcourt ~9000 entrées et mérite d'être espacé.
+        schedule.every(5).minutes.do(self.security_scan_runtime)
+        schedule.every(15).minutes.do(self.security_scan_filesystem)
+
         # Rapport matinal
         schedule.every().day.at("08:00").do(self.generate_morning_report)
 
@@ -400,6 +465,8 @@ class OrionDaemon:
         log("   • 04h00 : Cleanup nocturne")
         log("   • Toutes les 30s : Screenshot")
         log("   • Toutes les 5min : Log émotion")
+        log("   • Toutes les 5min : Sécurité — process et réseau")
+        log("   • Toutes les 15min : Sécurité — fichiers (rançongiciel)")
         log("   • Toutes les heures : Tests auto")
         log("   • 08h00 : Rapport matinal")
 

@@ -70,7 +70,9 @@ Sécurité validée : **liste blanche et confirmation pour toute action système
 
 La détection de rançongiciel repose sur les **métadonnées seules** (extensions connues, notes de rançon, rafale de modifications) et sur des **fichiers-appâts** déployés explicitement. Elle ne lit jamais le contenu des documents : l'analyse d'entropie serait plus fiable mais obligerait le capteur à ouvrir les fichiers personnels — décision qui revient à Cyril.
 
-Prochains niveaux envisageables : suivi des hooks clavier (keylogger), historique des connexions pour repérer les anomalies dans la durée, surveillance continue plutôt qu'à la demande.
+**Surveillance continue branchée sur le daemon** (01/08/2026) : `SecurityMonitor` orchestre les trois capteurs depuis `orion_daemon.py` — process et réseau toutes les 5 minutes, fichiers toutes les 15. Les signaux ne sont rapportés qu'une fois : un état persistant (`data/security_state.json`) déduplique d'un balayage à l'autre et d'un redémarrage à l'autre, et oublie un signal après 3 jours d'absence pour que son retour soit de nouveau une information. Les alertes atterrissent dans `system_events`, donc dans le contexte que Luca's injecte au LLM.
+
+Prochains niveaux envisageables : suivi des hooks clavier (keylogger), historique des connexions pour repérer les anomalies dans la durée, analyse d'entropie du contenu des fichiers (nécessite l'accord de Cyril — le capteur ouvrirait ses documents).
 
 **Nouveau principe acté le 01/08/2026 — la liberté est conditionnée à la protection.** Guardian et Privacy Shield (`security/`) deviennent une dépendance directe de toute extension future des libertés d'action de Luca's : plus ils sont matures et testés, plus le périmètre d'autonomie peut s'élargir. Concrètement pour le séquencement de ce fichier, aucune phase n'ouvre de nouveaux droits d'action (OS Controller, automation, exécution autonome) tant que ces deux modules ne sont pas au moins ébauchés et testés. Ils n'appartiennent donc plus au « polish » de la Phase 5 — ce sont des prérequis. Doctrine : `VISION_LONG_TERME.md` §4.1, résumé opposable : `CLAUDE.md`.
 

@@ -2,8 +2,10 @@
 # Installation : pip install -r requirements_daemon.txt
 #
 # Réduit le 01/08/2026 à ce que orion_daemon.py importe réellement.
-# Le daemon est autonome : il n'importe ni core/ ni modules/, il parle
-# directement à SQLite. Pas besoin de requirements.txt pour le lancer.
+# Le daemon n'importe ni core/ ni modules/. Depuis le branchement de la
+# surveillance sécurité, il importe security/ et memory/ — qui n'ajoutent
+# aucune dépendance externe au-delà de psutil, déjà listé ci-dessous.
+# Pas besoin de requirements.txt pour lancer le daemon.
 
 # ─── Base ──────────────────────────────────
 schedule>=1.2.0          # Planning des tâches cron-like

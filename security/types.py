@@ -9,6 +9,11 @@ CRITICAL = "critical"
 # Ordre d'affichage : le plus grave d'abord.
 SEVERITY_ORDER = {CRITICAL: 0, WARNING: 1, INFO: 2}
 
+# Champs qui bougent d'un balayage à l'autre sans que le signal change.
+VOLATILE_EVIDENCE_KEYS = frozenset({
+    "pid", "total", "fichiers_modifies", "distant", "exemple",
+})
+
 SEVERITY_LABELS = {
     INFO: "ℹ️  INFO",
     WARNING: "⚠️  ATTENTION",
@@ -33,6 +38,20 @@ class Finding:
     kind: str
     summary: str
     evidence: dict = field(default_factory=dict)
+
+    def fingerprint(self) -> str:
+        """
+        Identité stable d'un signal, pour ne pas ré-alerter à chaque
+        balayage sur la même chose.
+
+        Les champs volatils sont exclus : un PID change à chaque
+        redémarrage du programme, un compteur varie à chaque passage.
+        Les inclure ferait ré-alerter en boucle sur un signal identique,
+        et le rapport deviendrait du bruit qu'on cesse de lire.
+        """
+        stable = {k: v for k, v in self.evidence.items() if k not in VOLATILE_EVIDENCE_KEYS}
+        facts = "|".join(f"{k}={v}" for k, v in sorted(stable.items()))
+        return f"{self.kind}|{facts}"
 
     def as_event(self) -> tuple[str, str]:
         """Convertit en (event_type, details) pour MemoryManager.save_event."""
