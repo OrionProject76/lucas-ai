@@ -369,3 +369,73 @@ réellement engagé maintenant est volontairement restreint — voir
 ROADMAP.md §2 pour la brique de base (PWA chat + micro + avatar léger),
 qui doit être stable et prouvée avant d'envisager Tasker, Android Auto,
 ou l'automatisation domotique/PC.
+
+---
+
+# Addendum IDEAS.md / VISION_LONG_TERME.md — Session du 02/08/2026
+# Écoute et vision contextuelles selon "maison" vs "dehors"
+
+À intégrer dans IDEAS.md (nouvelle entrée catalogue) ET comme précision
+dans VISION_LONG_TERME.md §4 (philosophie de sécurité).
+
+---
+
+## 71. Écoute/vision ambiante contextuelle — "chez moi" vs "dehors"
+
+Clarification apportée par Cyril le 02/08/2026, en réponse à une
+proposition d'écoute ambiante permanente généralisée (rejetée telle
+quelle — voir ci-dessous pourquoi).
+
+**Principe retenu, différent de "toujours écouter partout" :**
+- **Contexte "à la maison"** (PC/avatar actif, Cyril chez lui) : micro du
+  téléphone ouvert en continu, analyse sémantique ambiante active — pas
+  besoin de mot-clé de déclenchement. Justification de Cyril : *"à la
+  maison je n'ai rien à cacher"*.
+- **Contexte "dehors"** (téléphone seul, hors de la maison) : activation
+  strictement sur demande explicite (ex. "Luca, s'il te plaît"), jamais
+  d'écoute ambiante en arrière-plan. Même logique pour la lecture
+  d'écran/caméra : sur demande uniquement hors du contexte maison.
+
+**Important — ceci N'EST PAS l'activation de la perception continue
+Astra** discutée et explicitement refusée pour l'instant le 02/08/2026
+(vision long terme, conditionnée à un `security/` plus mature). C'est
+une distinction contextuelle plus fine, pas un retour sur cette décision.
+Reste néanmoins un vrai changement de portée par rapport à ce qui existe
+aujourd'hui (activation uniquement sur bouton/mot précis) — à ne pas
+implémenter sans une nouvelle validation explicite le moment venu, avec
+un plan concret.
+
+### Problème technique non résolu, à garder en tête
+Comment Luca's détermine-t-elle le contexte "maison" vs "dehors" ? Piste
+la plus simple : détection du réseau WiFi connecté (domicile vs
+autre/cellulaire). Pas tranché, pas urgent.
+
+### Contrainte de performance à anticiper
+Une écoute ambiante véritablement continue avec transcription complète
+(Whisper tournant en permanence) serait coûteuse en calcul et en
+batterie côté téléphone. La bonne architecture, le moment venu,
+ressemblerait à la détection de mot-clé légère des assistants
+commerciaux (un tout petit modèle "toujours actif" qui ne déclenche une
+vraie transcription/analyse que sur une activité intéressante) plutôt
+que Whisper qui tourne 24/7. À concevoir en détail quand ce chantier
+sera vraiment lancé, pas maintenant.
+
+---
+
+## 72. Mécanisme de verrouillage en cas de compromission — idée mise en pause, PAS rejetée
+
+Proposition initiale : auto-destruction de l'app mobile si compromission
+détectée (root, extraction de code), réactivation possible uniquement
+par reconnexion USB physique au PC.
+
+**Statut le 02/08/2026 : mise en pause, pas abandonnée.** Risque identifié
+par Claude (via Claude — vérifié avec Cyril) : un faux positif
+(root légitime, mise à jour Android déclenchant une fausse alerte)
+bloquerait Cyril hors de chez lui, sans accès à Luca's, jusqu'à un retour
+physique — le mécanisme pourrait le pénaliser lui-même plus qu'un vrai
+attaquant.
+
+**À rechercher ensemble plus tard** : une alternative moins punitive —
+par exemple une révocation à distance via les listes de contrôle d'accès
+Tailscale plutôt qu'une auto-destruction, ou une confirmation par un
+second canal avant tout verrouillage définitif.
