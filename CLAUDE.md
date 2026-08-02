@@ -398,6 +398,14 @@ avoir relancé un `ollama.exe` enfant en double).
 Ollama si le démarrage automatique avec Windows est activé, et le désactiver
 si c'est le cas, pour éviter que le doublon revienne à chaque redémarrage du PC.
 
+**Fait le 02/08/2026** : un raccourci `Ollama.lnk` était présent dans le
+dossier de démarrage Windows (`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`),
+confirmant que l'appli tray se relançait automatiquement. Déplacé
+(pas supprimé, réversible) vers `...\Startup-Disabled\Ollama.lnk` dans le
+même dossier parent. Un seul `ollama.exe` tournait au moment de la
+vérification (pas de doublon actif ce jour-là), mais le risque se
+reproduirait à chaque redémarrage tant que le raccourci restait en place.
+
 ### SQLite et FastAPI : attention aux threads
 FastAPI traite chaque requête HTTP dans un thread du pool par défaut.
 SQLite refuse par défaut d'être utilisé depuis un thread différent de celui
