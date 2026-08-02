@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from api import protocol
 from core.orion_core import OrionCore
+from core.router import should_use_vision
 from core.world_model import get_snapshot
 
 app = FastAPI(title="Luca's API", version="0.2")
@@ -172,9 +173,31 @@ async def websocket_endpoint(websocket: WebSocket):
             if not message:
                 continue
 
-            await websocket.send_json(protocol.avatar_state(protocol.STATE_THINKING))
-
+            # ⚠️ WATCHING est le TÉMOIN DE CAPTURE D'ÉCRAN — l'équivalent
+            # de la LED d'une webcam. Il existait dans le protocole et
+            # dans les poses du visage Godot, mais RIEN NE L'ÉMETTAIT :
+            # le serveur ne connaissait que idle / thinking / speaking.
+            # Le client 3D ne pouvait donc jamais montrer que Luca's est
+            # en train de regarder l'écran, alors que l'UI PySide6 le fait
+            # depuis le début. Cyril a acté ce témoin comme un signal de
+            # confidentialité, pas comme une décoration.
+            #
+            # La décision est prise AVANT l'appel : orion.ask() capture
+            # l'écran à l'intérieur, et prévenir après coup n'aurait aucun
+            # intérêt — c'est pendant la capture que le témoin compte.
             orion = OrionCore()
+            try:
+                regarde = should_use_vision(message, orion.recent_context())
+            except Exception:  # noqa: BLE001 — un doute sur l'état ne doit
+                # jamais empêcher de répondre.
+                regarde = False
+
+            await websocket.send_json(
+                protocol.avatar_state(
+                    protocol.STATE_WATCHING if regarde else protocol.STATE_THINKING
+                )
+            )
+
             try:
                 answer = orion.ask(message)
             finally:
