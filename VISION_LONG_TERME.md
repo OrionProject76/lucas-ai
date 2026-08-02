@@ -263,3 +263,76 @@ section 3 (décisions moteur/architecture).
 et Desktop Pal sont déjà documentés comme inspirations. AURA correspond
 au système des 8 modes déjà défini (`IDEAS.md`, section 3). DEEPMIND se
 rattache à Astra (ci-dessus).
+# Addendum VISION_LONG_TERME.md — Session du 02/08/2026 — Avatar "vivant", pas robotique
+
+À intégrer dans VISION_LONG_TERME.md, section 1 (Pilier 1 — Le Visuel).
+
+---
+
+## Principe acté le 02/08/2026 : mouvements organiques, pas mécaniques
+
+Distinction importante posée par Cyril, à ne jamais perdre de vue dans le
+développement de l'avatar : la dérive dans l'espace et la respiration
+(implémentées le 02/08) réglent le **mouvement de position**, mais ne
+suffisent pas à donner une impression de vie. L'objectif final n'est pas
+un robot qui bouge dans l'écran, mais une présence qui semble vivante,
+au même titre qu'un visage humain.
+
+Caractéristiques à viser pour la version finale de l'avatar (au-delà de la
+Phase 5 — ROADMAP.md §3 ne définit que les Phases 0 à 5 ; « Phase 6 » utilisé
+ici avant le 02/08/2026 ne correspondait à rien de défini, corrigé lors de
+l'audit de fiabilité — non urgent, mais à garder en tête à chaque itération
+visuelle) :
+
+- **Micro-expressions**, pas seulement des états en blocs (parle/pense/
+  silence) — des nuances intermédiaires (hésitation, concentration,
+  surprise) plutôt que des transitions binaires
+- **Irrégularité organique** : le clignement, la respiration, les
+  mouvements ne doivent jamais être parfaitement périodiques — la
+  perception humaine détecte immédiatement une régularité mécanique
+  parfaite comme "artificielle"
+- **Cohérence émotionnelle** : l'expression doit refléter le contenu
+  et le ton de ce qui est dit, pas juste synchroniser une bouche qui
+  bouge avec un son qui sort
+- **Asymétrie et imperfection légères** : un peu de variation aléatoire
+  dans l'amplitude et la vitesse des mouvements rend le résultat
+  crédible ; le parfaitement symétrique et régulier lit comme
+  artificiel
+
+Ce principe s'applique à toute itération future sur `face_controller.gd`
+et les shaders associés — chaque nouvelle brique de comportement facial
+doit être évaluée à l'aune de "est-ce que ça bouge comme un robot ou
+comme un être vivant", pas seulement "est-ce que ça fonctionne
+techniquement".
+
+---
+
+## Extension du 02/08/2026 (suite) — Personnalité comportementale contextuelle
+
+Précision apportée par Cyril, en plus du principe "mouvements organiques"
+ci-dessus : l'avatar doit exprimer une **personnalité cohérente et
+adaptative**, pas seulement des mouvements crédibles. Traits demandés :
+curieux, discret, joueur, intelligent — capable de moduler son
+comportement selon de multiples paramètres (contexte de conversation,
+contenu de l'écran, sollicitation ou non, situation en cours).
+
+**Ce n'est pas une fonctionnalité isolée — c'est un système de décision
+comportementale**, qui doit lire en continu :
+- Le World Model (`core/world_model.py`) — ce qui se passe sur la machine
+- Le contexte de conversation (`core/intent.py`, l'historique récent)
+- Le contenu de l'écran quand pertinent (vision OCR)
+- Le mode AURA actif (Working/Gaming/Deep Focus/etc., `IDEAS.md` catalogue)
+
+...et en sortir un comportement d'avatar cohérent : présence discrète en
+mode Deep Focus, réactivité ludique en mode Gaming/Social, curiosité
+visible quand une nouvelle information apparaît à l'écran, calme quand
+Luca's parle (déjà acté le 02/08).
+
+**Statut : principe directeur documenté, pas un chantier à lancer
+d'un bloc.** Ce système suppose que les modes AURA (actuellement
+seulement catalogués, pas implémentés) et le socle d'animation de base
+(dérive spatiale, respiration — livrés le 02/08) soient stables avant
+de construire la couche de décision comportementale par-dessus. Ordre
+naturel : mouvements crédibles d'abord, états de présence ensuite,
+personnalité adaptative en dernier — chaque couche a besoin de la
+précédente pour avoir un sens.

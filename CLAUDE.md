@@ -166,6 +166,27 @@ Le mot "agent" employé dans `VISION_LONG_TERME.md` (§2, Pilier 2 : « agent pe
 « agent exécuteur ») désigne des **modules** au sens ci-dessus, pas des LLM autonomes —
 la vision et la règle 12 ne se contredisent donc pas.
 
+### ⚠️ Précision sur la règle 11 — "Piper/Kokoro seuls" (clarifié le 02/08/2026, audit de fiabilité)
+
+Trouvé en auditant la cohérence de la documentation avant le chantier de
+renommage : la règle 11 dit « PAS de voice cloning avancé/XTTS — Piper/Kokoro
+seuls », mais la section TTS ci-dessus (« La même règle s'applique à la voix »,
+01/08/2026) fait d'**edge_tts le moteur par défaut** — Piper n'intervient que
+pour le contenu sensible ou forcé en local. Sans clarification, un lecteur de
+la règle 11 seule croirait qu'aucun moteur cloud n'est jamais utilisé, ce qui
+est faux depuis le 01/08/2026. Même situation que la règle 3 avant sa
+précision : c'est la règle qui n'avait pas suivi le code, pas l'inverse.
+
+**Ce que la règle 11 interdit réellement, et qui reste entier** : le **voice
+cloning avancé** — une technologie qui reproduit la voix d'une personne réelle
+(XTTS et équivalents). Ni edge_tts ni Piper/Kokoro n'en font : ce sont des voix
+de synthèse génériques, pas des clones. Cette interdiction n'a jamais bougé.
+
+**Ce que la règle 11 disait à tort** : que Piper/Kokoro seraient les **seuls**
+moteurs utilisés. Faux depuis que edge_tts est devenu le défaut — voir le
+tableau de routage TTS ci-dessus (`route_voice()` dans `core/router.py`) pour
+le détail exact de quand chacun s'applique.
+
 ## 🚀 Autonomie d'exécution (acté le 01/08/2026)
 
 Cyril fait confiance au jugement technique de Claude Code. À partir de maintenant, avance en autonomie sur :
@@ -347,7 +368,12 @@ C:/OrionAI/
 - `chore: maintenance, dépendances`
 
 ## 🎯 Priorités de Développement
-1. **S1** : Perception (screen, system, audio, webcam, input)
+1. **S1** : Perception (screen, system, input — **audio et webcam exclus** :
+   le PC n'a ni micro ni caméra, ces deux capteurs dépendent du pont mobile
+   S25 Ultra, voir ROADMAP.md « Ce qui dépend du micro et de la caméra ne
+   peut pas être fait avant le mobile ». Corrigé le 02/08/2026 lors de
+   l'audit de fiabilité — cette liste énumérait encore les 5 capteurs comme
+   si tous relevaient de S1)
 2. **S2** : Mémoire + World Model + RAG
 3. **S3** : Interface Godot (avatar 3D)
 4. **S4** : Voix (TTS continu + STT)

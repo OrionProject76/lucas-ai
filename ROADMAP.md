@@ -26,7 +26,10 @@ Référence croisée : voir `IDEAS.md` pour le détail complet de chaque fonctio
 - `Orion3D.exe` (Godot) — visage/fenêtre transparente fonctionne visuellement, mais `orion3d_bridge.py` fait uniquement écho, pas connecté à Ollama/OrionCore
 
 ### 🟡 Godot 4 — toujours en branche expérimentale (non bloquant)
-Reclassé en Phase 6 (S5-S6), branche `experimental/godot-avatar`. Ne bloque pas la release.
+Reclassé en Phase 4 (S5-S6, voir tableau §3 — « Phase 6 » utilisé ici avant
+le 02/08/2026 était une erreur de numérotation, corrigée lors de l'audit de
+fiabilité : le tableau §3 ne définit que les Phases 0 à 5), branche
+`experimental/godot-avatar`. Ne bloque pas la release.
 
 ---
 
@@ -289,6 +292,94 @@ Trois surfaces de sortie n'avaient aucun garde-fou, contrairement au LLM cloud e
 **`cmd` retiré de la liste blanche — fait.** Un interpréteur de commandes permet de lancer n'importe quel programme : le laisser dans une liste blanche revient à n'en avoir aucune. `SHELL_LIKE_APPS` et la journalisation distincte (`automation_shell_opened`) restent en place pour le jour où un shell reviendrait derrière une confirmation explicite, quand le moteur de décision existera.
 
 **Filtre de recherche web — fait.** `modules/web_search.py` refuse, avant tout appel réseau, les requêtes contenant une donnée réellement identifiante : IBAN, numéro de carte ou de compte (motifs numériques), et expressions comme « mon solde » ou « mon numéro de carte ». Volontairement **plus étroit** que `KEYWORDS_SENSITIVE` : « crédit », « banque », « budget », « risque » et « portfolio » restent cherchables, car un filtre qui empêche l'usage normal finit désactivé, donc inutile.
+
+## 5.2 Audit de fiabilité effectué le 02/08/2026 — résultat : propre après corrections
+
+Fait à la demande de Cyril, avant de lancer le renommage technique complet
+(§6) : « partir d'une base saine avant de toucher à plein de fichiers ».
+Cinq vérifications, plus une trouvée en cours de route.
+
+**1. Chaque fichier Python commité s'importe sans erreur — 1 échec trouvé et corrigé.**
+Testé sur un `git worktree` détaché sur HEAD (pas la copie de travail) : les
+74 modules `.py` du dépôt ont été importés un par un. `modules/weather_manager.py`
+échouait — un bloc de test en bas de fichier, **sans garde `if __name__`**,
+appelait `requests.get()` vers wttr.in dès l'import, donc plantait sans accès
+réseau. Corrigé : bloc de test déplacé sous la garde, et l'exception
+`ValueError("Ville invalide")` (qui n'était pas rattrapée par le `except`
+sur `RequestException`) est maintenant traitée comme les autres échecs.
+Module toujours non branché ailleurs dans le code — voir la note § 1 « statut
+réel à clarifier », qui reste largement d'actualité : la correction rend le
+module *important sans crasher*, pas *fonctionnel contre le vrai wttr.in*
+(l'URL utilisée, `?format=3`, ne correspond probablement pas au format à 4
+lignes que le code suppose — non vérifié contre le service réel, à faire
+séparément si ce module est un jour branché).
+
+**2. Suite de tests complète sur l'état réellement commité — propre.**
+Même worktree détaché : 554/554 tests passaient déjà avant les corrections
+de cet audit (575/575 après, avec les 21 nouveaux tests des points 1 et
+« trouvaille additionnelle » ci-dessous).
+
+**3. Aucun fichier fantôme ou doublon réintroduit — propre.**
+Recherche sur `git ls-files` : aucun nom avec espace inhabituel, aucun motif
+« Fichier », « copy », « backup », « (1) », « _old ». Les modules qui se
+ressemblent par paire (`stt_engine.py`/`stt_manager.py`,
+`finance_categorizer.py`/`finance_manager.py`) sont bien tous les deux
+utilisés (imports confirmés depuis `core/orion_core.py`, `ui/`, et leurs
+tests respectifs) — pas des doublons.
+
+**4. Cohérence entre CLAUDE.md, ROADMAP.md, VISION_LONG_TERME.md, IDEAS.md — 4 écarts trouvés et corrigés.**
+Lecture croisée complète des quatre fichiers. Un écart significatif, trois
+mineurs :
+- **Règle 11 jamais réconciliée avec le TTS hybride** — « Piper/Kokoro seuls »
+  contredisait la section TTS (01/08/2026) qui fait d'edge_tts le moteur par
+  défaut. Même oubli que ce qui avait été corrigé pour les règles 3 et 12,
+  mais jamais fait pour la 11. Corrigé : nouvelle précision dans CLAUDE.md,
+  même format que les règles 3/12.
+- **« Phase 6 » utilisé sans être défini** — le tableau des phases (§3) ne va
+  que jusqu'à la Phase 5, mais ROADMAP.md §1 et VISION_LONG_TERME.md
+  parlaient tous deux de « Phase 6 » pour Godot / l'avatar final. Corrigé
+  dans les deux fichiers (Godot reclassé en Phase 4, qui est là où il vit
+  déjà dans le tableau §3 ; VISION_LONG_TERME.md renvoie maintenant à
+  « au-delà de la Phase 5 »).
+- **CLAUDE.md listait audio/webcam en S1** alors que ROADMAP.md documente
+  depuis le 01/08 que ces deux capteurs sont bloqués jusqu'au pont mobile
+  (le PC n'a ni micro ni caméra). ROADMAP citait déjà CLAUDE.md comme source
+  de l'écart sans le corriger — fait maintenant.
+- **IDEAS.md pointait vers un renommage « à faire »** dans une section de
+  ROADMAP.md qui documente désormais un renommage largement fait. Le titre
+  dit directement « Barre Luca's » maintenant, sans renvoi qui deviendrait
+  lui-même obsolète après le chantier de renommage technique.
+
+**5. Rien de sensible dans l'historique commité — propre.**
+`git log --all` sur les noms de fichiers : aucun fichier n'a jamais été
+ajouté sous `data/documents/`, `*.db`, ou un nom évoquant un secret.
+`git log -p --all` sur le contenu : aucune clé API non vide n'a jamais été
+commitée (`OPENAI_API_KEY` reste vide dans `.env.example` à travers toute
+l'histoire) ; les seules chaînes ressemblant à des IBAN sont des données de
+test explicites (`test_index_documents.py`, `test_router.py` — le format
+placeholder « FR76 3000... » sert à vérifier que ces données ne sortent
+JAMAIS, pas de vraies coordonnées bancaires de Cyril). `.env` réel n'a
+jamais été commité.
+
+**Trouvaille additionnelle, hors des 5 points demandés — corrigée, jugée
+suffisamment grave pour ne pas attendre :** `modules/calculator.py`
+appelait `eval(expression)` directement, avec un commentaire affirmant à
+tort « évaluation sécurisée ». `eval()` exécute n'importe quel code Python,
+pas seulement des maths — un vecteur d'exécution de code arbitraire si ce
+module était un jour exposé comme outil appelable par le LLM (ce que son nom
+et son intention suggèrent). Non branché ailleurs dans le code au moment de
+la correction. Remplacé par un évaluateur limité à un sous-ensemble d'AST
+(nombres et opérateurs arithmétiques de base, rien d'autre) —
+`test_calculator.py` vérifie explicitement que les expressions comme
+`__import__('os').system(...)` sont refusées, pas exécutées.
+
+**Modules restés sans test après cet audit** (hors périmètre — non touchés
+car ni cassés ni concernés par les 5 points) : voir §1 « statut réel à
+clarifier » pour le reste de la liste (`rag_manager.py`, `vision_manager.py`,
+`automation_manager.py`, `web_search.py` ont en réalité des tests, cette
+note datait d'avant leur écriture — seuls `weather_manager.py` et
+`calculator.py` étaient réellement orphelins, tous deux couverts
+maintenant).
 
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026
 

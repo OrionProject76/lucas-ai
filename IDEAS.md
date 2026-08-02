@@ -19,7 +19,7 @@ Ce fichier recense 100% de la matière discutée : toutes les fonctionnalités e
 LAYER 5 : INTERFACE VIVANTE (Godot 4 + PySide6)
 ├─ Avatar 3D Holographique (visage néon/cyan, flottant)
 ├─ Bureau Sémantique 3D (fichiers par concept, pas dossiers)
-├─ Barre Orion (remplace la taskbar Windows)
+├─ Barre Luca's (remplace la taskbar Windows)
 ├─ HUD Orbital (widgets flottants autour du visage)
 └─ Overlay Contextuel (notifications, suggestions)
 
@@ -83,7 +83,7 @@ reporté v1.1+).
 
 ## 3. Interface — remplacer Windows 11
 
-### Barre Orion → Barre Luca's (renommage à faire, voir ROADMAP.md §6)
+### Barre Luca's (remplace la taskbar Windows)
 - Input universel (texte/voix/geste)
 - Quick Actions prédites (3 actions les plus probables)
 - Mode vocal : maintien espace = dictée
