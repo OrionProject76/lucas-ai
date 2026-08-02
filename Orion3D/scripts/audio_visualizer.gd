@@ -9,7 +9,12 @@ func _ready():
     var effect = AudioEffectSpectrumAnalyzer.new()
     effect.buffer_length = 0.1
     effect.fft_size = AudioEffectSpectrumAnalyzer.FFT_SIZE_2048
-    effect_idx = AudioServer.add_bus_effect(bus_idx, effect)
+    # ⚠️ add_bus_effect() ne rend RIEN en Godot 4 — il rendait l'index
+    # en Godot 3. L'affecter était une erreur de compilation qui
+    # empêchait le projet ENTIER de démarrer. L'index utile est celui
+    # du dernier effet ajouté.
+    AudioServer.add_bus_effect(bus_idx, effect)
+    effect_idx = AudioServer.get_bus_effect_count(bus_idx) - 1
     spectrum = AudioServer.get_bus_effect_instance(bus_idx, effect_idx)
     print("AudioVisualizer initialise")
 

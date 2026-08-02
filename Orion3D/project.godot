@@ -27,7 +27,7 @@ config/icon="res://icon.svg"
 Global="*res://scripts/global.gd"
 WebSocketClient="*res://scripts/websocket_client.gd"
 WindowManager="*res://scripts/window_manager.gd"
-SystemMonitor="*res://scripts/system_monitor.gd"
+AudioVisualizer="*res://scripts/audio_visualizer.gd"
 
 [display]
 
