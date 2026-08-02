@@ -278,6 +278,23 @@ RAG_MAX_DISTANCE_DATED: float = 0.50
 # seuil monte sans rien céder. Tout changement du format de découpage
 # invalide cette valeur — relancer demos/calibrate_rag.py.
 #
+# ⚠️ Reconfirmé le 02/08/2026 (Cyril a demandé de vérifier l'indexation
+# et le calibrage). Toujours 39 documents, mais 229 chunks au lieu de 275
+# — au moins un document a changé depuis le 01/08 sans qu'on sache lequel
+# précisément. demos/calibrate_rag.py relancé sur l'état réel :
+#
+#     seuil   extraits utiles gardés   hors-sujet bloqués
+#     0,327           85 %                  100 %
+#     0,338           88 %                  100 %
+#     0,346           90 %                  100 %      <- retenu
+#     0,347           90 %                   88 %
+#
+# La valeur codée (0,33) n'avait jamais suivi la recommandation du premier
+# calibrage (0,34, ligne « <- retenu » ci-dessus) — écart d'un centième
+# entre le commentaire et la constante, présent depuis le 01/08. Les deux
+# calibrages, à un mois d'écart et sur une collection qui a changé,
+# retombent sur 0,34 : corrigé pour de bon.
+#
 # ⚠️ 12 % des extraits utiles sont écartés : sur certaines questions
 # légitimes, Luca's répondra qu'elle ne trouve rien. C'est le prix pour
 # ne JAMAIS injecter un extrait hors sujet — et ce sens-là a été choisi
@@ -298,7 +315,7 @@ RAG_MAX_DISTANCE_DATED: float = 0.50
 # Ce seuil reste le SECOND verrou : le premier est core/intent.py, qui
 # empêche la plupart des questions hors sujet d'atteindre le RAG — c'est
 # pourquoi une valeur imparfaite dégrade sans casser.
-RAG_MAX_DISTANCE: float = 0.33
+RAG_MAX_DISTANCE: float = 0.34
 
 # --- Intention : écran, documents, ou ni l'un ni l'autre ---
 # Les listes de mots-clés couvraient 50 % des formulations réelles et ne

@@ -456,6 +456,51 @@ note datait d'avant leur écriture — seuls `weather_manager.py` et
 `calculator.py` étaient réellement orphelins, tous deux couverts
 maintenant).
 
+## 5.3 Vérification indexation RAG + recalibrage — 02/08/2026
+
+À la demande de Cyril de confirmer que `data/documents/` est bien indexé et
+le seuil recalibré.
+
+**Indexation confirmée** : les deux fichiers présents dans `data/documents/`
+(`ANTS - Demande de changement d'adresse - Récapitulatif.pdf`,
+`Document.docx`) sont bien indexés, avec du contenu réel vérifié
+directement dans la collection ChromaDB (4 morceaux pour l'un, 3 pour
+l'autre, texte cohérent avec le PDF/docx source).
+
+**⚠️ Découverte importante, à connaître avant de relancer une indexation** :
+la collection contient en réalité **39 documents, 229 morceaux** — pas
+seulement les 2 fichiers de `data/documents/`. Les 37 autres (bulletins de
+paie, déclaration de revenus, CV, offres d'emploi, attestations…)
+correspondent à la calibration documentée dans `config.py` du 01/08/2026,
+faite sur **`C:/Users/PC/Documents`** — le vrai dossier Documents de
+Cyril, pas le dossier `data/documents/` du dépôt (`DOCUMENTS_DIR` dans
+`config.py`).
+
+**Conséquence concrète, pour éviter un accident** : `index_directory()`
+retire de la base tout document qu'il ne retrouve pas dans le dossier
+scanné (nettoyage des orphelins, voir `memory/index_documents.py`). Lancer
+`python -m memory.index_documents` **sans argument** scanne
+`data/documents/` par défaut — seulement 2 fichiers — ce qui **supprimerait
+les 37 autres documents indexés depuis `C:/Users/PC/Documents`**, un vrai
+dossier personnel, pas un dossier de test. Cette vérification a donc été
+faite en lecture seule (`RAGManager().indexed_documents()`,
+`collection.get()`) — **`index_directory()` n'a jamais été appelé**,
+justement pour ne pas risquer ce nettoyage. Si une réindexation est un
+jour nécessaire, elle doit rescanner `C:/Users/PC/Documents` explicitement,
+jamais le dossier par défaut du dépôt.
+
+**Seuil recalibré** : `demos/calibrate_rag.py` relancé en conditions
+réelles sur la collection actuelle. Toujours 39 documents, mais 229
+morceaux au lieu des 275 documentés le 01/08 — au moins un document a changé
+depuis (lequel n'est pas identifié). La valeur codée (`0,33`) n'avait de
+toute façon jamais suivi la recommandation du premier calibrage (`0,34` —
+écart d'un centième entre le commentaire de `config.py` et la constante,
+présent depuis le 01/08). Les deux calibrages, à un mois d'écart et sur une
+collection qui a changé, retombent sur la même valeur : `RAG_MAX_DISTANCE`
+corrigé à `0,34` (garde 90 % des extraits utiles, bloque 100 % des
+questions hors sujet — contre ~85-88 % à `0,33`). 590/590 tests après le
+changement.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
