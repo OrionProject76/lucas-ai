@@ -50,7 +50,11 @@ const DRIFT_MARGIN := 0.5
 
 # Part de l'espace libre réellement parcourue. X est plus restreint pour
 # que l'avatar ne passe pas sous les panneaux SYSTEME et CONVERSATION.
-const DRIFT_ZONE_X := 0.7
+# ⚠️ 0.7 ne suffisait pas : mesuré sur 5 minutes de fonctionnement réel,
+# l'avatar chevauchait les deux panneaux. Le calcul se fait sur la
+# largeur du frustum et ignore la largeur réelle des panneaux (320 px
+# de chaque côté), et le halo déborde bien au-delà de la sphère.
+const DRIFT_ZONE_X := 0.5
 const DRIFT_ZONE_Y := 0.85
 
 # Quand Luca's parle ou réfléchit, elle se pose : c'est ce que fait
