@@ -11,7 +11,7 @@ all:
     echo "🌌 Démarrage complet Luca's..."
     Start-Process powershell -ArgumentList "-c ollama serve" -WindowStyle Hidden
     Start-Sleep 2
-    Start-Process powershell -ArgumentList "-c uvicorn api.server:app --reload --host 127.0.0.1 --port 8000" -WindowStyle Hidden
+    Start-Process powershell -ArgumentList "-c uvicorn api.server:app --reload --host 0.0.0.0 --port 8000 --ssl-certfile data/cert.pem --ssl-keyfile data/key.pem" -WindowStyle Hidden
     Start-Sleep 2
     pythonw lucas_daemon.py
 
@@ -21,11 +21,28 @@ ollama:
 
 # NB : l'app FastAPI est dans api/server.py, pas dans main.py — main.py est
 # le point d'entrée PySide6 et expose une QApplication, pas une app ASGI.
-# 127.0.0.1 et non 0.0.0.0 : l'API n'a pas d'authentification, elle ne doit
-# pas être joignable depuis le réseau local. À revoir en Phase 5 (mobile).
+#
+# 0.0.0.0 + HTTPS, pas 127.0.0.1 : le pont mobile (PWA) en a besoin pour
+# deux raisons distinctes — 0.0.0.0 pour être joignable depuis le
+# téléphone sur le réseau local, HTTPS parce que getUserMedia() (micro,
+# caméra) refuse de fonctionner hors d'un contexte sécurisé, et une IP
+# réseau en HTTP n'en est pas un. API_TOKEN protège l'accès réseau
+# depuis le 02/08/2026 — le commentaire qui justifiait 127.0.0.1 par
+# « pas d'authentification » ne tenait plus.
+#
+# data/cert.pem et data/key.pem sont générés par mkcert (tools/mkcert.exe,
+# jamais versionnés — voir .gitignore) pour localhost/127.0.0.1 et les IP
+# réseau du PC. Si l'IP change (redémarrage, reconnexion Wi-Fi) et que le
+# téléphone n'y accède plus, régénérer avec les nouvelles IP :
+#   tools\mkcert.exe -cert-file data\cert.pem -key-file data\key.pem <IP...> localhost 127.0.0.1
 
-# Lancer FastAPI
+# Lancer FastAPI (HTTPS, joignable depuis le téléphone)
 serve:
+    uvicorn api.server:app --reload --host 0.0.0.0 --port 8000 --ssl-certfile data/cert.pem --ssl-keyfile data/key.pem
+
+# Lancer FastAPI en HTTP local seul — sans le pont mobile (micro/caméra
+# indisponibles), pour un dépannage rapide sans certificat.
+serve-http:
     uvicorn api.server:app --reload --host 127.0.0.1 --port 8000
 
 # Lancer le daemon (arrière-plan Windows)

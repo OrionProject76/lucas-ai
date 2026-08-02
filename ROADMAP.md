@@ -123,6 +123,59 @@ qui n'invalide pas la réponse texte, mime mp3/wav, image et audio
 transcrit peuvent aussi être prononcés), `test_voice_router.py`
 (`synthesize_routed()` délègue correctement).
 
+##### Correctif : le son coupait en plein mot — fait le 02/08/2026
+
+Signalé par Cyril en test réel : le son démarrait (« Bonj... ») puis
+coupait net, sans erreur. Diagnostic par élimination (voir historique
+git pour le détail complet des mesures) : `play()` créait `new Audio()`
+en variable locale, jamais référencé ailleurs — éligible au
+ramasse-miettes PENDANT la lecture. Corrigé en réutilisant un seul
+élément conservé sur l'instance (`static/js/voice_output.js`).
+Confirmé fonctionnel par Cyril après correctif.
+
+##### Prérequis découvert : micro ET caméra exigent un contexte sécurisé — fait le 02/08/2026
+
+En testant la voix, Cyril a signalé que le bouton micro échouait aussi
+(« contexte non sécurisé »). Vérification : la caméra échouait avec
+exactement le même message — pas un bug du micro, `getUserMedia()`
+(micro ET caméra) refuse de fonctionner hors HTTPS ou `localhost`, et
+une IP réseau en HTTP n'en est pas un. Ce n'est pas une régression :
+l'entrée `IDEAS.md` du 02/08/2026 sur la PWA ne parlait que de la
+« structure » micro/caméra testée, jamais d'une capture réellement
+vérifiée — ce test l'a simplement révélé le premier.
+
+**Décision de Cyril : vrai certificat HTTPS**, pas le contournement
+rapide (`chrome://flags`, un réglage par appareil, à refaire si l'IP
+change). `tools/mkcert.exe` (téléchargé directement — Chocolatey a
+échoué faute de droits admin) génère une CA locale, installée dans le
+magasin de confiance Windows (`mkcert -install`, a demandé une
+confirmation Windows — geste que je ne dois jamais faire à la place de
+Cyril, voir CLAUDE.md liste des actions interdites) puis un certificat
+couvrant les deux IP réseau du PC (Ethernet 192.168.1.12, Wi-Fi
+192.168.1.14) plus `localhost`/`127.0.0.1`. Ni `tools/mkcert.exe` ni
+`data/cert.pem`/`data/key.pem` ne sont versionnés (`.gitignore`) — la
+clé privée n'a rien à faire dans git, et le certificat est propre à
+cette machine et son IP réseau.
+
+`justfile` : `serve` sert maintenant en HTTPS sur `0.0.0.0` par défaut
+(`serve-http` reste disponible pour un dépannage local sans certificat).
+L'ancien commentaire justifiant `127.0.0.1` par « l'API n'a pas
+d'authentification » ne tenait plus depuis `API_TOKEN` (voir plus haut,
+02/08/2026) — corrigé au passage.
+
+⚠️ **Le jeton API ne survit pas au changement d'origine.**
+`http://192.168.1.14:8000` et `https://192.168.1.14:8000` sont deux
+origines distinctes pour le navigateur — `localStorage` ne se partage
+pas entre elles. Le lien avec `?token=...` doit être renvoyé une fois
+pour la nouvelle origine HTTPS, exactement comme au tout premier envoi.
+
+**La CA locale n'est installée que sur le PC.** Le téléphone de Cyril ne
+fera pas confiance au certificat tant que la CA n'y est pas installée
+aussi — `rootCA.pem` copié vers `static/rootCA.crt` (public, sans
+risque à distribuer, contrairement à `rootCA-key.pem` qui ne quitte
+jamais le PC) pour que le téléphone puisse le télécharger directement
+depuis la PWA et l'installer via les réglages Android.
+
 **Fait le 02/08/2026** : les PDF scannés (cartes d'identité, certains
 contrats) passent maintenant par `modules/ocr_engine.py` (RapidOCR, déjà
 utilisé pour l'écran) quand pypdf n'extrait aucune couche texte. PyMuPDF

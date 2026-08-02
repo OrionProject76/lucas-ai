@@ -18,6 +18,17 @@ htmlcov/
 .env.local
 !.env.example
 
+# --- HTTPS local (mkcert) — clé privée, jamais versionnée ---
+# Générés le 02/08/2026 pour le pont mobile (getUserMedia exige un
+# contexte sécurisé — voir ROADMAP.md). Propres à cette machine et son
+# IP réseau : aucune valeur à reconstituer ailleurs. rootCA.crt n'est
+# pas un secret (clé publique), mais il est dérivé de la même CA locale
+# — le laisser versionné deviendrait trompeur le jour où la CA change.
+data/cert.pem
+data/key.pem
+static/rootCA.crt
+tools/mkcert.exe
+
 # --- Outils IA / éditeurs ---
 .aider*
 .vscode/
