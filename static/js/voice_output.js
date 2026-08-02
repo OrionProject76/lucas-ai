@@ -68,6 +68,11 @@ window.Lucas = window.Lucas || {};
             toggleEl.addEventListener("click", () => {
                 this.enabled = !this.enabled;
                 window.localStorage.setItem("lucas_speak", this.enabled ? "1" : "0");
+                // Désactiver doit couper un son déjà en cours, pas
+                // seulement s'appliquer à la prochaine réponse (ROADMAP.md
+                // §5.4 point 3) — sinon le bouton 🔇 ment sur ce qu'il fait
+                // à l'instant où on clique dessus.
+                if (!this.enabled) this.stop();
                 this._reflect();
             });
         }

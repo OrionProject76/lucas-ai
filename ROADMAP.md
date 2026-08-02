@@ -934,9 +934,16 @@ tous deux corrigés le 02/08/2026, voir §2).
 2. **Lecture d'écran smartphone à affiner** — retour vague de Cyril
    (« il y a encore matière à travailler dessus »), à préciser avec lui
    avant d'agir.
-3. **Bouton haut-parleur sans vrai mode mute** — le toggle 🔊/🔇 actuel
-   active/désactive la synthèse vocale à la prochaine réponse, mais ne
-   permet pas de couper un son déjà en cours de lecture.
+3. **Bouton haut-parleur sans vrai mode mute** — ✅ **Corrigé le
+   03/08/2026**, à la suite directe du travail sur le barge-in (point 5) :
+   `VoiceOutput.stop()` existait déjà pour couper la lecture en cours,
+   il ne restait qu'à le brancher sur le toggle 🔊/🔇 lui-même — passer en
+   🔇 coupe désormais immédiatement un son déjà en train de jouer, pas
+   seulement les réponses suivantes. Non testé en conditions réelles pour
+   la même raison que les points 1 et 5 (pas de micro/haut-parleur
+   physique sur cette machine), mais ce point précis (couper un `<audio>`
+   HTML au clic) ne dépend d'aucun matériel — bien plus simple à faire
+   confiance sans test réel que le barge-in.
 4. **Dialogue perçu comme « compliqué »** — retour UX général de Cyril,
    pas encore de cause précise identifiée.
 5. **Pas d'interruption immédiate (« barge-in »)** — ⚠️ **Conçu et
