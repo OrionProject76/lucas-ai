@@ -855,6 +855,35 @@ corrigé à `0,34` (garde 90 % des extraits utiles, bloque 100 % des
 questions hors sujet — contre ~85-88 % à `0,33`). 590/590 tests après le
 changement.
 
+## 5.4 Backlog de polish identifié en usage réel — 02/08/2026
+
+Remonté par Cyril pendant le test du pont mobile TTS, explicitement noté
+comme **non urgent** par lui-même au moment du signalement — traité après
+les vrais bugs bloquants (coupure audio TTS, caméra qui s'éteint seule,
+tous deux corrigés le 02/08/2026, voir §2).
+
+1. **Transcription du micro imprécise** — Luca's comprend mal certaines
+   phrases dites au téléphone. À investiguer : qualité de l'audio du
+   navigateur, format d'encodage (webm/opus), réglages du modèle Whisper
+   côté serveur.
+2. **Lecture d'écran smartphone à affiner** — retour vague de Cyril
+   (« il y a encore matière à travailler dessus »), à préciser avec lui
+   avant d'agir.
+3. **Bouton haut-parleur sans vrai mode mute** — le toggle 🔊/🔇 actuel
+   active/désactive la synthèse vocale à la prochaine réponse, mais ne
+   permet pas de couper un son déjà en cours de lecture.
+4. **Dialogue perçu comme « compliqué »** — retour UX général de Cyril,
+   pas encore de cause précise identifiée.
+5. **Pas d'interruption immédiate (« barge-in »)** — quand Cyril parle
+   pendant que Luca's répond à voix haute, elle ne s'arrête pas
+   immédiatement. Nécessiterait de détecter la parole entrante pendant
+   la lecture TTS et de couper le son en cours — une vraie fonctionnalité
+   à concevoir, pas un correctif ponctuel.
+
+Voir aussi `IDEAS.md` pour l'idée distincte du double destinataire
+WebSocket (parler au micro du téléphone et faire répondre l'avatar PC
+en même temps) — une extension du pont mobile, pas un correctif.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

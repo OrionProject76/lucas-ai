@@ -593,3 +593,29 @@ Ultra le 02/08/2026 (avatar, chat, structure micro/caméra). Tauri reste
 une carte de secours déjà notée (#75), pas une décision à prendre
 maintenant — la refaire sans raison démontrée serait un vrai gaspillage
 de travail déjà validé.
+
+## 79. Réponse simultanée sur plusieurs clients — un seul destinataire par WebSocket
+
+Remonté par Cyril en testant le pont mobile TTS (02/08/2026) : il veut
+pouvoir parler dans le micro du téléphone et que l'avatar du PC (UI
+PySide6 ou Godot) réponde AUSSI, pas seulement le téléphone qui a posé
+la question. Explicitement noté comme une idée future, pas une action
+immédiate.
+
+**Pourquoi ça ne marche pas aujourd'hui** : `api/server.py` traite
+chaque connexion WebSocket indépendamment — la réponse (texte, audio,
+état de l'avatar) part uniquement vers le client qui a envoyé la
+question. Rien ne diffuse un événement vers les AUTRES clients connectés
+en même temps (PC, téléphone, Godot). Cyril devant son PC et parlant
+depuis son téléphone ne verrait/entendrait la réponse que sur le
+téléphone.
+
+**Ce que ça demanderait** : un mécanisme de diffusion (broadcast) —
+garder la liste des connexions actives, et pousser certains messages
+(au moins `chat`, `avatar_state`, `speech`) vers tous les clients
+authentifiés, pas seulement celui qui a posé la question. Question
+ouverte à trancher le jour où c'est construit : est-ce que ÇA DOIT être
+le comportement par défaut (tout se répercute partout), ou un choix
+explicite de Cyril par question/session ? Un défaut « tout partout »
+pourrait surprendre — parler discrètement depuis le téléphone ferait
+soudain parler l'avatar du PC à voix haute dans la pièce.
