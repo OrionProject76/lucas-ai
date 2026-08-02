@@ -1,16 +1,14 @@
 # modules/stt_engine.py — transcription audio locale (Speech-to-Text)
 #
 # ══════════════════════════════════════════════════════════════════════
-# BRANCHÉ CÔTÉ SERVEUR le 02/08/2026 — TOUJOURS SANS CLIENT RÉEL.
+# BRANCHÉ CÔTÉ SERVEUR le 02/08/2026 — EN USAGE RÉEL depuis (PWA S25 Ultra).
 # ══════════════════════════════════════════════════════════════════════
-# api/server.py appelle maintenant transcribe_base64() sur les messages
-# WebSocket de type « audio » (voir websocket_endpoint). Ce module reste
-# néanmoins SANS UTILISATION RÉELLE : le PC de Cyril n'a pas de micro
-# (IDEAS.md #69, VISION_LONG_TERME.md §2 Pilier 3), et aucun client mobile
-# n'existe encore pour envoyer de l'audio — seul le CÔTÉ SERVEUR du pont
-# est prêt. Ne pas le compter comme une fonctionnalité utilisable avant
-# qu'un vrai client (PWA S25 Ultra) existe et soit testé en conditions
-# réelles.
+# api/server.py appelle transcribe_base64() sur les messages WebSocket de
+# type « audio » (voir websocket_endpoint). Le PC de Cyril n'a pas de
+# micro (IDEAS.md #69, VISION_LONG_TERME.md §2 Pilier 3) — c'est le S25
+# Ultra qui capture et envoie l'audio via la PWA. Qualité mesurée et
+# améliorée le 03/08/2026 (STT_MODEL_SIZE, voir config.py et ROADMAP.md
+# §5.4) suite à un signalement réel de transcription imprécise.
 #
 # faster-whisper installé le 02/08/2026 (~200 Mo, sans torch — voir le
 # choix de backend ci-dessous). openai-whisper reste un repli possible

@@ -886,10 +886,51 @@ comme **non urgent** par lui-même au moment du signalement — traité après
 les vrais bugs bloquants (coupure audio TTS, caméra qui s'éteint seule,
 tous deux corrigés le 02/08/2026, voir §2).
 
-1. **Transcription du micro imprécise** — Luca's comprend mal certaines
-   phrases dites au téléphone. À investiguer : qualité de l'audio du
-   navigateur, format d'encodage (webm/opus), réglages du modèle Whisper
-   côté serveur.
+1. **Transcription du micro imprécise** — ✅ **Corrigé le 03/08/2026** (en
+   autonomie, pendant l'absence de Cyril). Mesuré avant de conclure :
+   script jetable synthétisant une phrase de référence connue via Piper
+   (donc un texte de vérité terrain exact), réencodée en WebM/Opus via
+   PyAV — même conteneur/codec que `MediaRecorder` sans `mimeType`
+   explicite dans `static/js/audio.js` — puis transcrite dans plusieurs
+   conditions et comparée au texte de référence (WER).
+
+   Hypothèses éliminées par la mesure (aucun effet observé, sur deux
+   phrases, à plusieurs niveaux de bruit) :
+   - **Le suffixe `.wav` codé en dur** dans `transcribe_base64()` alors
+     que le contenu réel est du WebM/Opus (`api/server.py` appelle
+     `transcribe_base64(audio_base64)` sans préciser `suffix`) : faster-
+     whisper (via PyAV) lit le contenu réel du fichier, pas son extension
+     — sortie strictement identique avec `.wav` ou `.webm`. **Pas un bug.**
+   - `language=None` (auto-détection) vs `"fr"` forcé : texte transcrit
+     identique dans tous les cas, seule la métadonnée de confiance change.
+   - `vad_filter=True` : aucun effet, ni sur audio propre, ni bruité, ni
+     avec un silence ajouté en tête/queue (simulant le temps entre l'appui
+     sur le bouton micro et le début de la phrase).
+   - `initial_prompt="Luca's"` (pour corriger l'homophone ci-dessous) :
+     **aggrave** le résultat — le modèle omet parfois le mot plutôt que de
+     le mal orthographier. Abandonné.
+
+   Cause réelle, mesurée : `STT_MODEL_SIZE = "base"` (`config.py`) perd
+   nettement en précision sous bruit de fond réaliste (SNR 5 dB, un micro
+   de téléphone dans une pièce) — WER 0,27 à 0,42 selon la phrase — alors
+   que `"small"` reste correct ou quasi (WER 0,00 à 0,09) sur les deux
+   mêmes phrases et les mêmes fichiers audio. Coût : ~0,8 s de calcul CPU
+   au lieu de ~0,3 s, négligeable pour un message vocal non temps réel.
+   `config.py` documentait déjà cette bascule comme une intention pour la
+   v1.1 (`« small »... envisagé en v1.1`) — la mesure la rend justifiée
+   dès maintenant plutôt que d'attendre. **`STT_MODEL_SIZE` passé à
+   `"small"`.**
+
+   Limite distincte constatée, non corrigée (pas un bug de pipeline) :
+   **« Luca's » est systématiquement mal transcrit** (« Lucas »,
+   « Loucause », « L'occose »...) par les deux tailles de modèle, à tous
+   les niveaux de bruit — une ambiguïté homophone réelle que l'audio seul
+   ne permet pas de lever (rien à l'oreille ne distingue « Luca's » de
+   « Lucas »), et que `initial_prompt` ne corrige pas (voir ci-dessus).
+   Une correction textuelle post-transcription serait possible (renommer
+   « Lucas » en « Luca's » en début de phrase) mais risquerait des faux
+   positifs (Cyril parlant d'un vrai Lucas) — décision produit, pas
+   tranchée ici, laissée à Cyril si le confort d'usage le justifie.
 2. **Lecture d'écran smartphone à affiner** — retour vague de Cyril
    (« il y a encore matière à travailler dessus »), à préciser avec lui
    avant d'agir.

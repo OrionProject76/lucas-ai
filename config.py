@@ -148,9 +148,15 @@ OCR_LANGUAGES = ["fr", "en"]
 VLM_MAX_CHARS: int = 1200
 
 # --- Voix : transcription (STT) ---
-# « base » ≈ 150 Mo, suffisant pour la v1.0 ; « small » ≈ 500 Mo, plus
-# précis, envisagé en v1.1 (mission_10_stt_engine.md).
-STT_MODEL_SIZE = "base"
+# « small » ≈ 500 Mo — mesuré le 03/08/2026 contre « base » (ROADMAP.md
+# §5.4, bug transcription imprécise) : sur audio WebM/Opus bruité (SNR
+# 5 dB, condition réaliste micro téléphone dans une pièce), « base »
+# dérive complètement (WER 0.27 à 0.42) alors que « small » reste correct
+# ou quasi (WER 0.00 à 0.09) sur les deux mêmes phrases. Coût : ~0,8 s de
+# calcul CPU au lieu de ~0,3 s — négligeable pour un message vocal non
+# temps réel. Ce n'était encore qu'une intention pour la v1.1 avant cette
+# mesure ; les chiffres la rendent justifiée dès maintenant.
+STT_MODEL_SIZE = "small"
 
 # Transcriptions récentes gardées en mémoire : re-transcrire deux fois
 # le même extrait coûte plusieurs secondes de calcul pour rien.
