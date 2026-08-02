@@ -6,7 +6,7 @@
 [sub_resource type="ShaderMaterial" id="ShaderMat_head"]
 render_priority = 0
 shader = ExtResource("2_holo")
-shader_parameter/base_color = Color(0, 0.5, 0.9, 0.07)
+shader_parameter/base_color = Color(0, 0.5, 0.9, 0.05)
 shader_parameter/glow_color = Color(0, 1, 1, 1)
 shader_parameter/rim_color = Color(0.2, 0.9, 1, 1)
 shader_parameter/scanline_count = 120.0
@@ -19,7 +19,7 @@ shader_parameter/wireframe_intensity = 0.8
 
 [sub_resource type="SphereMesh" id="SphereMesh_head"]
 radius = 2.5
-height = 4.0
+height = 5.0
 radial_segments = 64
 rings = 48
 

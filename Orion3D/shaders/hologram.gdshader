@@ -66,5 +66,9 @@ void fragment() {
 
     ALBEDO = color;
     ALPHA = alpha;
-    EMISSION = color * (3.0 + pulse * 2.0);
+    // ⚠️ C'EST ICI QUE VENAIT LE BLANC CRAMÉ, pas du glow. La surface
+	// émettait 3 à 5 fois la plage affichable : le centre saturait en
+	// blanc pur avant même le post-traitement, et baisser le glow ne
+	// pouvait rien y faire.
+	EMISSION = color * (0.8 + pulse * 0.4);
 }

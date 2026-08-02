@@ -16,8 +16,8 @@ glow_levels/4 = 1.0
 glow_levels/5 = 1.0
 glow_levels/6 = 0.8
 glow_levels/7 = 0.5
-glow_intensity = 0.35
-glow_strength = 0.7
+glow_intensity = 0.15
+glow_strength = 0.4
 glow_bloom = 0.1
 glow_hdr_luminance_cap = 8.0
 
@@ -28,7 +28,7 @@ script = ExtResource("1_main")
 environment = SubResource("Environment_001")
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=1014584209]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 18)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 26)
 fov = 35.0
 
 [node name="FaceRoot" parent="." unique_id=16368670 instance=ExtResource("2_face")]
