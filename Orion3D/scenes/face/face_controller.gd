@@ -44,6 +44,21 @@ const SACCADE_RANGE := 0.22     # amplitude d'un saut de regard
 const LOOK_RANGE := 0.30        # suivi de souris (etait 0.08, invisible)
 const LOOK_LERP := 6.0
 
+# ⚠️ LES YEUX DOIVENT SUIVRE LA COURBURE DE LA TETE.
+# Ils etaient a un z FIXE (2.0) alors que la tete est un ellipsoide : des
+# qu'une saccade les decalait lateralement, l'un ressortait et l'autre
+# s'enfoncait. Visible sur la planche des quatre expressions — l'oeil
+# gauche paraissait systematiquement plus gros et plus clair que le droit.
+# Calcul : a x = -1.2 la surface est a z = 1.95 ; a x = -1.42 elle tombe a
+# 1.82, soit 13 centiemes d'ecart d'enfoncement pour un simple regard de
+# cote.
+# Demi-axes de l'ellipsoide : Head est une sphere de rayon 2.5 mise a
+# l'echelle (1.0, 1.08, 0.92) — voir face_root.tscn.
+const HEAD_A := 2.5      # demi-axe X
+const HEAD_B := 2.7      # demi-axe Y
+const HEAD_C := 2.3      # demi-axe Z
+const EYE_PROUD := 0.06  # de combien l'oeil depasse la surface
+
 var eye_base_left: Vector3
 var eye_base_right: Vector3
 var eye_base_scale: Vector3
@@ -114,10 +129,19 @@ func _maj_saccades(delta: float):
     saccade_current = saccade_current.lerp(saccade_offset, delta * 12.0)
 
 
+func _z_surface(x: float, y: float) -> float:
+    """Profondeur de la surface de la tete a cette position frontale."""
+    var reste := 1.0 - pow(x / HEAD_A, 2.0) - pow(y / HEAD_B, 2.0)
+    return HEAD_C * sqrt(max(reste, 0.0)) + EYE_PROUD
+
+
 func _maj_yeux(delta: float):
     var decalage := eye_look_offset + saccade_current
-    var cible_g := eye_base_left + Vector3(decalage.x, decalage.y, 0.0)
-    var cible_d := eye_base_right + Vector3(decalage.x, decalage.y, 0.0)
+    var xg := eye_base_left.x + decalage.x
+    var xd := eye_base_right.x + decalage.x
+    var yy := eye_base_left.y + decalage.y
+    var cible_g := Vector3(xg, yy, _z_surface(xg, yy))
+    var cible_d := Vector3(xd, yy, _z_surface(xd, yy))
     eye_left.position = eye_left.position.lerp(cible_g, delta * LOOK_LERP)
     eye_right.position = eye_right.position.lerp(cible_d, delta * LOOK_LERP)
 
