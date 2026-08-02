@@ -16,6 +16,27 @@ window.Lucas = window.Lucas || {};
         constructor({ toggleEl }) {
             this.toggleEl = toggleEl;
             this.enabled = window.localStorage.getItem("lucas_speak") === "1";
+
+            // ⚠️ UN SEUL élément, créé une fois et réutilisé — jamais un
+            // `new Audio()` par appel. Trouvé en usage réel (Cyril,
+            // 02/08/2026) : le son démarrait puis coupait net après une
+            // syllabe, sans erreur. Mesuré (Chrome, instrumentation
+            // complète des événements média) : le fichier reçu est
+            // intact — un fichier tronqué aurait joué plusieurs secondes
+            // valides avant de s'arrêter, pas coupé après un fragment.
+            // La seule autre explication tenant compte des faits : un
+            // `Audio()` construit en variable locale et jamais référencé
+            // ailleurs devient éligible au ramasse-miettes PENDANT la
+            // lecture — un piège documenté de l'API, plus agressif sur
+            // mobile (mémoire contrainte) que sur bureau. En le gardant
+            // sur `this.player`, l'objet survit aussi longtemps que
+            // l'instance elle-même (donc toute la session).
+            this.player = new Audio();
+            this.player.addEventListener("error", () => {
+                // Pas de son plutôt qu'une erreur qui remonte — le texte
+                // reste affiché dans le chat.
+            });
+
             this._reflect();
 
             toggleEl.addEventListener("click", () => {
@@ -34,8 +55,12 @@ window.Lucas = window.Lucas || {};
 
         play(audioBase64, mime) {
             if (!audioBase64) return;
-            const audio = new Audio(`data:${mime};base64,${audioBase64}`);
-            audio.play().catch(() => {
+            // Une réponse qui arrive pendant que la précédente joue encore
+            // interrompt celle-ci et prend le relais — comportement voulu,
+            // pas un effet de bord : la dernière réponse de Cyril est
+            // toujours celle qui compte.
+            this.player.src = `data:${mime};base64,${audioBase64}`;
+            this.player.play().catch(() => {
                 // Lecture bloquée par le navigateur (pas d'interaction
                 // récente, onglet en arrière-plan...) — le texte reste
                 // affiché dans le chat, ce n'est pas une panne à signaler.

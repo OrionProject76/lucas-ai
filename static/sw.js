@@ -6,12 +6,12 @@
 // apparaissent un jour — une réponse de LucasCore périmée serait pire
 // qu'une absence de réponse.
 
-// v4 (02/08/2026) : ajout de voice_output.js (réponses vocales, pont
-// mobile TTS). Le nom change à chaque fois pour forcer un install()
-// frais — sans ça, un téléphone avec la PWA déjà installée garderait
-// indéfiniment l'ancien app shell en cache et ne verrait jamais le
-// nouveau fichier.
-const CACHE_NAME = "lucas-shell-v4";
+// v5 (02/08/2026) : correctif voice_output.js — l'audio coupait en plein
+// mot (Audio() sans référence, éligible au ramasse-miettes en cours de
+// lecture, voir le fichier). Le nom change à chaque fois pour forcer un
+// install() frais — sans ça, un téléphone avec la PWA déjà installée
+// garderait indéfiniment l'ancien fichier buggé en cache.
+const CACHE_NAME = "lucas-shell-v5";
 const SHELL_FILES = [
     "/app/",
     "/app/index.html",
