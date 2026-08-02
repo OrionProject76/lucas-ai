@@ -104,6 +104,13 @@ index:
 clean:
     python scripts/cleanup.py
 
+# Oublier le dernier échange (question + réponse)
+# À utiliser quand Luca's vient de répondre à côté : sans ça, elle voit sa
+# propre mauvaise réponse juste au-dessus et la réimite. Mesuré sur la base
+# réelle : 3/9 avec l'échange raté, 8/9 sans (voir config.py).
+forget-last:
+    python -c "from memory.memory_manager import MemoryManager; m=MemoryManager(); print(f'{m.forget_last_exchange()} message(s) oublié(s)')"
+
 # Rapport matinal manuel
 report:
     python -c "from lucas_daemon import LucasDaemon; d=LucasDaemon(); d.generate_morning_report()"

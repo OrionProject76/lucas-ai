@@ -570,15 +570,38 @@ def test_history_is_shortened_when_the_rag_fires(core_with_history, monkeypatch)
     )
 
 
-def test_history_is_kept_whole_without_vision(core_with_history):
+def test_history_without_vision_is_longer_than_with(core_with_history, monkeypatch):
     """
-    Le raccourcissement ne vaut QUE pour la vision. Une conversation
-    ordinaire garde sa mémoire longue — c'est tout l'intérêt du projet.
-    """
-    messages = core_with_history._build_messages("quelle heure il est", "local")
+    Ce test affirmait l'inverse : « le raccourcissement ne vaut QUE pour
+    la vision, une conversation ordinaire garde sa mémoire longue ». Il
+    protégeait en réalité le trou par lequel le prompt système se faisait
+    diluer — 100 messages bruts sur une question ordinaire, et une règle
+    de sécurité du prompt qui tombe à 2/9 (voir config.py,
+    HISTORY_BUDGET_CHARS).
 
-    old = [m for m in messages if m["content"].startswith(("vieille question", "vieille réponse"))]
-    assert len(old) == 90, f"historique tronqué à {len(old)} sans raison"
+    Ce qui reste vrai, et que ce test vérifie maintenant : une
+    conversation ordinaire garde PLUS de mémoire qu'une question qui
+    déclenche l'écran. C'était l'intention derrière l'ancien test ; c'est
+    « tout, sans limite » qui était faux, pas « plus ».
+    """
+    ordinaire = core_with_history._build_messages("quelle heure il est", "local")
+    ordinaire_old = [
+        m for m in ordinaire
+        if m["content"].startswith(("vieille question", "vieille réponse"))
+    ]
+
+    _fake_vision(monkeypatch, "un éditeur de texte")
+    avec_vision = core_with_history._build_messages("c'est écrit quoi ?", "local")
+    vision_old = [
+        m for m in avec_vision
+        if m["content"].startswith(("vieille question", "vieille réponse"))
+    ]
+
+    assert len(ordinaire_old) > len(vision_old), (
+        "une conversation ordinaire doit garder plus de contexte qu'une "
+        "question sur l'écran, où l'écran est le sujet"
+    )
+    assert ordinaire_old, "elle ne doit pas non plus perdre toute mémoire"
 
 
 def test_the_vlm_is_off_in_v1_and_never_called(core_with_history, monkeypatch):

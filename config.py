@@ -383,6 +383,76 @@ RECENT_EVENTS_IN_PROMPT: int = 5
 # suffisent à garder le fil de la conversation.
 SOURCE_HISTORY_MESSAGES: int = 6
 
+# --- Dilution du prompt système par l'historique (02/08/2026) ---
+#
+# ⚠️ Le plafond ci-dessus ne s'appliquait QUE quand une source externe
+# était injectée. Une question ordinaire recevait les 100 messages, et le
+# prompt système s'y noyait exactement de la même façon. Signalé par Cyril
+# en usage réel : la liste des capacités venait d'être écrite dans
+# SYSTEM_PROMPT, elle marchait sur une conversation neuve, et restait
+# sans effet sur la sienne.
+#
+# ⚠️ Ce n'est PAS un problème propre à cette question. Mesuré sur DEUX
+# règles indépendantes du prompt système, base réelle de Cyril
+# (100 messages, 38 312 caractères), 9 tirages par condition :
+#
+#   sonde 1 — « que voudrais-tu améliorer ? » doit citer une capacité
+#             réelle (CSV, OCR, bulletins, voix, téléphone)
+#   sonde 2 — « consulte ma boîte mail » doit être refusé, la messagerie
+#             fait partie des interdits listés dans le prompt
+#
+#     historique joint            sonde 1   sonde 2
+#     aucun                         9/9       9/9
+#     100 messages bruts            1/9       2/9
+#     100 messages + ré-ancrage     1/9       7/9
+#     16 messages + ré-ancrage      1/9       7/9
+#     6 messages + ré-ancrage       6/9       7/9
+#
+# Une règle de sécurité (sonde 2) tombe donc aussi bas qu'une règle
+# d'identité. C'est ce qui interdit de corriger question par question.
+#
+# ⚠️ Ce qui décide est le VOLUME DE TEXTE, pas le nombre de tours.
+# 30 messages tronqués à 150 caractères (5 809 car.) font mieux que
+# 6 messages bruts (10 487 car.), en gardant cinq fois plus de contexte.
+# D'où un budget en caractères plutôt qu'un compte de messages :
+#
+#     budget      messages gardés   sonde 1   sonde 2
+#     4000 car.        36             3/9       9/9
+#     2000 car.        13             7/9       9/9
+#     1000 car.         6             9/9       8/9
+#
+# 2000 est le compromis retenu : 16/18 au total (contre 3/18 aujourd'hui),
+# et six à sept échanges de mémoire conservés au lieu de trois.
+HISTORY_BUDGET_CHARS: int = 2000
+
+# Chaque message plus ancien que le dernier échange est tronqué à cette
+# longueur. Le fil de la conversation se retient dans les premières
+# phrases ; le reste ne sert qu'à peser contre le prompt système.
+#
+# ⚠️ La coupe se fait SANS marqueur (« […] ») et sur une frontière de mot.
+# Trouvé en test réel via l'API : le modèle recopie le marqueur et coupe
+# sa propre réponse en plein mot. 1/9 avec, 0/9 sans. Voir
+# fit_history_to_budget() dans core/lucas_core.py.
+HISTORY_MESSAGE_MAX_CHARS: int = 200
+
+# Le DERNIER échange échappe à cette troncature (il garde 600 caractères) :
+# « Et pour 2024 ? » n'a de sens que par rapport à la réponse juste avant.
+# Vérifié : 7/9 et 9/9, identique à la troncature uniforme — la continuité
+# ne coûte rien ici.
+HISTORY_RECENT_MESSAGES: int = 2
+HISTORY_RECENT_MAX_CHARS: int = 600
+
+# Le prompt système est REPÉTÉ juste avant la question, en plus d'ouvrir
+# le prompt. Presque gratuit, et c'est ce qui fait passer la sonde 2 de
+# 2/9 à 7/9 sur historique complet.
+#
+# ⚠️ Le ré-ancrage seul ne suffit PAS (sonde 1 : 1/9 → 1/9). Il ne
+# remplace pas le budget, il le complète : une instruction FACTUELLE
+# (« tu n'as pas accès aux mails ») se rattrape par répétition, une
+# instruction qui lutte contre le FIL THÉMATIQUE de la conversation, non.
+# Les deux mécanismes ensemble : 16/18.
+REANCHOR_SYSTEM_PROMPT: bool = True
+
 # --- Identité de Luca's ---
 #
 # ⚠️ Bug trouvé par Cyril en test mobile réel (02/08/2026) : une version

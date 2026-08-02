@@ -2,8 +2,13 @@
 
 from config import (
     CLOUD_HISTORY_MESSAGES,
+    HISTORY_BUDGET_CHARS,
+    HISTORY_MESSAGE_MAX_CHARS,
+    HISTORY_RECENT_MAX_CHARS,
+    HISTORY_RECENT_MESSAGES,
     OCR_ENABLED,
     OCR_MAX_CHARS,
+    REANCHOR_SYSTEM_PROMPT,
     RECENT_EVENTS_IN_PROMPT,
     SYSTEM_PROMPT,
     VISION_ENABLED,
@@ -22,6 +27,57 @@ from core.world_model import (
 )
 from memory.memory_manager import MemoryManager
 from modules.rag_manager import RAGManager
+
+
+def fit_history_to_budget(
+    history: list[tuple[str, str]],
+    budget: int = HISTORY_BUDGET_CHARS,
+    max_chars: int = HISTORY_MESSAGE_MAX_CHARS,
+    recent: int = HISTORY_RECENT_MESSAGES,
+    recent_max_chars: int = HISTORY_RECENT_MAX_CHARS,
+) -> list[tuple[str, str]]:
+    """
+    Réduit l'historique au VOLUME DE TEXTE que le prompt système peut
+    supporter sans se faire noyer, du plus récent au plus ancien.
+
+    ⚠️ Un budget en caractères, pas un compte de messages — et ce n'est
+    pas un détail d'implémentation, c'est la mesure qui l'impose : 30
+    messages tronqués à 150 caractères tiennent mieux tête au prompt
+    système que 6 messages bruts, tout en gardant cinq fois plus de
+    contexte. Ce qui pèse, c'est le texte, pas les tours. Tableau complet
+    dans config.py (HISTORY_BUDGET_CHARS).
+
+    Le dernier échange garde une longueur plus généreuse : « Et pour
+    2024 ? » n'a de sens que par rapport à la réponse qui précède.
+
+    Au moins un message est toujours conservé : un historique réduit à
+    zéro ferait perdre le fil au milieu d'une phrase, ce qui est plus
+    visible pour Cyril que la dilution qu'on corrige.
+
+    ⚠️ AUCUN marqueur de troncature n'est ajouté, et ce n'est pas un
+    oubli. La première version terminait les messages coupés par « […] » —
+    pour que le modèle sache que le message continuait. Trouvé en test
+    réel via l'API : il RECOPIE le marqueur et coupe sa propre réponse en
+    plein mot (« 2. **Interfa […] »). Mesuré : 1/9 avec le marqueur, 0/9
+    sans. Tout motif régulier ajouté à l'historique est un exemple à
+    imiter — c'est le même mécanisme que le bug qu'on corrige ici, appliqué
+    à la forme au lieu du fond.
+    """
+    kept: list[tuple[str, str]] = []
+    used = 0
+    for index, (role, content) in enumerate(reversed(history)):
+        limit = recent_max_chars if index < recent else max_chars
+        if len(content) > limit:
+            coupe = content[:limit]
+            # Sur une frontière de mot : une coupe en plein milieu d'un mot
+            # est elle aussi un motif que le modèle peut reproduire.
+            espace = coupe.rfind(" ")
+            content = (coupe[:espace] if espace > limit // 2 else coupe).rstrip()
+        if used + len(content) > budget and kept:
+            break
+        kept.append((role, content))
+        used += len(content)
+    return list(reversed(kept))
 
 
 class LucasCore:
@@ -216,8 +272,36 @@ class LucasCore:
         if not is_cloud and (vision_context or rag_context):
             history = history[-SOURCE_HISTORY_MESSAGES:]
 
+        # ⚠️ TROISIÈME VISAGE DU MÊME BUG, et le plus large.
+        #
+        # Les deux plafonds ci-dessus ne s'appliquent que dans un cas
+        # précis : une requête cloud, ou une source externe injectée. Une
+        # question ordinaire recevait les 100 messages en entier — et le
+        # PROMPT SYSTÈME s'y noyait exactement comme s'y noyait le bloc
+        # vision. Cyril l'a vu sur sa vraie conversation : la liste des
+        # capacités venait d'être écrite dans SYSTEM_PROMPT, elle marchait
+        # sur une conversation neuve, et restait sans effet chez lui.
+        #
+        # Mesuré sur DEUX règles indépendantes du prompt système — une
+        # d'identité, une de sécurité (« tu n'as pas accès aux mails ») —
+        # les deux tombent de 9/9 à 1/9 et 2/9 sous 100 messages. Une
+        # correction question par question ne pouvait donc pas suffire.
+        # Tableaux complets dans config.py.
+        history = fit_history_to_budget(history)
+
         for role, content in history:
             messages.append({"role": role, "content": content})
+
+        # Ré-ancrage : le prompt système répété juste avant la question.
+        # Complète le budget sans le remplacer — une règle FACTUELLE se
+        # rattrape par répétition (2/9 → 7/9), une règle qui lutte contre
+        # le fil thématique de la conversation, non (1/9 → 1/9).
+        #
+        # ⚠️ Placé AVANT les blocs vision/RAG, pour ne pas les éloigner
+        # de la question : leur position collée à la question est ce qui
+        # les a fait fonctionner, on n'y touche pas.
+        if REANCHOR_SYSTEM_PROMPT and history:
+            messages.append({"role": "system", "content": SYSTEM_PROMPT})
 
         # Vision : Luca's regarde l'écran uniquement sur demande explicite.
         # Jamais vers le cloud — l'image reste locale, mais sa description

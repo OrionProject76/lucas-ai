@@ -104,6 +104,31 @@ class MemoryManager:
         self.cursor.execute("DELETE FROM conversations")
         self.conn.commit()
 
+    def forget_last_exchange(self) -> int:
+        """
+        Efface le dernier échange (la question et la réponse qui suit).
+        Retourne le nombre de messages supprimés.
+
+        ⚠️ Ceci n'est pas un confort, c'est le complément indispensable au
+        budget d'historique de config.py. Mesuré sur la base réelle de
+        Cyril, question identique, 9 tirages : 3/9 avec l'historique tel
+        quel, 8/9 en supprimant QUATRE messages — la même question déjà
+        posée deux fois, et ses deux réponses génériques.
+
+        Aucun réglage de prompt ne renverse ça : face à la question
+        identique déjà répondue juste au-dessus, le modèle imite sa propre
+        réponse, et c'est le comportement normal d'un modèle de langue.
+        Le budget empêche une mauvaise réponse d'en contaminer cent ; il
+        ne peut pas effacer celle qui vient d'être donnée. Il faut pouvoir
+        la retirer.
+        """
+        self.cursor.execute("""
+            DELETE FROM conversations
+            WHERE id IN (SELECT id FROM conversations ORDER BY id DESC LIMIT 2)
+        """)
+        self.conn.commit()
+        return self.cursor.rowcount
+
     # ── Événements système (nouveau) ──────────────────────────
 
     def save_event(self, event_type: str, details: str = ""):
