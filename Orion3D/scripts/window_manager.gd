@@ -25,21 +25,12 @@ func setup_window():
 
 # ── Zones cliquables ──────────────────────────────────────────────────
 #
-# ⚠️ SEMANTIQUE DE window_set_mouse_passthrough : le polygone definit ce
-# qui REÇOIT les clics ; tout le reste TRAVERSE. Un tableau vide DESACTIVE
-# le passthrough, donc la fenetre intercepte TOUT.
-#
-# L'ancien code appelait _set_click_through(false) au demarrage, donc
-# tableau vide, donc interception totale. Mesure au demarrage, via
-# WindowFromPoint sur huit points : Godot recevait les clics PARTOUT, y
-# compris sur la barre des taches Windows. Et le mode « actif » posait un
-# cercle de 200 px au CENTRE de l'ecran — alors que l'avatar derive et que
-# les panneaux HUD sont sur les bords : la seule zone cliquable etait
-# celle ou il n'y a rien.
-#
-# La zone qui intercepte est desormais le CADRE du HUD, trace en un seul
-# polygone « en beignet » : contour exterieur, puis contour interieur
-# parcouru en sens inverse. Le centre — ou vit l'avatar — traverse.
+# Etat de depart, MESURE via WindowFromPoint sur huit points : Godot
+# recevait les clics PARTOUT, barre des taches Windows comprise. Deux
+# causes — setup_window() appelait _set_click_through(false), et un
+# tableau vide DESACTIVE le passthrough ; et le mode « actif » posait un
+# cercle de 200 px au CENTRE de l'ecran, alors que l'avatar derive et que
+# les panneaux sont sur les bords.
 #
 # Decision de Cyril, 02/08/2026 : l'avatar TRAVERSE tant qu'aucune action
 # ne lui est associee. Une forme qui derive et bloque des clics au hasard
@@ -63,43 +54,92 @@ const HUD_BOTTOM := 80.0
 const TASKBAR_RESERVED := 144.0
 
 
-func _region_hud() -> PackedVector2Array:
+# ⚠️ NE PLUS UTILISER window_set_mouse_passthrough(polygone) SUR WINDOWS.
+# Il y est implemente par une REGION DE FENETRE, qui ne decoupe pas
+# seulement les clics mais aussi LE RENDU : le trou central rendait
+# l'avatar et tout le centre du HUD invisibles. Verifie a la capture —
+# seuls les bords du HUD subsistaient, le bureau apparaissait au milieu.
+#
+# WINDOW_FLAG_MOUSE_PASSTHROUGH pose WS_EX_TRANSPARENT : les clics
+# traversent TOUTE la fenetre, sans toucher au rendu. Il est global, donc
+# on le bascule selon la position du curseur — sur le HUD il s'eteint
+# (la fenetre recoit), ailleurs il s'allume (ca traverse).
+#
+# mouse_get_position() rend la position GLOBALE du curseur meme sans
+# focus : le sondage fonctionne alors que la fenetre est en NO_FOCUS.
+
+# ⚠️⚠️ LIMITE DE PLATEFORME, MESUREE — NE PAS REESSAYER SANS LIRE CECI.
+#
+# Sur Windows, avec Godot 4.7, AUCUNE des deux voies ne donne a la fois un
+# rendu complet et des clics qui traversent :
+#
+#   • window_set_mouse_passthrough(polygone) DECOUPE LE RENDU. Preuve :
+#     avec un trou rectangulaire de (1200,500) a (2600,1600), la tete de
+#     l'avatar apparait TRANCHEE VERTICALEMENT a x = 1200 exactement.
+#     Le centre de l'overlay cesse simplement d'etre dessine.
+#
+#   • WINDOW_FLAG_MOUSE_PASSTHROUGH est SANS EFFET. La bascule s'execute
+#     bien (verifie par journalisation : true -> false sur le HUD ->
+#     true au centre), mais GWL_EXSTYLE reste identique aux deux
+#     positions et WS_EX_TRANSPARENT n'est jamais pose.
+#
+# L'etat actuel privilegie le RENDU : l'avatar et le HUD s'affichent
+# entierement, mais la fenetre capte les clics. Le vrai correctif demande
+# de poser WS_EX_TRANSPARENT par du code natif (GDExtension), hors de
+# portee de GDScript. En attente d'arbitrage de Cyril.
+var _traverse: bool = false
+
+
+func _dans_hud(p: Vector2i) -> bool:
+    """Le curseur est-il sur une zone interactive de Luca's ?"""
+    var w := screen_size.x
+    var h := screen_size.y
+    var bas := h - int(TASKBAR_RESERVED)
+    # La barre des taches Windows n'appartient jamais a Luca's.
+    if p.y >= bas:
+        return false
+    if p.y < int(HUD_TOP):
+        return true
+    if p.y >= bas - int(HUD_BOTTOM):
+        return true
+    if p.x < int(HUD_LEFT):
+        return true
+    if p.x >= w - int(HUD_RIGHT):
+        return true
+    return false
+
+
+func _appliquer_traverse(valeur: bool):
     """
-    Le cadre du HUD, en un seul polygone troue.
+    ⚠️ SANS EFFET AUJOURD'HUI — et c'est volontaire de le laisser en place.
 
-    Deux bornes, et les deux ont ete trouvees par la mesure :
+    L'appel ci-dessous ne fait rien sur Windows (voir l'encadre plus
+    haut). Ce qui est conserve, c'est la POLITIQUE : _dans_hud() decrit
+    exactement quelles zones doivent intercepter, et cette politique est
+    verifiee. Le jour ou WS_EX_TRANSPARENT sera pose par une GDExtension,
+    seul le corps de cette fonction changera.
 
-    ⚠️ Le contour EXTERIEUR s'arrete a `bas_utile`, pas au bas de l'ecran.
-    Tout ce qui est en dessous — la barre des taches — sort du polygone et
-    traverse donc. Premiere version : le contour descendait jusqu'a `h`,
-    si bien que la bande de la barre des taches faisait partie du cadre
-    cliquable, et WindowFromPoint confirmait que Godot y captait les clics.
-
-    ⚠️ Le TROU central couvre tout l'interieur : c'est la que vit
-    l'avatar, et il doit traverser (decision de Cyril, 02/08/2026).
+    Ne pas supprimer en croyant nettoyer du code mort : ce serait perdre
+    la partie qui a demande le plus de mesures.
     """
-    var w := float(screen_size.x)
-    var h := float(screen_size.y)
-    var bas_utile := h - TASKBAR_RESERVED
-    var l := HUD_LEFT
-    var r := w - HUD_RIGHT
-    var t := HUD_TOP
-    var b := bas_utile - HUD_BOTTOM
-    return PackedVector2Array([
-        # contour exterieur, borne au-dessus de la barre des taches
-        Vector2(0, 0), Vector2(w, 0), Vector2(w, bas_utile), Vector2(0, bas_utile), Vector2(0, 0),
-        # trou central, parcouru en sens inverse
-        Vector2(l, t), Vector2(l, b), Vector2(r, b), Vector2(r, t), Vector2(l, t),
-    ])
+    if valeur == _traverse:
+        return
+    _traverse = valeur
+    DisplayServer.window_set_flag(
+        DisplayServer.WINDOW_FLAG_MOUSE_PASSTHROUGH, valeur, window.get_window_id()
+    )
+
+
+func _process(_delta: float):
+    if not Global.click_through or not window:
+        return
+    _appliquer_traverse(not _dans_hud(DisplayServer.mouse_get_position()))
 
 
 func _set_click_through(enabled: bool):
     Global.click_through = enabled
-    var win_id = window.get_window_id()
-    if enabled:
-        DisplayServer.window_set_mouse_passthrough(_region_hud(), win_id)
-    else:
-        DisplayServer.window_set_mouse_passthrough(PackedVector2Array(), win_id)
+    if not enabled:
+        _appliquer_traverse(false)
 
 
 func toggle_click_through():

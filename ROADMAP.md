@@ -126,6 +126,34 @@ intact, les tests du chemin VLM tournent toujours (`_fake_vision` l'active
 explicitement), et `VLM_ENABLED = True` + `VLM_MODEL = "internvl2"` suffisent à
 le réactiver.
 
+#### ⛔ Click-through : bloqué par une limite de Godot 4.7 sur Windows
+
+**État acté le 02/08/2026 : on laisse en l'état, le correctif réel est différé.**
+
+Un compagnon de bureau doit laisser passer les clics là où il n'y a rien.
+Aujourd'hui l'overlay **capte tous les clics de l'écran**. Les deux voies
+accessibles depuis GDScript ont été essayées et **mesurées** :
+
+| voie | résultat mesuré |
+|---|---|
+| `window_set_mouse_passthrough(polygone)` | les clics traversent, **mais le rendu est découpé** — avec un trou de test commençant à x=1200, la tête de l'avatar apparaît tranchée verticalement à x=1200 exactement |
+| `WINDOW_FLAG_MOUSE_PASSTHROUGH` | **sans effet** — la bascule s'exécute bien (journalisée : `true` → `false` sur le HUD → `true` au centre) mais `GWL_EXSTYLE` ne change jamais et `WS_EX_TRANSPARENT` n'est jamais posé |
+
+L'état retenu privilégie **le rendu** : tout s'affiche, la fenêtre capte
+les clics. Acceptable tant que Godot se lance et se ferme pendant le
+travail sur l'apparence ; **inacceptable pour un usage continu**.
+
+**➜ Le correctif : une petite GDExtension qui pose `WS_EX_TRANSPARENT`.**
+La politique est déjà écrite et vérifiée — `window_manager._dans_hud()`
+décrit quelles zones interceptent, et `WindowFromPoint` sur huit points
+sert de test. Seul le mécanisme manque. Ne pas supprimer
+`_appliquer_traverse()` en croyant nettoyer du code mort.
+
+⚠️ Deux constantes y sont mesurées et non devinées : `TASKBAR_RESERVED`
+(144 px — `screen_get_usable_rect()` rend l'écran entier sur cette
+machine, vérifié en l'affichant) et les bords du HUD. À revoir si Cyril
+change son échelle d'affichage.
+
 ⚠️ **Attention en reprenant la Phase 3** : « 5 modes de présence » n'était défini nulle part. Il s'agit des états de Luca's elle-même, **à ne pas confondre avec les 8 « modes AURA »** d'`IDEAS.md` (Working, Gaming, Meeting…), qui sont des contextes d'activité de Cyril et relèvent de S5.
 
 ### ⚠️ Ce qui dépend du micro et de la caméra ne peut pas être fait avant le mobile
