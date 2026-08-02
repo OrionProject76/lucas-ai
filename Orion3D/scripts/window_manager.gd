@@ -2,10 +2,18 @@ extends Node
 
 var window: Window
 var screen_size: Vector2i
+var _scale: float = 1.0
 
 func _ready():
     window = get_window()
     screen_size = DisplayServer.screen_get_size()
+    # hud_canvas.tscn est dessine dans le canevas de conception (project.godot :
+    # viewport_width=1920), mis a l'echelle par stretch/mode=canvas_items sur la
+    # taille reelle de la fenetre. Sans ce facteur, les seuils HUD_* ci-dessous
+    # sont compares a des coordonnees de souris en pixels reels : sur cette
+    # machine (3840x2160, facteur 2), toute la bande interactive du bas se
+    # retrouvait au-dessus de la barre de saisie reelle au lieu de la couvrir.
+    _scale = screen_size.x / DESIGN_WIDTH
 
 func setup_window():
     if not window:
@@ -20,7 +28,7 @@ func setup_window():
     DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_BORDERLESS, true, window.get_window_id())
     DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_ALWAYS_ON_TOP, true, window.get_window_id())
     DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_NO_FOCUS, true, window.get_window_id())
-    _set_click_through(true)
+    _appliquer_passthrough_total()
     print("Fenetre configuree : " + str(screen_size))
 
 # ── Zones cliquables ──────────────────────────────────────────────────
@@ -37,12 +45,15 @@ func setup_window():
 # de sa trajectoire serait vite insupportable ; on peut toujours parler a
 # Luca's par la barre de saisie, qui reste cliquable.
 
-# Bords du HUD, en pixels. Suivent hud_canvas.tscn : LeftPanel et
-# RightPanel font 320 de large, la barre du haut 70, celle du bas 80.
+# Bords du HUD, en pixels du canevas de CONCEPTION (1920x1080) — voir
+# _scale plus haut pour la conversion vers les pixels reels de l'ecran.
+# Suivent hud_canvas.tscn exactement : LeftPanel large de 320, RightPanel
+# de 400, TopBar haute de 60, BottomBar de 70.
+const DESIGN_WIDTH := 1920.0
 const HUD_LEFT := 320.0
-const HUD_RIGHT := 320.0
-const HUD_TOP := 70.0
-const HUD_BOTTOM := 80.0
+const HUD_RIGHT := 400.0
+const HUD_TOP := 60.0
+const HUD_BOTTOM := 70.0
 
 # ⚠️ Hauteur reservee a la barre des taches Windows. MESUREE sur cette
 # machine : y 2016 a 2160, soit 144 px.
@@ -87,7 +98,58 @@ const TASKBAR_RESERVED := 144.0
 # entierement, mais la fenetre capte les clics. Le vrai correctif demande
 # de poser WS_EX_TRANSPARENT par du code natif (GDExtension), hors de
 # portee de GDScript. En attente d'arbitrage de Cyril.
-var _traverse: bool = false
+#
+# ⚠️⚠️ INCIDENT DU 02/08/2026 — le bureau ENTIER se bloquait, pas
+# seulement le HUD. La ligne juste au-dessus etait fausse : la fenetre ne
+# "captait les clics" pas seulement sur elle-meme, elle les captait sur
+# TOUT l'ecran, en permanence, quelle que soit la valeur du flag —
+# puisque WINDOW_FLAG_MOUSE_PASSTHROUGH est SANS EFFET MESURE (voir plus
+# haut). _dans_hud() et son appel par _process() ne changeaient donc rien
+# en pratique : le vrai defaut a toujours ete "tout capte", jamais "tout
+# traverse" comme le code semblait le dire.
+#
+# Regle non negociable de Cyril, posee apres ce blocage : le comportement
+# PAR DEFAUT doit garantir que le bureau n'est jamais bloque, quitte a
+# n'avoir ENCORE aucune zone cliquable. window_set_mouse_passthrough(region)
+# est le seul mecanisme MESURE qui fasse reellement passer les clics sur
+# cette machine. Son defaut connu (decouper le rendu) n'apparaissait qu'a
+# la FRONTIERE d'une region PARTIELLE a l'interieur de la fenetre visible
+# (mesure avec un trou centre) : une region totalement hors ecran n'a pas
+# de frontiere interne visible, donc pas de raison de couper le rendu.
+#
+# _dans_hud() reste ci-dessous, INUTILISEE pour l'instant : elle decrit la
+# politique des zones cliquables du HUD, a reconnecter plus tard a une
+# region reelle (pas au flag mort) une fois validee sans risque de blocage.
+const HORS_ECRAN := Vector2(-10.0, -10.0)
+
+
+func _region_totalement_hors_ecran() -> PackedVector2Array:
+    # Polygone degenere (aire nulle) mais volontairement NON VIDE : un
+    # tableau [] desactive le passthrough (capture totale — l'inverse de
+    # l'effet recherche). Trois points identiques hors fenetre donnent un
+    # passthrough actif sur toute la fenetre, sans jamais definir de zone
+    # interactive.
+    return PackedVector2Array([HORS_ECRAN, HORS_ECRAN, HORS_ECRAN])
+
+
+func _region_fenetre_entiere() -> PackedVector2Array:
+    var w := float(screen_size.x)
+    var h := float(screen_size.y)
+    return PackedVector2Array([
+        Vector2(0, 0), Vector2(w, 0), Vector2(w, h), Vector2(0, h)
+    ])
+
+
+func _appliquer_passthrough_total():
+    """Etat SUR par defaut au demarrage : rien n'est interactif, tout traverse."""
+    DisplayServer.window_set_mouse_passthrough(_region_totalement_hors_ecran(), window.get_window_id())
+    Global.click_through = true
+
+
+func _appliquer_capture_totale():
+    """Bascule manuelle (F12) : toute la fenetre redevient interactive."""
+    DisplayServer.window_set_mouse_passthrough(_region_fenetre_entiere(), window.get_window_id())
+    Global.click_through = false
 
 
 func _dans_hud(p: Vector2i) -> bool:
@@ -98,52 +160,22 @@ func _dans_hud(p: Vector2i) -> bool:
     # La barre des taches Windows n'appartient jamais a Luca's.
     if p.y >= bas:
         return false
-    if p.y < int(HUD_TOP):
+    if p.y < int(HUD_TOP * _scale):
         return true
-    if p.y >= bas - int(HUD_BOTTOM):
+    if p.y >= bas - int(HUD_BOTTOM * _scale):
         return true
-    if p.x < int(HUD_LEFT):
+    if p.x < int(HUD_LEFT * _scale):
         return true
-    if p.x >= w - int(HUD_RIGHT):
+    if p.x >= w - int(HUD_RIGHT * _scale):
         return true
     return false
 
 
-func _appliquer_traverse(valeur: bool):
-    """
-    ⚠️ SANS EFFET AUJOURD'HUI — et c'est volontaire de le laisser en place.
-
-    L'appel ci-dessous ne fait rien sur Windows (voir l'encadre plus
-    haut). Ce qui est conserve, c'est la POLITIQUE : _dans_hud() decrit
-    exactement quelles zones doivent intercepter, et cette politique est
-    verifiee. Le jour ou WS_EX_TRANSPARENT sera pose par une GDExtension,
-    seul le corps de cette fonction changera.
-
-    Ne pas supprimer en croyant nettoyer du code mort : ce serait perdre
-    la partie qui a demande le plus de mesures.
-    """
-    if valeur == _traverse:
-        return
-    _traverse = valeur
-    DisplayServer.window_set_flag(
-        DisplayServer.WINDOW_FLAG_MOUSE_PASSTHROUGH, valeur, window.get_window_id()
-    )
-
-
-func _process(_delta: float):
-    if not Global.click_through or not window:
-        return
-    _appliquer_traverse(not _dans_hud(DisplayServer.mouse_get_position()))
-
-
-func _set_click_through(enabled: bool):
-    Global.click_through = enabled
-    if not enabled:
-        _appliquer_traverse(false)
-
-
 func toggle_click_through():
-    _set_click_through(not Global.click_through)
+    if Global.click_through:
+        _appliquer_capture_totale()
+    else:
+        _appliquer_passthrough_total()
     print("Click-through : " + ("ON" if Global.click_through else "OFF"))
 
 func toggle_visibility():

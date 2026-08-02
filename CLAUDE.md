@@ -191,6 +191,16 @@ Cette précision ne retire rien aux 4 cas ci-dessus. Le confort et la fluidité 
 
 Reste à distinguer : un changement **esthétique de fond** — remplacer le visage de l'avatar par une forme abstraite, changer la charte de couleurs — engage l'identité du produit et se discute. Adoucir une transition, corriger un tremblement, rendre un message d'attente compréhensible : non, c'est du travail normal.
 
+### Précision : minimiser des fenêtres du bureau pour un test visuel (acté le 02/08/2026)
+
+Pour valider visuellement un comportement (ex. l'avatar Godot en overlay plein écran), Claude Code peut **minimiser** — jamais fermer — les autres fenêtres ouvertes sur le bureau de Cyril, pour avoir une vue dégagée sans interférence.
+
+**Ne jamais minimiser la fenêtre du terminal Claude Code lui-même** : le travail y continue, la minimiser couperait la capacité d'agir.
+
+Une fois le test terminé, restaurer les fenêtres minimisées — ou les laisser ainsi et le signaler explicitement à Cyril s'il est préférable qu'il s'en charge lui-même.
+
+Contexte : posé après l'incident du 02/08/2026 où un avatar Godot plein écran, toujours au-dessus, capturait les clics sur tout le bureau (voir `ROADMAP.md` §3, section Godot). Minimiser les fenêtres gênantes évite la confusion visuelle pendant un test, sans rapport avec ce bug de fond.
+
 ## 🛡️ Liberté conditionnée à la protection (acté le 01/08/2026)
 
 ⚠️ **Ne pas confondre avec la section précédente.** « Autonomie d'exécution »

@@ -179,6 +179,22 @@ sert de test. Seul le mécanisme manque. Ne pas supprimer
 machine, vérifié en l'affichant) et les bords du HUD. À revoir si Cyril
 change son échelle d'affichage.
 
+#### 🔴 Bug de fond ouvert (02/08/2026) — Godot se ferme ou gèle spontanément, cause non identifiée
+
+Sur cette machine, `Godot.exe --path Orion3D` (lancé depuis l'éditeur, hors export) a **quatre fois** quitté ou gelé de lui-même après quelques minutes d'exécution, **sans aucune trace** :
+
+- Aucune ligne supplémentaire dans les logs (stdout/stderr redirigés) — le process s'arrête net après « Connecte a Orion Backend », rien après.
+- Aucune entrée dans le journal d'événements Windows (`Get-WinEvent -LogName Application`) — ni « Application Error » (crash), ni « Application Hang » (gel). Sur les deux occurrences où la fermeture a été observée en direct par Cyril, une fois c'était une disparition silencieuse (processus absent de `tasklist`), une fois un gel visible (icône grisée « ne répond pas » dans la barre des tâches, tuée manuellement par `taskkill /F /IM Godot.exe`).
+- Reproduit avec au moins deux versions différentes de `window_manager.gd` (avant et après le correctif de zone HUD), donc **pas causé par le contenu du script à lui seul** — mais la dernière occurrence (le gel) a suivi de près un changement touchant `window_set_mouse_passthrough()`, donc un lien n'est pas exclu non plus.
+
+**Hypothèse la plus concrète, non vérifiée** : `window_set_mouse_passthrough()` a été appelé avec un polygone **dégénéré** — trois points strictement identiques, hors écran (`_region_totalement_hors_ecran()` dans `window_manager.gd`, ajouté puis remplacé le 02/08/2026). Un polygone à aire nulle avec des sommets confondus est un cas limite classique pour un algorithme de géométrie (triangulation, construction de région Win32 `SetWindowRgn`) : plusieurs implémentations bouclent indéfiniment ou restent bloquées sur une comparaison qui ne se résout jamais (arêtes de longueur nulle). C'est un candidat plausible pour un **gel** (le thread principal ne rend plus la main à la boucle de messages Windows), par opposition à un crash qui laisserait une trace.
+
+Cette hypothèse n'explique pas a elle seule les disparitions silencieuses observées **avant** ce changement (avec l'ancien code, qui n'appelait jamais `window_set_mouse_passthrough`) — il y a donc peut-être **deux causes distinctes** : une instabilité de fond (pilote Vulkan/RTX 5080, ou autre) indépendante du code, et un risque de gel spécifique aux polygones dégénérés.
+
+**Avant de retenter un correctif de polygone dégénéré** : remplacer les trois points identiques par un vrai (micro-)polygone non dégénéré mais toujours hors écran (ex. trois sommets distincts autour de (-10,-10), (-9,-10), (-10,-9)), pour éliminer cette piste sans revenir sur la décision de fond.
+
+**État actuel, choisi par Cyril le 02/08/2026** : rester sur le comportement le plus sûr — fenêtre invisible mais qui ne bloque jamais le bureau (`_appliquer_passthrough_total()`) — plutôt que d'itérer sans supervision directe. Le chantier avatar/HUD Godot est **en pause** jusqu'à ce que Cyril supervise en direct le prochain essai visuel. Ne pas relancer Godot pour des tests automatisés sans lui tant que ce point n'est pas rouvert.
+
 ⚠️ **Attention en reprenant la Phase 3** : « 5 modes de présence » n'était défini nulle part. Il s'agit des états de Luca's elle-même, **à ne pas confondre avec les 8 « modes AURA »** d'`IDEAS.md` (Working, Gaming, Meeting…), qui sont des contextes d'activité de Cyril et relèvent de S5.
 
 ### ⚠️ Ce qui dépend du micro et de la caméra ne peut pas être fait avant le mobile
