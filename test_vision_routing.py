@@ -330,6 +330,32 @@ def test_both_failing_produces_an_explicit_failure_block(core, monkeypatch) -> N
     assert "vision_failed" in [t for t, _ in core.memory.events]
 
 
+def test_the_failure_block_also_forbids_a_hypothetical_example(core, monkeypatch) -> None:
+    """
+    Trouvé en usage réel le même jour, une fois le premier correctif en
+    place : le modèle disait honnêtement « je n'ai pas accès à une
+    image », puis illustrait quand même sa réponse d'un exemple fictif
+    (« par exemple, je vois une fenêtre Chrome affichant OrangeTV »).
+    Confirmé via les événements vision_failed horodatés : aucune photo
+    n'avait rien donné à lire, l'exemple ne venait donc pas d'une vraie
+    lecture — mais un exemple concret se lit comme une observation, pas
+    comme une hypothèse, surtout s'il coïncide par hasard avec la
+    réalité (le titre de la fenêtre active du PC est injecté dans
+    chaque prompt, indépendamment de la vision).
+    """
+    _fake_vision(monkeypatch, "Erreur analyse")
+    _fake_ocr(monkeypatch, "", raises=RuntimeError("absent"))
+
+    messages = core._build_messages("regarde mon écran", "local")
+    block = next(
+        m["content"] for m in messages
+        if "AUCUN TEXTE NI CONTEXTE VISUEL" in m["content"]
+    )
+
+    assert "par exemple" in block.lower()
+    assert "INTERDIT AUSSI" in block
+
+
 def test_long_screen_text_is_truncated(core, monkeypatch) -> None:
     """
     Un écran 4K produit des milliers de caractères. Sans borne, le texte
@@ -797,6 +823,31 @@ def test_camera_image_without_ocr_or_vlm_result_produces_a_failure_block(core, m
     assert VISION_MARKER not in block
     assert "INTERDIT" in block
     assert "vision_failed" in [t for t, _ in core.memory.events]
+
+
+def test_camera_image_failure_block_forbids_a_hypothetical_example(core, monkeypatch) -> None:
+    """
+    C'est précisément via ce chemin (photo, bouton caméra, échec OCR/VLM)
+    que le "par exemple" fictif est apparu en usage réel : trois photos
+    prises coup sur coup, toutes trois marquées vision_failed dans les
+    événements horodatés, et pourtant une réponse citant une fenêtre
+    Chrome et un site web précis. Voir
+    test_the_failure_block_also_forbids_a_hypothetical_example pour le
+    même correctif côté écran PC.
+    """
+    _fake_vision(monkeypatch, "Erreur analyse")
+    _fake_ocr(monkeypatch, "", raises=RuntimeError("absent"))
+
+    messages = core._build_messages(
+        "Décris ce que tu vois.", "local", image_path="data/photo.jpg"
+    )
+    block = next(
+        m["content"] for m in messages
+        if "AUCUN TEXTE NI CONTEXTE VISUEL" in m["content"]
+    )
+
+    assert "par exemple" in block.lower()
+    assert "INTERDIT AUSSI" in block
 
 
 # ── Capture PC bloquée pour un client ambigu (allow_screen_capture) ────

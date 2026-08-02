@@ -461,16 +461,37 @@ class LucasCore:
             # ("123456789, VISA, 10/08/2023, Débit, 250.00, Magasin XYZ")
             # — aucune de ces valeurs n'existait sur la photo, l'OCR
             # n'avait rien trouvé du tout.
+            #
+            # ⚠️ Deuxième trouvaille, même jour : l'interdiction ci-dessous
+            # bloque bien les faits inventés, mais pas un « par exemple »
+            # hypothétique — le modèle disait honnêtement "je n'ai pas
+            # accès à une image", puis illustrait quand même sa réponse
+            # d'un exemple fictif ("Je vois une fenêtre Chrome affichant
+            # OrangeTV"). Vérifié via les événements vision_failed
+            # horodatés : aucune photo n'avait rien donné à lire, donc cet
+            # exemple ne pouvait pas venir d'une vraie lecture — mais il
+            # est resté troublant, car ce genre de détail peut coïncider
+            # avec la réalité (le titre de la fenêtre active du PC est
+            # injecté dans CHAQUE prompt, indépendamment de la vision) et
+            # se lire comme une vraie observation. Et une fois généré, ce
+            # même exemple s'est fait imiter mot pour mot par la réponse
+            # suivante — la panne se propage.
             return (
                 "TENTATIVE DE LECTURE (écran ou photo du téléphone) : "
                 "AUCUN TEXTE NI CONTEXTE VISUEL EXPLOITABLE N'A ÉTÉ TROUVÉ.\n\n"
                 "Ta réponse doit dire clairement que tu n'as rien pu lire "
                 "d'exploitable sur cette image, et proposer de reprendre "
-                "la photo ou la capture si besoin.\n"
+                "la photo ou la capture si besoin. Rien d'autre.\n"
                 "INTERDIT : citer un numéro, un montant, un nom de "
                 "commerce, une date ou tout autre détail — une image "
                 "illisible ne permet de connaître AUCUN de ces faits, et "
-                "les inventer serait indiscernable d'une vraie lecture."
+                "les inventer serait indiscernable d'une vraie lecture.\n"
+                "INTERDIT AUSSI : illustrer ta réponse par un exemple "
+                "hypothétique du genre « par exemple, je pourrais voir... » "
+                "ou « je vois actuellement... ». Même présenté comme une "
+                "hypothèse, un exemple concret se lit comme une vraie "
+                "observation, et n'a aucune raison d'être plus précis "
+                "qu'une phrase générale."
             )
 
         # ⚠️ On journalise l'usage, JAMAIS le contenu. Le texte OCR est du
