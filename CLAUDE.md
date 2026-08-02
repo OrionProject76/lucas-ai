@@ -222,6 +222,34 @@ Une fois le test terminé, restaurer les fenêtres minimisées — ou les laisse
 
 Contexte : posé après l'incident du 02/08/2026 où un avatar Godot plein écran, toujours au-dessus, capturait les clics sur tout le bureau (voir `ROADMAP.md` §3, section Godot). Minimiser les fenêtres gênantes évite la confusion visuelle pendant un test, sans rapport avec ce bug de fond.
 
+### Précision : toute action manuelle côté client se demande explicitement (acté le 02/08/2026)
+
+La section précédente couvre ce que Claude Code peut faire **lui-même** sur le
+bureau. Celle-ci couvre l'inverse : ce que seul **Cyril** peut faire.
+
+Quand un test ou un diagnostic exige une action de sa part sur un client —
+fermer ou rouvrir l'onglet de la PWA sur le téléphone, quitter Godot,
+redémarrer un serveur que lui seul relance — **le demander explicitement, en
+clair, à chaque fois, avant de lancer la mesure**. Jamais supposer que c'est
+déjà fait, jamais compter sur le contexte pour qu'il le devine.
+
+**Par défaut, Cyril laisse tout allumé.** Ce n'est pas une négligence : rien
+dans l'interface ne lui signale qu'une connexion ouverte pourrait interférer.
+Les conséquences sont réelles — mesures faussées, ou connexions fantômes qui
+restent actives sans que ni lui ni Claude Code ne le sachent.
+
+Corollaire : **signaler aussi l'état à la fin** — ce qui s'est reconnecté tout
+seul, ce qui reste ouvert, ce qui a été relancé. Un serveur redémarré coupe
+ses clients puis les laisse revenir en silence.
+
+Contexte : posé après le chantier du 02/08/2026 sur la dilution du prompt
+système, où le téléphone de Cyril s'est reconnecté seul au serveur API relancé,
+en pleine campagne de mesures, sans que ce soit signalé.
+
+Cohérent avec la validation en conditions réelles exigée pour ce projet :
+l'état réel des clients connectés fait partie des conditions du test, au même
+titre que le contenu de la base.
+
 ## 🛡️ Liberté conditionnée à la protection (acté le 01/08/2026)
 
 ⚠️ **Ne pas confondre avec la section précédente.** « Autonomie d'exécution »
