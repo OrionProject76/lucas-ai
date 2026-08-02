@@ -10,9 +10,10 @@ window.Lucas = window.Lucas || {};
     const RECONNECT_DELAY_MS = 3000;
 
     class LucasSocket {
-        constructor({ onAvatarState, onChat, onError, onConnectionChange }) {
+        constructor({ onAvatarState, onChat, onActivity, onError, onConnectionChange }) {
             this.onAvatarState = onAvatarState;
             this.onChat = onChat;
+            this.onActivity = onActivity || (() => {});
             this.onError = onError;
             this.onConnectionChange = onConnectionChange || (() => {});
             this.socket = null;
@@ -67,6 +68,9 @@ window.Lucas = window.Lucas || {};
                     break;
                 case "chat":
                     this.onChat(data.text || "", data.from_lucas !== false);
+                    break;
+                case "activity":
+                    this.onActivity(data.kind || "", data.text || "");
                     break;
                 case "error":
                     this.onError(data.detail || "erreur inconnue");

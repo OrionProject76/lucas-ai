@@ -83,6 +83,31 @@ def error(detail: str) -> dict:
     return {"type": "error", "detail": detail}
 
 
+# Émis pendant LucasCore.ask() (voir core/lucas_core.py, paramètre
+# on_activity) — pas une liste fermée à valider, juste ce que le serveur
+# émet aujourd'hui. Un « kind » inconnu ne casse rien côté client : la
+# console de flux affiche une puce générique plutôt que rien.
+ACTIVITY_KINDS = ("routed", "screen_read", "documents_searched", "answered")
+
+
+def activity(kind: str, text: str) -> dict:
+    """
+    Un pas du traitement en cours — console de flux (IDEAS.md #77).
+
+    Purement informatif : aucun client n'a besoin de le comprendre pour
+    fonctionner. Godot l'ignore silencieusement (son match sur "type" n'a
+    pas de branche par défaut, voir test_protocol.py). Le texte arrive
+    déjà en français, prêt à afficher tel quel.
+
+    ⚠️ Pas de vrai temps réel : LucasCore.ask() est un appel synchrone
+    unique, les événements sont collectés pendant son exécution puis
+    envoyés d'un coup à la fin (voir api/server.py). Les horodatages
+    restent fidèles à quand chaque étape a réellement eu lieu, mais
+    l'affichage arrive en rafale, pas au fil de l'eau.
+    """
+    return {"type": "activity", "kind": kind, "text": text}
+
+
 def read_user_text(data: dict) -> str:
     """
     Extrait le texte d'un message entrant, quel que soit le champ.

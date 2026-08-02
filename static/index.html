@@ -14,6 +14,18 @@
     <div id="app">
         <div id="connection-banner"></div>
 
+        <button type="button" id="activity-toggle" class="icon-btn" title="Journal d'activité">
+            📋<span id="activity-badge" class="badge"></span>
+        </button>
+
+        <div id="activity-drawer">
+            <div id="activity-drawer-header">
+                <span>Journal d'activité</span>
+                <button type="button" id="activity-close" class="icon-btn" title="Fermer">✕</button>
+            </div>
+            <div id="activity-log"></div>
+        </div>
+
         <div id="avatar-panel">
             <canvas id="avatar-canvas" width="140" height="140"></canvas>
             <div id="avatar-label">prête</div>
@@ -32,6 +44,7 @@
     <script src="/app/js/avatar.js"></script>
     <script src="/app/js/websocket.js"></script>
     <script src="/app/js/chat.js"></script>
+    <script src="/app/js/activity.js"></script>
     <script src="/app/js/audio.js"></script>
     <script src="/app/js/camera.js"></script>
     <script src="/app/js/app.js"></script>

@@ -494,6 +494,33 @@ propres contraintes de plateforme, pas un détail d'implémentation.
 
 ## 77. Console de flux — journal d'activité en direct
 
+**Construit le 02/08/2026** — tiroir dépliable dans la PWA, badge discret
+quand du nouveau arrive. Deux écarts assumés par rapport à la proposition
+initiale ci-dessous, tranchés par Cyril avant construction :
+
+- **Pas les mêmes messages existants.** `avatar_state`/`system` ne
+  disent qu'un état de présence, pas un fait vérifiable — impossible d'en
+  tirer « écran lu, OCR : 340 caractères trouvés ». Nouveau type
+  `activity` dans `api/protocol.py`, émis par `LucasCore.ask()` via un
+  callback optionnel (`on_activity`, voir `core/lucas_core.py`) à chaque
+  décision réelle : routage local/cloud, lecture d'écran (et son
+  résultat), recherche documentaire (et son résultat), temps de réponse.
+- **Pas du vrai temps réel.** `ask()` est un appel synchrone unique : les
+  événements sont collectés pendant son exécution puis envoyés d'un coup
+  juste avant la réponse (voir `api/server.py`). Les horodatages restent
+  fidèles à quand chaque étape a eu lieu ; l'affichage arrive en rafale,
+  pas au fil de l'eau. Du vrai temps réel exigerait de rendre tout le
+  pipeline asynchrone — hors périmètre de cette construction.
+
+Godot ignore silencieusement le nouveau type (son `match` n'a pas de
+branche par défaut) — vérifié par test, aucune modification du client 3D.
+
+Tests : `test_protocol.py` (`activity()`) ; `test_server.py`
+(`test_websocket_relays_the_activity_events` et voisins).
+
+<details>
+<summary>Proposition initiale (02/08/2026)</summary>
+
 Ajout proposé à la PWA existante : une zone de texte qui affiche en
 temps réel ce que Luca's fait en arrière-plan, dans un style journal
 système (ex. "Analyse du bulletin de salaire en cours...", "Tunnel
@@ -505,6 +532,8 @@ concrètement ce qui se passe, pas seulement un état abstrait.
 Techniquement : s'appuierait sur les mêmes messages WebSocket déjà
 existants (`avatar_state`, `system`), affichés sous une nouvelle forme
 visuelle — pas un nouveau protocole serveur.
+
+</details>
 
 ## 78. Panneau des privilèges — indicateur d'état sécurité visible
 

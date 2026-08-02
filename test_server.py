@@ -51,6 +51,7 @@ def fake_core(monkeypatch):
             message: str,
             image_path: str | None = None,
             allow_screen_capture: bool = True,
+            on_activity=None,
         ) -> str:
             calls["asked"] = message
             calls["asked_image_path"] = image_path
@@ -60,6 +61,9 @@ def fake_core(monkeypatch):
             calls["image_existed_during_call"] = (
                 image_path is not None and os.path.exists(image_path)
             )
+            if on_activity is not None:
+                on_activity("routed", "question reçue — traitée en LOCAL (fake)")
+                on_activity("answered", "réponse prête (0.0 s)")
             return f"réponse à « {message} »"
 
         def history(self):
@@ -290,6 +294,80 @@ def test_websocket_also_emits_a_chat_message(client, fake_core) -> None:
 
     assert message["from_lucas"] is True
     assert "bonjour" in message["text"]
+
+
+def test_websocket_relays_the_activity_events(client, fake_core) -> None:
+    """
+    Console de flux (IDEAS.md #77). _FakeCore émet deux événements
+    pendant ask() (voir la fixture) : le serveur doit les relayer tels
+    quels, dans l'ordre, avant la réponse — pas les inventer lui-même.
+    """
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "chat", "message": "bonjour"})
+
+        events = []
+        for _ in range(15):
+            message = ws.receive_json()
+            if message.get("type") == "activity":
+                events.append((message["kind"], message["text"]))
+            if message.get("type") == "chat":
+                break
+
+    assert events == [
+        ("routed", "question reçue — traitée en LOCAL (fake)"),
+        ("answered", "réponse prête (0.0 s)"),
+    ]
+
+
+def test_websocket_activity_events_arrive_before_the_answer(client, fake_core) -> None:
+    """
+    Point d'ordre : les événements décrivent ce qui a mené à la réponse,
+    ils doivent donc arriver avant elle, pas après ou entremêlés au
+    hasard de l'ordonnancement asyncio.
+    """
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "chat", "message": "bonjour"})
+
+        types_in_order = []
+        for _ in range(15):
+            message = ws.receive_json()
+            if message.get("type") in ("activity", "chat"):
+                types_in_order.append(message["type"])
+            if message.get("type") == "chat":
+                break
+
+    assert types_in_order == ["activity", "activity", "chat"]
+
+
+def test_websocket_no_activity_events_when_the_core_emits_none(client, monkeypatch) -> None:
+    """
+    Une session sans callback (ou qui n'appelle jamais on_activity) ne
+    doit produire aucun message « activity » fantôme — le serveur relaie,
+    il n'invente rien.
+    """
+    class _SilentCore:
+        def ask(self, message, image_path=None, allow_screen_capture=True, on_activity=None):
+            return "réponse"
+
+        def recent_context(self):
+            return ""
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("api.server.LucasCore", _SilentCore)
+
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "chat", "message": "bonjour"})
+
+        seen_types = []
+        for _ in range(15):
+            message = ws.receive_json()
+            seen_types.append(message.get("type"))
+            if message.get("type") == "chat":
+                break
+
+    assert "activity" not in seen_types
 
 
 def test_websocket_accepts_the_godot_text_field(client, fake_core) -> None:

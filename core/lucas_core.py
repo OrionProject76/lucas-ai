@@ -1,11 +1,15 @@
 # core/lucas_core.py — le chef d'orchestre
 
+import time
+from typing import Callable
+
 from config import (
     CLOUD_HISTORY_MESSAGES,
     HISTORY_BUDGET_CHARS,
     HISTORY_MESSAGE_MAX_CHARS,
     HISTORY_RECENT_MAX_CHARS,
     HISTORY_RECENT_MESSAGES,
+    MODEL_NAME,
     OCR_ENABLED,
     OCR_MAX_CHARS,
     REANCHOR_SYSTEM_PROMPT,
@@ -27,6 +31,26 @@ from core.world_model import (
 )
 from memory.memory_manager import MemoryManager
 from modules.rag_manager import RAGManager
+
+# Signature du callback de la console de flux (IDEAS.md #77) : (kind, texte).
+ActivityCallback = Callable[[str, str], None]
+
+
+def _emit(on_activity: ActivityCallback | None, kind: str, text: str) -> None:
+    """
+    Signale un pas du traitement, pour la console de flux — jamais
+    obligatoire, jamais bloquant.
+
+    ⚠️ Ne doit JAMAIS interrompre la réponse à Cyril. Si le callback lève
+    (ex. le WebSocket s'est fermé pendant qu'on répondait), c'est un
+    problème d'affichage, pas une raison de faire échouer sa question.
+    """
+    if on_activity is None:
+        return
+    try:
+        on_activity(kind, text)
+    except Exception:  # noqa: BLE001 — voir docstring
+        pass
 
 
 def fit_history_to_budget(
@@ -90,6 +114,7 @@ class LucasCore:
         destination: str = "local",
         image_path: str | None = None,
         allow_screen_capture: bool = True,
+        on_activity: ActivityCallback | None = None,
     ) -> list[dict]:
         """
         Construit la liste de messages envoyée au LLM.
@@ -113,6 +138,9 @@ class LucasCore:
         mais la capture elle-même est refusée, et Luca's l'explique au lieu
         de se taire — jamais une capture PC silencieuse déclenchée par un
         texte dont on ne sait pas d'où il vient vraiment.
+
+        `on_activity` : callback optionnel (kind, texte) pour la console de
+        flux de la PWA (IDEAS.md #77) — voir _emit() ci-dessus.
         """
         is_cloud = destination == "cloud"
 
@@ -150,6 +178,12 @@ class LucasCore:
         if not is_cloud and VISION_ENABLED:
             if image_path is not None:
                 vision_context = self._describe_camera_image(image_path, user_message)
+                _emit(
+                    on_activity, "screen_read",
+                    "photo du téléphone analysée — texte trouvé (OCR)"
+                    if "Texte lu à l'écran" in vision_context
+                    else "photo du téléphone analysée — rien d'exploitable",
+                )
             elif should_use_vision(user_message, context):
                 # allow_screen_capture protège contre le déclenchement
                 # ACCIDENTEL (« que peux-tu voir sur mes écrans ? » depuis
@@ -159,6 +193,12 @@ class LucasCore:
                 # sur l'ambiguïté, pas sur l'origine du message.
                 if allow_screen_capture or mentions_pc_explicitly(user_message):
                     vision_context = self._describe_screen(user_message)
+                    _emit(
+                        on_activity, "screen_read",
+                        "écran lu — texte trouvé (OCR)"
+                        if "Texte lu à l'écran" in vision_context
+                        else "écran lu — rien d'exploitable",
+                    )
                 else:
                     # ⚠️ Le classifieur dit "intention écran", mais ce
                     # client ne peut pas prouver que Cyril est devant ce
@@ -178,6 +218,11 @@ class LucasCore:
                         "téléphone, il peut utiliser le bouton caméra. "
                         "S'il parlait d'autre chose que de l'écran du PC, "
                         "réponds à ça à la place."
+                    )
+                    _emit(
+                        on_activity, "screen_read",
+                        "écran non lu — demande reçue depuis le téléphone, "
+                        "sans confirmation que Cyril est devant ce PC",
                     )
 
         history = self.memory.load_history()
@@ -217,7 +262,16 @@ class LucasCore:
         rag_context = ""
         if not is_cloud and should_use_rag(user_message, context):
             rag_context = RAGManager().get_context(user_message)
+            if rag_context:
+                extraits = rag_context.count("[Extrait")
+                _emit(
+                    on_activity, "documents_searched",
+                    f"documents personnels — {extraits} extrait(s) trouvé(s)"
+                    if extraits
+                    else "documents personnels — résultat trouvé",
+                )
             if not rag_context:
+                _emit(on_activity, "documents_searched", "documents personnels — aucun résultat")
                 # ⚠️ NE PAS SE TAIRE. Observé en conditions réelles : sur
                 # « mon salaire de juillet 2024 », dont Cyril n'a aucun
                 # bulletin, rien n'était injecté — et le modèle a
@@ -504,20 +558,36 @@ class LucasCore:
         user_message: str,
         image_path: str | None = None,
         allow_screen_capture: bool = True,
+        on_activity: ActivityCallback | None = None,
     ) -> str:
+        """
+        `on_activity` : callback optionnel (kind, texte) pour la console de
+        flux de la PWA (IDEAS.md #77). Ne change rien à la réponse ni au
+        routage — voir _emit() en tête de fichier.
+        """
         self.memory.save_message("user", user_message)
         destination = route(user_message, self.recent_context())
+        _emit(
+            on_activity, "routed",
+            "question reçue — traitée en CLOUD"
+            if destination == "cloud"
+            else f"question reçue — traitée en LOCAL ({MODEL_NAME})",
+        )
         messages = self._build_messages(
             user_message,
             destination,
             image_path=image_path,
             allow_screen_capture=allow_screen_capture,
+            on_activity=on_activity,
         )
 
+        start = time.time()
         if destination == "cloud":
             answer = ask_cloud(messages)
         else:
             answer = ask_local(messages)
+        elapsed = time.time() - start
+        _emit(on_activity, "answered", f"réponse prête ({elapsed:.1f} s)")
 
         self.memory.save_message("assistant", answer)
         return answer

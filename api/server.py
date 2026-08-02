@@ -371,14 +371,30 @@ async def websocket_endpoint(websocket: WebSocket):
                 )
             )
 
+            # Console de flux (IDEAS.md #77). LucasCore.ask() est un appel
+            # SYNCHRONE unique — impossible d'envoyer chaque événement au
+            # fil de l'eau sans rendre tout le pipeline asynchrone, ce qui
+            # dépasserait largement la construction de la console. Les
+            # événements sont donc COLLECTÉS pendant ask(), puis envoyés
+            # d'un coup juste avant la réponse : pas du vrai temps réel,
+            # mais les horodatages restent fidèles à quand chaque étape a
+            # réellement eu lieu — voir protocol.activity().
+            activity_events: list[tuple[str, str]] = []
+
             try:
                 answer = lucas.ask(
-                    message, image_path=image_path, allow_screen_capture=allow_screen_capture
+                    message,
+                    image_path=image_path,
+                    allow_screen_capture=allow_screen_capture,
+                    on_activity=lambda kind, text: activity_events.append((kind, text)),
                 )
             finally:
                 lucas.close()
                 if image_path is not None:
                     Path(image_path).unlink(missing_ok=True)
+
+            for kind, text in activity_events:
+                await websocket.send_json(protocol.activity(kind, text))
 
             # Deux messages plutôt qu'un : l'état pilote l'animation du
             # visage, le message de chat alimente la bulle du HUD. Le

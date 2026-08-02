@@ -24,12 +24,20 @@
         );
         const chat = new window.Lucas.Chat(document.getElementById("chat-log"));
         const banner = document.getElementById("connection-banner");
+        const activity = new window.Lucas.ActivityConsole({
+            toggleEl: document.getElementById("activity-toggle"),
+            drawerEl: document.getElementById("activity-drawer"),
+            closeEl: document.getElementById("activity-close"),
+            logEl: document.getElementById("activity-log"),
+            badgeEl: document.getElementById("activity-badge"),
+        });
 
         const socket = new window.Lucas.LucasSocket({
             onAvatarState: (state) => avatar.setState(state),
             onChat: (text, fromLucas) => {
                 if (fromLucas) chat.addLucasMessage(text);
             },
+            onActivity: (kind, text) => activity.add(kind, text),
             onError: (detail) => chat.addError(detail),
             onConnectionChange: (connected) => {
                 banner.classList.toggle("visible", !connected);

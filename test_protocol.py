@@ -53,6 +53,14 @@ def test_chat_uses_the_field_names_godot_reads() -> None:
     assert message == {"type": "chat", "text": "salut", "from_lucas": True}
 
 
+def test_activity_carries_kind_and_text() -> None:
+    assert protocol.activity("screen_read", "écran lu — texte trouvé") == {
+        "type": "activity",
+        "kind": "screen_read",
+        "text": "écran lu — texte trouvé",
+    }
+
+
 def test_system_rounds_and_defaults_gpu() -> None:
     """
     Le GPU vaut 0 quand il n'est pas lisible : le HUD affiche une jauge
