@@ -45,9 +45,14 @@ rapidocr-onnxruntime>=1.4.0
 # et relevés de Cyril sont dans ce format, ils étaient jusqu'ici
 # signalés mais pas lus.
 # ⚠️ pypdf n'extrait que la couche TEXTE. Un PDF scanné n'en a pas : il
-# est refusé avec un message explicite, pas indexé à vide. Le passer par
-# l'OCR (modules/ocr_engine.py, déjà là) est une piste v1.1.
+# est d'abord tenté par OCR (voir pymupdf ci-dessous), et refusé avec un
+# message explicite seulement si ça aussi échoue.
 pypdf>=6.0.0
+
+# Rendu des PDF scannés en image, pour l'OCR (memory/index_documents.py).
+# PyMuPDF plutôt que pdf2image : pas de binaire externe (poppler) à
+# installer, même logique que RapidOCR plutôt qu'easyocr ci-dessus.
+pymupdf>=1.24.0
 
 # Lecture des .docx pour le RAG. Les paragraphes ET les tableaux sont
 # extraits : un formulaire ou une facture met l'essentiel de son

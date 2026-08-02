@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import shutil
+
 import pytest
 
 from memory import index_documents
@@ -200,6 +202,161 @@ def test_un_pdf_scanne_est_signale_comme_tel(rag, dossier, monkeypatch, capsys):
     assert "scan.pdf" in sortie
     assert "scanné" in sortie
     assert "scan.pdf" not in rag.indexed_documents()
+
+
+# ── OCR de repli pour les PDF scannés ──────────────────────────────────
+#
+# PyMuPDF (fitz) rend chaque page en image, RapidOCR (modules/ocr_engine.py)
+# en lit le texte. Aucune vraie bibliothèque n'est chargée ici : ce qui est
+# testé est le COMPORTEMENT face aux trois cas — OCR qui réussit, absent,
+# ou qui ne trouve rien — pas la qualité de la reconnaissance elle-même.
+
+def _fake_fitz(monkeypatch, nb_pages):
+    """Remplace fitz (PyMuPDF) par une doublure qui rend nb_pages pages vierges."""
+    import sys
+    import types
+    from pathlib import Path as _Path
+
+    class _Pixmap:
+        def save(self, path):
+            _Path(path).write_bytes(b"\x89PNG\r\n\x1a\n")  # contenu sans importance
+
+    class _Page:
+        def get_pixmap(self, dpi=200):
+            return _Pixmap()
+
+    class _Document:
+        def __init__(self, pages):
+            self._pages = pages
+
+        def __iter__(self):
+            return iter(self._pages)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    module = types.ModuleType("fitz")
+    module.open = lambda path: _Document([_Page() for _ in range(nb_pages)])
+    monkeypatch.setitem(sys.modules, "fitz", module)
+
+
+def _fake_ocr_engine(monkeypatch, textes_par_page):
+    """
+    Remplace OCREngine par une doublure qui rend, dans l'ordre, un texte
+    fixe par image reçue — une chaîne vide simule une page sans texte
+    détecté par l'OCR.
+    """
+
+    class _FakeResultat:
+        def __init__(self, texte):
+            self.text = texte
+
+        @property
+        def is_empty(self):
+            return not self.text.strip()
+
+    class _FakeOCREngine:
+        def __init__(self, *args, **kwargs):
+            self._index = 0
+
+        def extract_text(self, image_path):
+            texte = textes_par_page[self._index]
+            self._index += 1
+            return _FakeResultat(texte)
+
+    monkeypatch.setattr(index_documents, "OCREngine", _FakeOCREngine)
+
+
+def test_un_pdf_scanne_est_recupere_par_ocr(rag, dossier, monkeypatch):
+    """
+    LE cas visé : une carte d'identité ou un contrat reçu par la poste et
+    photographié n'a aucune couche texte, mais reste consultable via OCR.
+    """
+    _fake_pypdf(monkeypatch, ["", ""])
+    _fake_fitz(monkeypatch, nb_pages=2)
+    _fake_ocr_engine(
+        monkeypatch,
+        [
+            "Carte nationale d'identite republique francaise ",
+            "Valable jusqu'au 01/01/2035, delivree a Paris ",
+        ],
+    )
+    (dossier / "carte_identite.pdf").write_bytes(b"%PDF-1.4")
+    index_directory(dossier)
+
+    assert "carte_identite.pdf" in rag.indexed_documents()
+    morceaux = [
+        d for d, m in rag.collection.docs.values() if m["source"] == "carte_identite.pdf"
+    ]
+    assert any("Carte nationale" in m for m in morceaux)
+
+
+def test_un_pdf_scanne_sans_ocr_disponible_reste_signale(rag, dossier, monkeypatch, capsys):
+    """
+    Sans PyMuPDF installé, l'indexation ne doit pas planter — retomber
+    sur le message existant, en précisant que l'OCR n'a pas pu être
+    tenté (distinct du cas où il tourne mais ne trouve rien).
+    """
+    import sys
+
+    _fake_pypdf(monkeypatch, ["", ""])
+    monkeypatch.setitem(sys.modules, "fitz", None)
+    (dossier / "scan_ancien.pdf").write_bytes(b"%PDF-1.4")
+    index_directory(dossier)
+
+    sortie = capsys.readouterr().out
+    assert "scan_ancien.pdf" in sortie
+    assert "scanné" in sortie
+    assert "OCR indisponible" in sortie
+    assert "scan_ancien.pdf" not in rag.indexed_documents()
+
+
+def test_un_pdf_scanne_ocr_sans_resultat_reste_signale(rag, dossier, monkeypatch, capsys):
+    """
+    Un scan illisible même par l'OCR (photo floue, page blanche) ne doit
+    pas être indexé avec un texte vide.
+    """
+    _fake_pypdf(monkeypatch, [""])
+    _fake_fitz(monkeypatch, nb_pages=1)
+    _fake_ocr_engine(monkeypatch, [""])
+    (dossier / "photo_floue.pdf").write_bytes(b"%PDF-1.4")
+    index_directory(dossier)
+
+    sortie = capsys.readouterr().out
+    assert "photo_floue.pdf" in sortie
+    assert "OCR" in sortie
+    assert "rien trouvé" in sortie
+    assert "photo_floue.pdf" not in rag.indexed_documents()
+
+
+def test_les_images_temporaires_de_l_ocr_sont_supprimees(monkeypatch, tmp_path):
+    """
+    Ce sont potentiellement des pièces d'identité rendues en image :
+    elles ne doivent pas traîner dans le dossier temporaire du système
+    au-delà de l'extraction, succès ou échec.
+    """
+    _fake_fitz(monkeypatch, nb_pages=1)
+    _fake_ocr_engine(monkeypatch, ["texte suffisant pour depasser le seuil minimal "])
+
+    chemin = tmp_path / "scan.pdf"
+    chemin.write_bytes(b"%PDF-1.4")
+
+    appels = []
+    original_rmtree = shutil.rmtree
+
+    def _rmtree_espion(path, *args, **kwargs):
+        appels.append(index_documents.Path(path))
+        return original_rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(index_documents.shutil, "rmtree", _rmtree_espion)
+
+    index_documents._ocr_pdf(chemin, index_documents.OCREngine())
+
+    assert len(appels) == 1
+    assert not appels[0].exists()
 
 
 def test_un_pdf_corrompu_n_interrompt_pas_les_autres(rag, dossier, monkeypatch):
@@ -401,9 +558,9 @@ def test_le_contenu_d_un_fichier_de_secrets_n_est_jamais_lu(rag, dossier, monkey
 
     original = mod._read
 
-    def _read_espion(path):
+    def _read_espion(path, ocr_engine=None):
         assert "mots de passe" not in path.name.lower(), "le fichier a été ouvert"
-        return original(path)
+        return original(path, ocr_engine)
 
     monkeypatch.setattr(mod, "_read", _read_espion)
     index_directory(dossier)

@@ -36,13 +36,16 @@ from __future__ import annotations
 import argparse
 import hashlib
 import re
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 if __package__ in (None, ""):  # exécution directe : python memory/index_documents.py
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import DOCUMENTS_DIR  # noqa: E402
+from modules.ocr_engine import OCREngine, OCRUnavailable  # noqa: E402
 from modules.rag_manager import RAGManager  # noqa: E402
 
 # Formats lus sans dépendance supplémentaire.
@@ -193,14 +196,68 @@ def _extract_page(page) -> str:
     return "\n".join(lignes)
 
 
-def _read_pdf(path: Path) -> str:
+def _rasteriser_pdf(path: Path) -> Path:
+    """
+    Rend chaque page du PDF en image PNG, dans un dossier temporaire.
+
+    PyMuPDF (fitz) plutôt que pdf2image : pas de binaire externe
+    (poppler) à installer, pour la même raison que RapidOCR a été choisi
+    plutôt qu'easyocr dans modules/ocr_engine.py.
+
+    Lève OCRUnavailable si la bibliothèque manque ou si le rendu échoue
+    (PDF invalide, mot de passe, page corrompue) — l'appelant traite ça
+    comme « OCR non tenté », pas comme « rien trouvé ».
+    """
+    try:
+        import fitz  # PyMuPDF
+    except ImportError as exc:
+        raise OCRUnavailable("PyMuPDF absent — pip install pymupdf") from exc
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="lucas_ocr_pdf_"))
+    try:
+        with fitz.open(str(path)) as document:
+            for i, page in enumerate(document):
+                pixmap = page.get_pixmap(dpi=200)
+                pixmap.save(str(tmp_dir / f"page_{i:03d}.png"))
+    except Exception as exc:  # noqa: BLE001 — fitz lève des types variés
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise OCRUnavailable(f"rendu PDF impossible ({type(exc).__name__})") from exc
+    return tmp_dir
+
+
+def _ocr_pdf(path: Path, ocr_engine: OCREngine) -> str:
+    """
+    Dernier recours pour un PDF sans couche texte : rendre chaque page en
+    image, puis lire le texte par OCR (RapidOCR, en local — voir
+    modules/ocr_engine.py).
+
+    ⚠️ Les images intermédiaires sont supprimées dans tous les cas
+    (succès ou échec) : ce sont potentiellement des pièces d'identité ou
+    des contrats, elles ne doivent pas traîner dans le dossier temporaire
+    du système au-delà de cette fonction.
+    """
+    images_dir = _rasteriser_pdf(path)
+    try:
+        morceaux = []
+        for image_path in sorted(images_dir.iterdir()):
+            resultat = ocr_engine.extract_text(image_path)
+            if not resultat.is_empty:
+                morceaux.append(resultat.text)
+        return "\n\n".join(morceaux)
+    finally:
+        shutil.rmtree(images_dir, ignore_errors=True)
+
+
+def _read_pdf(path: Path, ocr_engine: OCREngine | None = None) -> str:
     """
     Extrait le texte d'un PDF.
 
-    ⚠️ Lève UnreadablePDF plutôt que de rendre une chaîne vide sur un PDF
-    scanné. La distinction compte pour Cyril : « document vide, ignoré »
-    ne lui dit pas quoi faire, « aucune couche texte, probablement
-    scanné » lui dit que seul un OCR le rendrait consultable.
+    ⚠️ Lève UnreadablePDF si ni la couche texte ni l'OCR (repli pour un
+    PDF scanné — cartes d'identité, contrats reçus par la poste) ne
+    donnent assez de matière. La distinction compte pour Cyril :
+    « document vide, ignoré » ne lui dit pas quoi faire, « aucune couche
+    texte, probablement scanné » lui dit que seul un OCR le rendrait
+    consultable — et c'est justement ce qui vient d'être tenté.
     """
     try:
         from pypdf import PdfReader
@@ -225,12 +282,24 @@ def _read_pdf(path: Path) -> str:
         raise UnreadablePDF(f"illisible ({type(exc).__name__})") from exc
 
     texte = "\n\n".join(p.strip() for p in pages if p.strip())
-    if len(texte) < PDF_MIN_CHARS:
+    if len(texte) >= PDF_MIN_CHARS:
+        return texte
+
+    try:
+        texte_ocr = _ocr_pdf(path, ocr_engine or OCREngine())
+    except OCRUnavailable:
         raise UnreadablePDF(
             f"aucune couche texte ({len(texte)} caractères sur "
-            f"{len(reader.pages)} page(s)) — probablement scanné"
+            f"{len(reader.pages)} page(s)) — probablement scanné, "
+            "OCR indisponible"
+        ) from None
+
+    if len(texte_ocr.strip()) < PDF_MIN_CHARS:
+        raise UnreadablePDF(
+            f"aucune couche texte — probablement scanné — et l'OCR n'a "
+            f"rien trouvé d'exploitable sur {len(reader.pages)} page(s)"
         )
-    return texte
+    return texte_ocr
 
 
 class UnreadableDOCX(Exception):
@@ -291,18 +360,24 @@ def _read_text(path: Path) -> str | None:
     return None
 
 
-def _read(path: Path) -> tuple[str | None, str]:
+def _read(
+    path: Path, ocr_engine: OCREngine | None = None
+) -> tuple[str | None, str]:
     """
     Lit un document, quel que soit son format.
 
     Retourne (texte, motif) — `motif` explique l'échec quand `texte` est
     None, pour que la sortie dise POURQUOI un fichier n'est pas indexé.
+
+    `ocr_engine` est réutilisé d'un appel à l'autre par `index_directory`
+    (repli pour les PDF scannés) : recharger RapidOCR à chaque fichier
+    coûterait cher sur un dossier qui en contient plusieurs.
     """
     suffix = path.suffix.lower()
 
     if suffix in PDF_SUFFIXES:
         try:
-            return _read_pdf(path), ""
+            return _read_pdf(path, ocr_engine), ""
         except UnreadablePDF as exc:
             return None, str(exc)
 
@@ -456,12 +531,15 @@ def index_directory(
     ajoutes = inchanges = illisibles = 0
     vus: set[str] = set()
     morceaux_par_doc: dict[str, int] = {}
+    # Une seule instance pour tout le dossier : recharger RapidOCR à
+    # chaque PDF scanné coûterait cher si plusieurs en contiennent.
+    ocr_engine = OCREngine()
 
     for path in fichiers:
         doc_id = path.name
         vus.add(doc_id)
 
-        texte, motif = _read(path)
+        texte, motif = _read(path, ocr_engine)
         if texte is None:
             print(f"  illisible  {doc_id} — {motif}")
             illisibles += 1

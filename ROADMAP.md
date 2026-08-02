@@ -66,10 +66,16 @@ changement du format d'indexation incrémente `RAGManager._FORMAT_VERSION`,
 ce qui force la réindexation — sinon la base resterait silencieusement à
 l'ancien format.
 
-**Reste ouvert** : les documents scannés (cartes d'identité, certains
-contrats) n'ont aucune couche texte et sont refusés avec leur motif. Les
-passer par `modules/ocr_engine.py`, déjà présent pour l'écran, est une
-piste v1.1.
+**Fait le 02/08/2026** : les PDF scannés (cartes d'identité, certains
+contrats) passent maintenant par `modules/ocr_engine.py` (RapidOCR, déjà
+utilisé pour l'écran) quand pypdf n'extrait aucune couche texte. PyMuPDF
+rend chaque page en image temporaire — supprimée dans tous les cas, ce
+sont potentiellement des pièces d'identité — puis l'OCR lit le texte,
+page par page. Si l'OCR est indisponible (dépendance absente) ou ne
+trouve rien d'exploitable, le document est signalé avec un motif
+explicite, comme avant — jamais indexé à moitié en silence. Voir
+`memory/index_documents.py` (`_read_pdf`, `_ocr_pdf`, `_rasteriser_pdf`)
+et `test_index_documents.py`.
 
 **Prérequis avant de commencer S2 :** vérifier qu'Ollama tourne sans doublon de process (voir section 5 — point de vigilance infra).
 
