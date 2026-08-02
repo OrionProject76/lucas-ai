@@ -884,6 +884,40 @@ Voir aussi `IDEAS.md` pour l'idée distincte du double destinataire
 WebSocket (parler au micro du téléphone et faire répondre l'avatar PC
 en même temps) — une extension du pont mobile, pas un correctif.
 
+## 5.5 🔴 Bug de fond ouvert (02/08/2026) — dérive complète de sujet sous historique chargé
+
+Trouvé en diagnostiquant le bug « OrangeTV » (§ correctif vision
+ci-dessus, voir git log), en rejouant le contexte réel exact de Cyril :
+demandé de décrire une photo (bouton caméra), le modèle a répondu
+**au sujet précédent de la conversation** (« je n'ai pas accès à votre
+nom ou votre adresse ») au lieu de la question posée — 4 tirages sur 4,
+avec ou sans le correctif « par exemple » ci-dessus, qui ne peut rien y
+faire puisque le modèle n'atteint même pas le bloc d'instruction.
+
+**Distinct de l'auto-imitation déjà documentée** (config.py,
+`HISTORY_BUDGET_CHARS`, `REANCHOR_SYSTEM_PROMPT`) : celle-là faisait
+imiter une réponse *au même sujet* ; ici le modèle change complètement
+de sujet, en répondant à une question d'il y a plusieurs tours plutôt
+qu'à celle qu'on vient de lui poser. Le ré-ancrage du prompt système
+juste avant la question (déjà en place) ne suffit pas à empêcher ça —
+la question elle-même semble se faire noyer, pas seulement les règles
+du prompt système.
+
+**Reproduit avec de vraies mesures**, pas une supposition : contexte
+reconstruit depuis une copie de la vraie base de Cyril (troncature à
+l'état exact avant l'échange concerné), rejoué contre le vrai modèle
+local, 4/4 tirages dérivant sur le mauvais sujet.
+
+**Non traité** — Cyril a choisi de le garder en note plutôt que d'agir
+maintenant. Probablement lié au même mécanisme de troncature
+d'historique (`fit_history_to_budget()`, `core/lucas_core.py`) que les
+correctifs précédents, mais la piste reste à instruire : est-ce la
+fenêtre de troncature qui laisse passer un tour trop saillant (comme
+pour l'auto-imitation), ou autre chose de spécifique au changement de
+sujet complet ? À reprendre avec le même protocole de mesure que les
+bugs précédents (reconstruction sur copie de base réelle, tirages
+multiples, isolation par historique vierge) avant tout correctif.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
