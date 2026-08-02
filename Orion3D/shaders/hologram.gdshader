@@ -10,6 +10,13 @@ uniform float fresnel_power : hint_range(0.0, 15.0) = 2.0;
 uniform float glitch_intensity : hint_range(0.0, 2.0) = 0.12;
 uniform float time_scale : hint_range(0.0, 10.0) = 2.0;
 uniform float pulse_speed : hint_range(0.0, 20.0) = 3.0;
+// ⚠️ LE SEUL LEVIER REEL DE LUMINOSITE. En render_mode « unshaded »,
+// Godot sort ALBEDO directement et IGNORE EMISSION — la ligne EMISSION
+// plus bas est inerte. Or `color` s'accumule sans borne : mix (jusqu'a
+// 1.0) + scanline 0.8 + h_scan 0.6 + pulse 0.4 + wire 0.8 + pulse2 0.3,
+// soit ~3.9. Le tone mapping ACES desature alors ce depassement vers le
+// BLANC, d'ou un centre crame et du cyan seulement sur les bords.
+uniform float surface_brightness : hint_range(0.05, 1.5) = 0.20;
 uniform float wireframe_intensity : hint_range(0.0, 5.0) = 1.0;
 
 varying vec3 world_pos;
@@ -63,12 +70,15 @@ void fragment() {
     alpha += wire * 0.5;
     alpha += glitch * 0.2;
     alpha = clamp(alpha, 0.0, 0.95);
-
+    // Application du seul levier reel (voir surface_brightness).
+    color *= surface_brightness;
+    // Filet de securite : la surface ne peut plus depasser la plage.
+    color = clamp(color, vec3(0.0), vec3(1.0));
     ALBEDO = color;
     ALPHA = alpha;
     // ⚠️ C'EST ICI QUE VENAIT LE BLANC CRAMÉ, pas du glow. La surface
 	// émettait 3 à 5 fois la plage affichable : le centre saturait en
 	// blanc pur avant même le post-traitement, et baisser le glow ne
 	// pouvait rien y faire.
-	EMISSION = color * (0.8 + pulse * 0.4);
+	EMISSION = vec3(0.0);   // inerte en unshaded, conserve pour memoire
 }
