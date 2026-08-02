@@ -126,6 +126,31 @@ intact, les tests du chemin VLM tournent toujours (`_fake_vision` l'active
 explicitement), et `VLM_ENABLED = True` + `VLM_MODEL = "internvl2"` suffisent à
 le réactiver.
 
+#### 🟢 Session autonome du 02/08/2026 — avatar Godot
+
+Quatre défauts trouvés **en mesurant**, tous invisibles au simple coup d'œil :
+
+| défaut | comment il a été trouvé | correction |
+|---|---|---|
+| **Bouche invisible** (0 pixel clair en `idle`, 0 en `watching`, 6 en `speaking`) | planche de contrôle des 4 états, dérive figée | z 2,2 → 2,45. **Géométrique, pas lumineux** — monter la luminosité de 0,5 à 0,75 faisait passer le compte de 6747 à 6758 |
+| **Yeux asymétriques** — le gauche systématiquement plus gros | même planche | leur z est calculé sur l'ellipsoïde à chaque image. Écart 5,1 % en `idle`, 7,7 % en `speaking` |
+| **`watching` jamais émis** vers Godot | vérification que les états se déclenchent en usage réel | `api/server.py` décide de l'état **avant** `orion.ask()` |
+| **Inclinaison imperceptible** (médiane 0,76°, p90 1,72°) | mesure sur 10 min simulées | `LEAN_GAIN` 0,035 → 0,09 → p90 4,42° |
+
+⚠️ Le plus important est le troisième. **`WATCHING` est le témoin de capture
+d'écran** — l'équivalent de la LED d'une webcam, acté comme signal de
+confidentialité. L'UI PySide6 le respectait ; le chemin Godot ne le
+respectait pas. Un avatar 3D qui regarde l'écran sans le montrer, c'est
+exactement ce que le témoin existe pour empêcher.
+
+**Décisions prises seul, réversibles, à valider :** luminosité de la bouche
+à 0,4 (à 0,75 elle écrasait les yeux, or la hiérarchie du visage doit leur
+revenir) et `LEAN_GAIN` à 0,09.
+
+**Outil conservé** : `Orion3D/scripts/_expr.gd` produit la planche des
+quatre expressions. Retiré de `main.tscn`, mode d'emploi en tête du
+fichier. C'est lui qui a trouvé les deux premiers défauts.
+
 #### ⛔ Click-through : bloqué par une limite de Godot 4.7 sur Windows
 
 **État acté le 02/08/2026 : on laisse en l'état, le correctif réel est différé.**

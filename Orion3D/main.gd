@@ -109,7 +109,12 @@ var attention: float = 1.0
 
 # Inclinaison induite par la vitesse. Faible : au-dela, elle se remarque
 # comme un effet plutot que comme un mouvement.
-const LEAN_GAIN := 0.035
+# ⚠️ 0.035 etait IMPERCEPTIBLE, mesure a l'appui : mediane 0.76 deg,
+# p90 1.72 deg — sous le degre la moitie du temps, et noye par la rotation
+# ambiante du bruit qui fait deja 1.71 deg de mediane. A 0.09 : p90 ~4.4
+# deg, max ~11 deg, soit une inclinaison qui se lit sans se remarquer
+# comme un effet.
+const LEAN_GAIN := 0.09
 var lean: Vector2 = Vector2.ZERO
 
 # La respiration garde une horloge NON déformée : elle ne s'arrête
