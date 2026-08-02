@@ -10,12 +10,12 @@ import pytest
 from config import CLOUD_HISTORY_MESSAGES
 from core.router import is_sensitive, route, should_use_rag, should_use_vision
 
-# core.orion_core tire chromadb (via modules/rag_manager). Les tests de routage
+# core.lucas_core tire chromadb (via modules/rag_manager). Les tests de routage
 # n'en ont pas besoin : on les garde exécutables même sur un environnement
 # minimal, et on saute seulement les tests de _build_messages.
 try:
-    from core import orion_core
-    from core.orion_core import OrionCore
+    from core import lucas_core
+    from core.lucas_core import LucasCore
 
     CORE_AVAILABLE = True
 except ModuleNotFoundError as exc:  # pragma: no cover
@@ -24,7 +24,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover
 
 requires_core = pytest.mark.skipif(
     not CORE_AVAILABLE,
-    reason="core.orion_core indisponible (dépendance manquante)",
+    reason="core.lucas_core indisponible (dépendance manquante)",
 )
 
 
@@ -145,18 +145,18 @@ class _FakeMemory:
 
 
 @pytest.fixture
-def core_with_history(monkeypatch) -> OrionCore:
-    """OrionCore sans base ni World Model, avec 40 messages d'historique."""
-    monkeypatch.setattr(orion_core, "get_snapshot", dict)
+def core_with_history(monkeypatch) -> LucasCore:
+    """LucasCore sans base ni World Model, avec 40 messages d'historique."""
+    monkeypatch.setattr(lucas_core, "get_snapshot", dict)
     monkeypatch.setattr(
-        orion_core, "format_for_prompt",
+        lucas_core, "format_for_prompt",
         lambda snapshot, include_window=True: "[système]",
     )
     monkeypatch.setattr(
-        orion_core, "RAGManager", lambda: _FakeRag()
+        lucas_core, "RAGManager", lambda: _FakeRag()
     )
 
-    core = OrionCore.__new__(OrionCore)
+    core = LucasCore.__new__(LucasCore)
     core.memory = _FakeMemory([("user", f"message {i}") for i in range(40)])
     return core
 
@@ -167,21 +167,21 @@ class _FakeRag:
 
 
 @requires_core
-def test_cloud_never_receives_rag_context(core_with_history: OrionCore) -> None:
+def test_cloud_never_receives_rag_context(core_with_history: LucasCore) -> None:
     """Aucun extrait de document personnel ne doit atteindre le cloud."""
     messages = core_with_history._build_messages("résume le document", "cloud")
     assert not any("[RAG]" in m["content"] for m in messages)
 
 
 @requires_core
-def test_local_receives_rag_context(core_with_history: OrionCore) -> None:
+def test_local_receives_rag_context(core_with_history: LucasCore) -> None:
     """En local, le RAG fonctionne toujours normalement."""
     messages = core_with_history._build_messages("résume le document", "local")
     assert any("[RAG]" in m["content"] for m in messages)
 
 
 @requires_core
-def test_cloud_history_is_truncated(core_with_history: OrionCore) -> None:
+def test_cloud_history_is_truncated(core_with_history: LucasCore) -> None:
     """L'historique joint au cloud est réduit, pas complet."""
     messages = core_with_history._build_messages("compare ces options", "cloud")
     history = [m for m in messages if m["role"] != "system"]
@@ -189,14 +189,14 @@ def test_cloud_history_is_truncated(core_with_history: OrionCore) -> None:
 
 
 @requires_core
-def test_local_history_is_complete(core_with_history: OrionCore) -> None:
+def test_local_history_is_complete(core_with_history: LucasCore) -> None:
     messages = core_with_history._build_messages("bonjour", "local")
     history = [m for m in messages if m["role"] != "system"]
     assert len(history) == 40
 
 
 @requires_core
-def test_default_destination_is_local(core_with_history: OrionCore) -> None:
+def test_default_destination_is_local(core_with_history: LucasCore) -> None:
     """Un appel sans destination ne doit jamais se comporter comme du cloud."""
     default = core_with_history._build_messages("résume le document")
     explicit = core_with_history._build_messages("résume le document", "local")

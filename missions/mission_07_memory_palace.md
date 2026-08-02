@@ -1,7 +1,7 @@
 # MISSION 07 : memory/memory_palace.py
 
 ## Contexte
-Couche 2 — Memory Palace 2.0. Système de mémoire à 5 types pour Orion.
+Couche 2 — Memory Palace 2.0. Système de mémoire à 5 types pour Luca's.
 
 ## Objectif
 Créer `memory/memory_palace.py` + `tests/test_memory_palace.py`

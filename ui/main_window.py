@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 
 from config import WINDOW_HEIGHT, WINDOW_TITLE, WINDOW_WIDTH
 from core.llm_worker import LLMWorker
-from core.orion_core import OrionCore
+from core.lucas_core import LucasCore
 from core.router import should_use_vision
 from memory.memory_manager import save_event_from_any_thread
 
@@ -132,7 +132,7 @@ class ContextWorker(QThread):
     le premier chargement de llava en VRAM prend ~25 s. Le faire dans le
     thread UI figerait toute l'interface, sans même un curseur d'attente.
 
-    ⚠️ Le worker crée sa PROPRE instance d'OrionCore. SQLite refuse d'être
+    ⚠️ Le worker crée sa PROPRE instance de LucasCore. SQLite refuse d'être
     utilisé depuis un autre thread que celui qui a ouvert la connexion —
     réutiliser celle de MainWindow lèverait une ProgrammingError. Même
     raison que dans api/server.py, et sans coût : tout l'état vit dans la
@@ -161,7 +161,7 @@ class ContextWorker(QThread):
     def run(self):
         core = None
         try:
-            core = OrionCore()
+            core = LucasCore()
             messages = core.prepare(self.text)
             if not self._cancelled:
                 self.ready.emit(messages)
@@ -214,12 +214,12 @@ class TTSWorker(QThread):
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
-        self.orion = OrionCore()
+        self.lucas = LucasCore()
         self.worker = None
         self.tts_worker = None
         self.context_worker = None
         self.tts_auto = False
-        self.last_orion_response = ""
+        self.last_lucas_response = ""
 
         self.setWindowTitle(WINDOW_TITLE)
         self.resize(WINDOW_WIDTH + 180, WINDOW_HEIGHT)
@@ -395,7 +395,7 @@ class MainWindow(QWidget):
 
     # ── Chat history ──
     def _load_history(self):
-        for role, message in self.orion.history():
+        for role, message in self.lucas.history():
             self._append(role, message)
 
     def _append(self, role: str, message: str):
@@ -434,7 +434,7 @@ class MainWindow(QWidget):
         # cache de core/intent est indexé sur (contexte, question), donc
         # deux contextes différents pour un seul message donneraient deux
         # appels au classifieur au lieu d'un.
-        if should_use_vision(text, self.orion.recent_context()):
+        if should_use_vision(text, self.lucas.recent_context()):
             self._set_status("👁️ Luca's regarde ton écran...", "watching")
             self._set_avatar_state("WATCHING")
         else:
@@ -481,8 +481,8 @@ class MainWindow(QWidget):
         self.chat_history.ensureCursorVisible()
 
     def _on_complete(self, full_answer: str):
-        self.last_orion_response = full_answer
-        self.orion.save_response(full_answer)
+        self.last_lucas_response = full_answer
+        self.lucas.save_response(full_answer)
         self._unlock_input()
 
         # 🔊 TTS Auto ?
@@ -516,7 +516,7 @@ class MainWindow(QWidget):
         silence — l'avatar mentirait sur son état.
         """
         self._set_status("🔊 Synthèse de la voix...", "connecting")
-        # ⚠️ PAS self.orion.log_event : le worker tourne dans un autre
+        # ⚠️ PAS self.lucas.log_event : le worker tourne dans un autre
         # thread, et SQLite refuse une connexion ouverte ailleurs. C'est
         # ce qui levait « SQLite objects created in a thread can only be
         # used in that same thread » à chaque lecture vocale.
@@ -592,5 +592,5 @@ class MainWindow(QWidget):
             self.worker.stop()
         if self.tts_worker is not None and self.tts_worker.isRunning():
             self.tts_worker.wait(2000)
-        self.orion.close()
+        self.lucas.close()
         event.accept()

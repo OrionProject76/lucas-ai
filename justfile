@@ -1,4 +1,4 @@
-# justfile — Commandes Orion AI
+# justfile — Commandes Lucas AI
 # Installation : winget install Casey.Just
 # Usage : just <commande>
 
@@ -8,12 +8,12 @@ set shell := ["powershell.exe", "-c"]
 
 # Lancer tout (Ollama + FastAPI + Daemon)
 all:
-    echo "🌌 Démarrage complet Orion..."
+    echo "🌌 Démarrage complet Luca's..."
     Start-Process powershell -ArgumentList "-c ollama serve" -WindowStyle Hidden
     Start-Sleep 2
     Start-Process powershell -ArgumentList "-c uvicorn api.server:app --reload --host 127.0.0.1 --port 8000" -WindowStyle Hidden
     Start-Sleep 2
-    pythonw orion_daemon.py
+    pythonw lucas_daemon.py
 
 # Lancer Ollama
 ollama:
@@ -30,11 +30,11 @@ serve:
 
 # Lancer le daemon (arrière-plan Windows)
 daemon:
-    pythonw orion_daemon.py
+    pythonw lucas_daemon.py
 
 # Lancer le daemon en mode visible (debug)
 daemon-debug:
-    python orion_daemon.py
+    python lucas_daemon.py
 
 # ─── DÉVELOPPEMENT ───────────────────────────────────────
 
@@ -90,7 +90,7 @@ git-push:
 git-feature name:
     git checkout -b feature/{{name}}
 
-# ─── ORION SPÉCIFIQUE ────────────────────────────────────
+# ─── LUCA'S SPÉCIFIQUE ──────────────────────────────────
 
 # Entraînement LoRA manuel
 train:
@@ -106,7 +106,7 @@ clean:
 
 # Rapport matinal manuel
 report:
-    python -c "from orion_daemon import OrionDaemon; d=OrionDaemon(); d.generate_morning_report()"
+    python -c "from lucas_daemon import LucasDaemon; d=LucasDaemon(); d.generate_morning_report()"
 
 # Voir les logs du daemon
 logs:

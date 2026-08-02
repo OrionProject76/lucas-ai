@@ -1,7 +1,7 @@
 # MISSION 08 : memory/rag_engine.py
 
 ## Contexte
-Couche 2 — Retrieval Augmented Generation. Permet à Orion de récupérer des infos pertinentes avant de répondre.
+Couche 2 — Retrieval Augmented Generation. Permet à Luca's de récupérer des infos pertinentes avant de répondre.
 
 ## Objectif
 Créer `memory/rag_engine.py` + `tests/test_rag_engine.py`

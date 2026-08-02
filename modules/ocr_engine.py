@@ -15,7 +15,7 @@
 #
 # Les deux se complètent et ne se remplacent pas : l'OCR donne le texte
 # exact, le VLM dit quelle application est ouverte et comment l'écran est
-# disposé. Voir OrionCore._describe_screen().
+# disposé. Voir LucasCore._describe_screen().
 #
 # ── Choix du moteur ───────────────────────────────────────────────────
 #

@@ -45,7 +45,7 @@ class SecurityMonitor:
     Orchestre les capteurs et ne rapporte que ce qui est nouveau.
 
     `log_event` est injecté, comme partout ailleurs dans security/ :
-    ce module ne connaît ni OrionCore ni MemoryManager.
+    ce module ne connaît ni LucasCore ni MemoryManager.
     """
 
     def __init__(

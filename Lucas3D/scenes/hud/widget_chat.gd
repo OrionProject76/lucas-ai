@@ -7,7 +7,7 @@ var message_scene = preload("res://scenes/hud/chat_message.tscn")
 func _ready():
     Global.chat_message_received.connect(_add_message)
 
-func _add_message(text: String, from_orion: bool):
+func _add_message(text: String, from_lucas: bool):
     var msg = message_scene.instantiate()
     # ⚠️ add_child AVANT set_message. Les @onready de
     # chat_message.gd ne sont résolus qu'à l'entrée dans l'arbre :
@@ -15,7 +15,7 @@ func _add_message(text: String, from_orion: bool):
     # `text_label` valent null, et chaque message reçu levait
     # « Invalid assignment ... on a base object of type 'Nil' ».
     messages_container.add_child(msg)
-    msg.set_message(text, from_orion)
+    msg.set_message(text, from_lucas)
     await get_tree().process_frame
     $Scroll.scroll_vertical = $Scroll.get_v_scroll_bar().max_value
     while messages_container.get_child_count() > 50:

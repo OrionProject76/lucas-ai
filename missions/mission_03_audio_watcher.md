@@ -21,7 +21,7 @@ Créer `perception/audio_watcher.py` + `tests/test_audio_watcher.py`
   "type": "audio_transcript",
   "timestamp": "2026-07-29T08:30:00",
   "data": {
-    "transcript": "Orion, quelle heure est-il ?",
+    "transcript": "Luca's, quelle heure est-il ?",
     "confidence": 0.92,
     "language": "fr",
     "duration_seconds": 2.5

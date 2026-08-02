@@ -13,7 +13,7 @@ from config import (
     RAG_MAX_DISTANCE_DATED,
 )
 # ⚠️ core.dates est importé PARESSEUSEMENT dans les méthodes : core/__init__
-# charge OrionCore, qui charge ce module — un import en tête d'ici ferme la
+# charge LucasCore, qui charge ce module — un import en tête d'ici ferme la
 # boucle. Même motif que core/router.py avec core.intent.
 
 try:
@@ -101,6 +101,13 @@ class RAGManager:
         risque — les documents sources restent sur le disque, seuls les
         vecteurs sont recalculés.
         """
+        # ⚠️ "orion_docs" reste tel quel, volontairement, malgré le
+        # renommage technique du 02/08/2026 (voir ROADMAP §6) : c'est le nom
+        # de la collection ChromaDB PERSISTÉE sur le disque de Cyril. La
+        # renommer en "lucas_docs" ferait chercher une collection qui
+        # n'existe pas — tous ses documents déjà indexés deviendraient
+        # invisibles sans réindexation complète, pour un gain purement
+        # cosmétique. Nom de stockage interne, jamais vu par Cyril.
         collection = self.chroma_client.get_or_create_collection(
             name="orion_docs",
             embedding_function=OllamaEmbeddingFunction(),
@@ -417,7 +424,7 @@ class RAGManager:
         aucun extrait n'est assez proche.
 
         La chaîne vide est significative : l'appelant
-        (OrionCore._build_messages) n'ajoute alors aucun bloc au prompt.
+        (LucasCore._build_messages) n'ajoute alors aucun bloc au prompt.
         L'ancienne version renvoyait la phrase « Aucun document pertinent
         trouvé. », qui était injectée telle quelle et occupait un tour de
         contexte pour ne rien dire.

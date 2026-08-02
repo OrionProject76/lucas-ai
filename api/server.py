@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from api import protocol
-from core.orion_core import OrionCore
+from core.lucas_core import LucasCore
 from core.router import should_use_vision
 from core.world_model import get_snapshot
 
@@ -55,22 +55,22 @@ def chat(req: ChatRequest):
     """
     Envoie un message à Luca's et retourne sa réponse.
 
-    Note technique : on crée une instance OrionCore par requête plutôt
+    Note technique : on crée une instance LucasCore par requête plutôt
     qu'une instance partagée au niveau du module. Raison : SQLite refuse
     par défaut d'être utilisé depuis un thread différent de celui qui a
     ouvert la connexion, et FastAPI traite chaque requête dans un thread
     du pool. Comme tout l'état (historique) vit dans la base SQLite et
-    pas en mémoire Python, recréer OrionCore() à chaque appel est sans
+    pas en mémoire Python, recréer LucasCore() à chaque appel est sans
     coût réel de logique — juste une micro-latence d'ouverture de fichier.
     """
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="Message vide")
 
-    orion = OrionCore()
+    lucas = LucasCore()
     try:
-        answer = orion.ask(req.message)
+        answer = lucas.ask(req.message)
     finally:
-        orion.close()
+        lucas.close()
 
     return {"response": answer, "status": "ok"}
 
@@ -78,11 +78,11 @@ def chat(req: ChatRequest):
 @app.get("/history")
 def history():
     """Retourne l'historique complet de conversation (mémoire SQLite réelle)."""
-    orion = OrionCore()
+    lucas = LucasCore()
     try:
-        rows = orion.history()
+        rows = lucas.history()
     finally:
-        orion.close()
+        lucas.close()
 
     return {
         "history": [
@@ -111,7 +111,7 @@ def system_snapshot():
 # ── WebSocket : canal unique Luca's ↔ Godot ─────────────────────
 #
 # Le vocabulaire est défini dans api/protocol.py. Il remplace celui
-# d'Orion3D/python_service/orion3d_bridge.py, qui était un simple écho
+# de Lucas3D/python_service/orion3d_bridge.py, qui était un simple écho
 # jamais branché sur Ollama — et qui ne démarre plus depuis websockets 12,
 # son handler ayant une signature obsolète.
 #
@@ -182,12 +182,12 @@ async def websocket_endpoint(websocket: WebSocket):
             # depuis le début. Cyril a acté ce témoin comme un signal de
             # confidentialité, pas comme une décoration.
             #
-            # La décision est prise AVANT l'appel : orion.ask() capture
+            # La décision est prise AVANT l'appel : lucas.ask() capture
             # l'écran à l'intérieur, et prévenir après coup n'aurait aucun
             # intérêt — c'est pendant la capture que le témoin compte.
-            orion = OrionCore()
+            lucas = LucasCore()
             try:
-                regarde = should_use_vision(message, orion.recent_context())
+                regarde = should_use_vision(message, lucas.recent_context())
             except Exception:  # noqa: BLE001 — un doute sur l'état ne doit
                 # jamais empêcher de répondre.
                 regarde = False
@@ -199,9 +199,9 @@ async def websocket_endpoint(websocket: WebSocket):
             )
 
             try:
-                answer = orion.ask(message)
+                answer = lucas.ask(message)
             finally:
-                orion.close()
+                lucas.close()
 
             # Deux messages plutôt qu'un : l'état pilote l'animation du
             # visage, le message de chat alimente la bulle du HUD. Le

@@ -42,7 +42,7 @@ class AutomationManager:
 
     `log_event` est injecté, comme dans security/ et voice_manager : toute
     action système doit laisser une trace, sans que ce module connaisse
-    OrionCore.
+    LucasCore.
     """
 
     def __init__(

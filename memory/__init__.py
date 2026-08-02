@@ -1,4 +1,4 @@
-"""OrionAI memory package."""
+"""Luca's memory package."""
 
 from memory.memory_manager import MemoryManager
 

@@ -104,7 +104,7 @@ Comparatif tranché avec Cyril : Unreal Engine 5 offre objectivement le
 meilleur rendu visuel du marché, mais représente un risque projet trop
 élevé au stade actuel (GPU partagé avec les LLM locaux, courbe
 d'apprentissage très raide, zéro travail déjà fait). Godot a déjà une
-base fonctionnelle (`Orion3D/`, scenes, shaders néon/hologramme, bridge
+base fonctionnelle (`Lucas3D/`, scenes, shaders néon/hologramme, bridge
 WebSocket scaffoldé) et laisse plus de VRAM disponible pour Ollama.
 
 **Séquençage retenu :**

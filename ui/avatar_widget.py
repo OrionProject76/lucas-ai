@@ -415,7 +415,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     window = QWidget()
-    window.setWindowTitle("Test Avatar Orion")
+    window.setWindowTitle("Test Avatar Luca's")
     window.setFixedSize(300, 400)
     window.setStyleSheet("background-color: #0a0a0a;")
 

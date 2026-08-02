@@ -10,7 +10,7 @@ Créer `voice/tts_engine.py` + `tests/test_tts_engine.py`
 - [ ] Classe `TTSEngine`
 - [ ] Support **Piper** (local, rapide, français) et **Kokoro** (fallback)
 - [ ] File d'attente audio (queue) pour parler en continu
-- [ ] Prosodie émotionnelle : vitesse, pitch selon l'état émotionnel d'Orion
+- [ ] Prosodie émotionnelle : vitesse, pitch selon l'état émotionnel de Luca's
 - [ ] Interruption possible (stop la parole en cours)
 - [ ] WebSocket endpoint pour recevoir du texte à prononcer
 - [ ] Tests pytest avec mock audio
@@ -19,7 +19,7 @@ Créer `voice/tts_engine.py` + `tests/test_tts_engine.py`
 ```json
 {
   "type": "speak",
-  "text": "Bonjour, je suis Orion.",
+  "text": "Bonjour, je suis Luca's.",
   "emotion": "happy",
   "speed": 1.0,
   "priority": "normal"

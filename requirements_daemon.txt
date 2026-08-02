@@ -1,7 +1,7 @@
-# Dépendances du Daemon Orion (24/7 background tasks)
+# Dépendances du Daemon Luca's (24/7 background tasks)
 # Installation : pip install -r requirements_daemon.txt
 #
-# Réduit le 01/08/2026 à ce que orion_daemon.py importe réellement.
+# Réduit le 01/08/2026 à ce que lucas_daemon.py importe réellement.
 # Le daemon n'importe ni core/ ni modules/. Depuis le branchement de la
 # surveillance sécurité, il importe security/ et memory/ — qui n'ajoutent
 # aucune dépendance externe au-delà de psutil, déjà listé ci-dessous.

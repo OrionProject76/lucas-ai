@@ -36,7 +36,7 @@ func _process(delta: float):
 			WebSocketPeer.STATE_OPEN:
 				if not connected:
 					connected = true
-					print("Connecte a Orion Backend")
+					print("Connecte a Lucas Backend")
 					_send_heartbeat()
 				# ⚠️ get_available_packets() N'EXISTE PAS. La méthode est
 				# get_available_packet_count(). L'erreur ne se voyait pas à
@@ -80,7 +80,7 @@ func _handle_message(msg: String):
 			"avatar_state":
 				_apply_state(data.get("state", "idle"), data.get("text", ""))
 			"chat":
-				Global.chat_message_received.emit(data.get("text", ""), data.get("from_orion", true))
+				Global.chat_message_received.emit(data.get("text", ""), data.get("from_lucas", true))
 			"system":
 				Global.system_data_updated.emit(data.get("cpu", 0.0), data.get("ram", 0.0), data.get("gpu", 0.0))
 			"error":
@@ -102,28 +102,28 @@ func _handle_message(msg: String):
 # Les cinq états sont ceux de l'avatar PySide6 : une seule liste pour les
 # deux interfaces, sinon elles divergent (un test Python le vérifie).
 # thinking, watching et listening n'ont pas encore d'animation propre au
-# visage 3D — ils sont diffusés sur orion_state_changed pour que
+# visage 3D — ils sont diffusés sur lucas_state_changed pour que
 # face_controller puisse s'en saisir, sans forcer la bouche à bouger
 # comme si Luca's parlait.
 func _apply_state(state: String, text: String):
-	Global.orion_state = state
-	Global.orion_state_changed.emit(state)
+	Global.lucas_state = state
+	Global.lucas_state_changed.emit(state)
 
 	match state:
 		"speaking":
-			Global.orion_speaking.emit(0.8)
+			Global.lucas_speaking.emit(0.8)
 			if text != "":
 				Global.chat_message_received.emit(text, true)
 		"idle":
-			Global.orion_idle.emit()
+			Global.lucas_idle.emit()
 		_:
 			# thinking / watching / listening : le visage cesse de parler
 			# sans repasser en repos complet.
-			Global.orion_idle.emit()
+			Global.lucas_idle.emit()
 
 func send_message(data: Dictionary):
 	if connected and socket:
 		socket.send_text(JSON.stringify(data))
 
 func _send_heartbeat():
-	send_message({"type": "hello", "client": "orion3d_godot", "version": "1.0"})
+	send_message({"type": "hello", "client": "lucas3d_godot", "version": "1.0"})

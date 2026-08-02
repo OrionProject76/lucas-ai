@@ -280,11 +280,11 @@ def test_mixer_is_not_reinitialised_while_playing(monkeypatch) -> None:
 
 def test_event_reaches_the_database(tmp_path, monkeypatch) -> None:
     """
-    Vérifie la chaîne réelle VoiceManager -> OrionCore.log_event ->
+    Vérifie la chaîne réelle VoiceManager -> LucasCore.log_event ->
     MemoryManager.save_event -> table system_events. Les mocks des tests
     précédents ne prouvent que l'appel, pas l'écriture.
 
-    Base temporaire : on ne touche pas à orion_memory.db.
+    Base temporaire : on ne touche pas à lucas_memory.db.
     """
     from memory.memory_manager import MemoryManager
 

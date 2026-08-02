@@ -24,9 +24,9 @@ htmlcov/
 .idea/
 
 # --- Godot : sources suivies, artefacts d'export ignorés ---
-Orion3D.exe
-Orion3D.console.exe
-Orion3D/.godot/
+Lucas3D.exe
+Lucas3D.console.exe
+Lucas3D/.godot/
 *.pck
 export_presets.cfg
 

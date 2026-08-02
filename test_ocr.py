@@ -122,9 +122,9 @@ def test_no_torch_dependency() -> None:
 # ── Composition du bloc vision ────────────────────────────────────────
 
 def _block(screen_text: str, visual: str) -> str:
-    from core.orion_core import OrionCore
+    from core.lucas_core import LucasCore
 
-    return OrionCore._compose_vision_block(screen_text, visual)
+    return LucasCore._compose_vision_block(screen_text, visual)
 
 
 def test_both_sources_are_labelled_distinctly() -> None:

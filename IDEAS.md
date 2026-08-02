@@ -158,15 +158,15 @@ Visage low-poly stylisé, shaders néon cyan/bleu avec glow. Flottement organiqu
 ### 🎮 Modules fun & wow
 1. Jarvis Total — OCR+VLM+TTS continu, assistant omniprésent
 2. Matrix Live — Shader écran vert style Matrix sur le bureau
-3. DJ Orion — Musique générée selon activité (focus, détente, sport)
+3. DJ Luca's — Musique générée selon activité (focus, détente, sport)
 4. Storyteller Interactif — Histoire + images + musique + voix générées localement
 5. Time Travel — Screenshots toutes les 30s indexés, remonter le temps visuellement
-6. Orion Artiste — Dessin sur écran (overlay interactif)
+6. Luca's Artiste — Dessin sur écran (overlay interactif)
 7. Compagnon de Jeu — Analyse écran temps réel + overlay coaching
-8. Prank Orion — Blagues contextuelles intelligentes (modération)
+8. Prank Luca's — Blagues contextuelles intelligentes (modération)
 
 ### 🧠 Modules cognitifs avancés
-9. Orion Brain 3D — Réseau de neurones visuel temps réel dans Godot
+9. Luca's Brain 3D — Réseau de neurones visuel temps réel dans Godot
 10. Holographic Desktop — Bureau 3D holographique navigable
 11. Neural Link — Prédiction patterns utilisateur (anticipation comportement)
 12. Parallel Universe — Simulation "et si" (conséquences décisions)
@@ -182,13 +182,13 @@ Visage low-poly stylisé, shaders néon cyan/bleu avec glow. Flottement organiqu
 20. Contextual Awareness — Références implicites : "le truc" = bon truc
 
 ### 🤯 Modules démentiels
-21. Orion Clone — Imitation style+voix locale via LoRA+XTTS *(voice cloning avancé/XTTS explicitement exclu — voir section 7)*
-22. Reality AR Orion — Webcam voit bureau réel, projette infos AR
+21. Luca's Clone — Imitation style+voix locale via LoRA+XTTS *(voice cloning avancé/XTTS explicitement exclu — voir section 7)*
+22. Reality AR Luca's — Webcam voit bureau réel, projette infos AR
 23. Predictive Desktop — Prépare le bureau avant usage (ouvre apps, fichiers)
-24. Orion Cinema — Films 2-3min générés localement (scénario+images+musique+voix)
+24. Luca's Cinema — Films 2-3min générés localement (scénario+images+musique+voix)
 25. Synthetic Companion — Personnages virtuels avec mémoire persistante
 26. Living Wallpaper — Fond d'écran vivant réactif à l'activité
-27. Orion Ghost — Mode invisible, interventions critiques uniquement
+27. Luca's Ghost — Mode invisible, interventions critiques uniquement
 28. Data Sculpture — Données transformées en sculptures 3D imprimables
 
 ### 🚀 Modules futuristes (inspirés Lenovo/Desktop Pal)
@@ -201,7 +201,7 @@ Visage low-poly stylisé, shaders néon cyan/bleu avec glow. Flottement organiqu
 35. Aura System — 8 modes auto (détaillés section 3)
 36. Smart Glasses Bridge — Prêt pour lunettes AR (API standardisée)
 37. Digital Twin — Jumeau numérique 3D du PC (diagnostic, prédiction pannes)
-38. **Swarm Intelligence — Multi-Orion parallèle : Principal, Analyste, Créatif, Veilleur, Apprenant.** *(Multi-agents LLM autonomes explicitement exclu de la v1, reporté v1.1+ — voir `CLAUDE.md` règle 12, clarifié le 01/08/2026 : c'est CETTE idée précisément qui est interdite, pas l'architecture modulaire du Pilier 2)*
+38. **Swarm Intelligence — Multi-Luca's parallèle : Principal, Analyste, Créatif, Veilleur, Apprenant.** *(Multi-agents LLM autonomes explicitement exclu de la v1, reporté v1.1+ — voir `CLAUDE.md` règle 12, clarifié le 01/08/2026 : c'est CETTE idée précisément qui est interdite, pas l'architecture modulaire du Pilier 2)*
 
 ### 💰 Module finance
 39. Import universel CSV/OFX/QIF toutes banques françaises
@@ -243,7 +243,7 @@ Visage low-poly stylisé, shaders néon cyan/bleu avec glow. Flottement organiqu
 63. Assistant révision aide-soignant — flashcards et quiz générés localement à partir de supports de cours, pour accompagner une reconversion professionnelle
 64. Vigilance budget temps réel — alerte douce en cas de dépassement d'un budget mensuel serré
 65. Journal vocal fatigue/sommeil — auto-déclaratif uniquement, sans capteur santé externe requis, adapté à un métier physique
-66. Mode "Debug Silencieux" — veille graphique totale de l'avatar pendant le développement d'Orion lui-même, pour libérer le GPU
+66. Mode "Debug Silencieux" — veille graphique totale de l'avatar pendant le développement de Luca's elle-même, pour libérer le GPU
 67. **Suivi & validation à distance (S25 Ultra)** — Tailscale+terminal mobile, ou bot Telegram/Discord de notification+validation par boutons, ou workflow Git+PR GitHub. Rejoint #6 (Handoff PC↔S25) — à fusionner conceptuellement, pas dupliquer.
 68. **Modèles spécialisés en complément** — Gemma Vision (VLM léger, analyse écran) et ShieldGemma (second filtre sécurité automatisé) en complément du modèle principal, chacun sur sa tâche plutôt qu'un seul modèle surchargé. Détaillé dans `VISION_LONG_TERME.md` Pilier 2.
 69. **Contrainte matérielle confirmée** — pas de webcam/micro sur PC, tout ce qui nécessite caméra/micro passe obligatoirement par le S25 Ultra.
@@ -296,4 +296,4 @@ Visage low-poly stylisé, shaders néon cyan/bleu avec glow. Flottement organiqu
 - Architecture adaptative : PC maître (GPU lourd), mobile client léger.
 - Problèmes techniques rencontrés et documentés : Aider + Ollama 8B échoue sur fichiers >200 lignes ; quota IA Cursor épuisé, d'où passage à Claude Code.
 - Documentation de référence technique existante côté utilisateur : "orion_ai_documentation.docx".
-- **Renommage acté (29-30/07/2026)** : Orion → Luca's. Différé techniquement jusqu'à stabilisation de S2 (voir `ROADMAP.md` §6).
+- **Renommage acté (29-30/07/2026)** : Orion → Luca's. Partie visible faite le 01/08/2026, renommage technique du code fait le 02/08/2026 (voir `ROADMAP.md` §6).

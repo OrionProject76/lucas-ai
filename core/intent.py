@@ -276,7 +276,7 @@ def _ask_classifier(question: str, context: str = "") -> str | None:
 # ⚠️ Ce cache n'est pas une optimisation, il est nécessaire à la
 # correction du coût annoncé. Un même message traverse classify() jusqu'à
 # quatre fois : route() consulte les deux axes, puis
-# OrionCore._build_messages() les reconsulte pour décider quels blocs
+# LucasCore._build_messages() les reconsulte pour décider quels blocs
 # injecter. Sans cache, les 0,14 s deviendraient 0,56 s.
 # Le résultat est déterministe (temperature 0), donc le cache est exact.
 #

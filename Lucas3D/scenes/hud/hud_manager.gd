@@ -18,5 +18,5 @@ func _on_input_submitted(text: String):
 func _on_system_updated(cpu: float, ram: float, gpu: float):
     status_label.text = "CPU: %.0f%% | RAM: %.0f%% | GPU: %.0f%%" % [cpu, ram, gpu]
 
-func _on_chat_received(text: String, from_orion: bool):
+func _on_chat_received(text: String, from_lucas: bool):
     pass

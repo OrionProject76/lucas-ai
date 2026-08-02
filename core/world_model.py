@@ -5,7 +5,7 @@
 # terme système" — un instantané léger, jamais un historique complet.
 #
 # Ce code était dupliqué dans api/server.py — centralisé ici pour que
-# l'API et OrionCore (donc l'UI PySide6 aussi) utilisent exactement la
+# l'API et LucasCore (donc l'UI PySide6 aussi) utilisent exactement la
 # même logique, sans divergence possible entre les deux.
 
 import psutil
@@ -35,7 +35,7 @@ def _get_gpu_load() -> float:
     voir la carte grimper explique une réponse lente ou un chargement de
     modèle, là où CPU et RAM ne diraient rien.
 
-    Reprise du service Orion3D supprimé, qui alimentait la jauge GPU du
+    Reprise du service Lucas3D supprimé, qui alimentait la jauge GPU du
     HUD — sans elle, ce cadran serait resté à zéro pour toujours.
     """
     try:
@@ -65,7 +65,7 @@ def _get_active_window_title() -> str:
         return "Inconnu"
 
 
-# Événements internes à Orion : ils décrivent sa propre plomberie, pas
+# Événements internes à Lucas : ils décrivent sa propre plomberie, pas
 # l'environnement de Cyril. Les injecter dans le prompt n'apporte rien au
 # LLM et réinjecterait des extraits sensibles (voir voice_manager._log)
 # dans des conversations qui n'ont rien à voir.

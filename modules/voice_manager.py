@@ -30,7 +30,7 @@ class VoiceManager:
     Point d'entrée unique du TTS. `speak()` route puis prononce.
 
     `log_event` est injecté (et non importé) : modules/ ne doit pas importer
-    OrionCore, ça créerait un cycle. L'UI passe `orion.log_event`.
+    LucasCore, ça créerait un cycle. L'UI passe `lucas.log_event`.
     """
 
     def __init__(

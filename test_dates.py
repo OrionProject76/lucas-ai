@@ -263,8 +263,8 @@ def test_une_recherche_infructueuse_est_annoncee_au_modele(monkeypatch):
 
     Le silence laisse le modèle combler le vide.
     """
-    from core import orion_core
-    from core.orion_core import OrionCore
+    from core import lucas_core
+    from core.lucas_core import LucasCore
 
     class _Memoire:
         def __init__(self):
@@ -283,15 +283,15 @@ def test_une_recherche_infructueuse_est_annoncee_au_modele(monkeypatch):
         def get_context(self, query, top_k=3):
             return ""
 
-    monkeypatch.setattr(orion_core, "get_snapshot", dict)
+    monkeypatch.setattr(lucas_core, "get_snapshot", dict)
     monkeypatch.setattr(
-        orion_core, "format_for_prompt", lambda s, include_window=True: "[système]"
+        lucas_core, "format_for_prompt", lambda s, include_window=True: "[système]"
     )
-    monkeypatch.setattr(orion_core, "should_use_rag", lambda text, context="": True)
-    monkeypatch.setattr(orion_core, "should_use_vision", lambda text, context="": False)
-    monkeypatch.setattr(orion_core, "RAGManager", _RagVide)
+    monkeypatch.setattr(lucas_core, "should_use_rag", lambda text, context="": True)
+    monkeypatch.setattr(lucas_core, "should_use_vision", lambda text, context="": False)
+    monkeypatch.setattr(lucas_core, "RAGManager", _RagVide)
 
-    core = OrionCore.__new__(OrionCore)
+    core = LucasCore.__new__(LucasCore)
     core.memory = _Memoire()
     messages = core._build_messages("mon salaire de juillet 2024", "local")
 

@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import pytest
 
-from core import orion_core
-from core.orion_core import OrionCore
+from core import lucas_core
+from core.lucas_core import LucasCore
 from core.router import route, should_use_vision
 
 # Marqueur du bloc vision injecté dans le prompt. Défini une fois :
@@ -105,12 +105,12 @@ class _FakeMemory:
 
 @pytest.fixture
 def core(monkeypatch):
-    monkeypatch.setattr(orion_core, "get_snapshot", dict)
+    monkeypatch.setattr(lucas_core, "get_snapshot", dict)
     monkeypatch.setattr(
-        orion_core, "format_for_prompt",
+        lucas_core, "format_for_prompt",
         lambda snapshot, include_window=True: "[système]",
     )
-    instance = OrionCore.__new__(OrionCore)
+    instance = LucasCore.__new__(LucasCore)
     instance.memory = _FakeMemory()
     return instance
 
@@ -130,7 +130,7 @@ def _fake_vision(monkeypatch, description: str, captured: dict | None = None):
     pas sur ces tests, mais sur test_the_vlm_is_off_in_v1_and_never_called,
     qui vérifie le réglage réel de config.py.
     """
-    monkeypatch.setattr(orion_core, "VLM_ENABLED", True)
+    monkeypatch.setattr(lucas_core, "VLM_ENABLED", True)
 
     class _FakeVisionManager:
         def __init__(self, model=None):
@@ -179,7 +179,7 @@ def test_no_capture_on_a_cloud_request(core, monkeypatch) -> None:
 
 
 def test_vision_can_be_disabled(core, monkeypatch) -> None:
-    monkeypatch.setattr(orion_core, "VISION_ENABLED", False)
+    monkeypatch.setattr(lucas_core, "VISION_ENABLED", False)
 
     def must_not_be_called(model=None):
         raise AssertionError("VISION_ENABLED=False doit tout couper")
@@ -212,7 +212,7 @@ def test_the_users_question_reaches_the_vlm(core, monkeypatch) -> None:
 
 def test_vision_prompt_asks_for_french() -> None:
     """llava bascule spontanément en anglais sans consigne explicite."""
-    prompt = OrionCore._vision_prompt("que vois-tu ?")
+    prompt = LucasCore._vision_prompt("que vois-tu ?")
     assert "français" in prompt
     assert "capture" in prompt.lower()
     assert "que vois-tu ?" in prompt
@@ -223,7 +223,7 @@ def test_vision_prompt_demands_concrete_detail() -> None:
     Sans consigne, llava rend une paraphrase vague (« un message d'erreur
     ou de confirmation ») au lieu de citer ce qui est écrit.
     """
-    prompt = OrionCore._vision_prompt("c'est quoi cette erreur ?").lower()
+    prompt = LucasCore._vision_prompt("c'est quoi cette erreur ?").lower()
     assert "concrètement" in prompt
     assert "cite" in prompt
 
@@ -348,7 +348,7 @@ def test_screen_text_is_never_logged(core, monkeypatch) -> None:
 
 
 def test_ocr_can_be_disabled(core, monkeypatch) -> None:
-    monkeypatch.setattr(orion_core, "OCR_ENABLED", False)
+    monkeypatch.setattr(lucas_core, "OCR_ENABLED", False)
     _fake_vision(monkeypatch, "un terminal")
 
     def must_not_be_called():
@@ -445,12 +445,12 @@ def _long_history(turns: int = 45):
 
 @pytest.fixture
 def core_with_history(monkeypatch):
-    monkeypatch.setattr(orion_core, "get_snapshot", dict)
+    monkeypatch.setattr(lucas_core, "get_snapshot", dict)
     monkeypatch.setattr(
-        orion_core, "format_for_prompt",
+        lucas_core, "format_for_prompt",
         lambda snapshot, include_window=True: "[système]",
     )
-    instance = OrionCore.__new__(OrionCore)
+    instance = LucasCore.__new__(LucasCore)
     instance.memory = _FakeMemory(
         history=_long_history() + [("user", "c'est écrit quoi ?")]
     )
@@ -549,14 +549,14 @@ def test_history_is_shortened_when_the_rag_fires(core_with_history, monkeypatch)
     from config import SOURCE_HISTORY_MESSAGES
 
     monkeypatch.setattr(
-        orion_core, "should_use_rag", lambda text, context="": True
+        lucas_core, "should_use_rag", lambda text, context="": True
     )
 
     class _FakeRAG:
         def get_context(self, query, top_k=3):
             return "Contexte trouvé dans les documents:\n[Extrait 1] Aide-soignant"
 
-    monkeypatch.setattr(orion_core, "RAGManager", _FakeRAG)
+    monkeypatch.setattr(lucas_core, "RAGManager", _FakeRAG)
 
     messages = core_with_history._build_messages("résume-moi mon CV", "local")
 
@@ -632,7 +632,7 @@ def test_the_vlm_description_is_capped(core_with_history, monkeypatch):
     # Le plafond concerne la v1.1 : il doit rester correct le jour où le
     # VLM est réactivé avec internvl2, sinon on retrouvera les 10 270
     # caractères au premier changement de modèle.
-    monkeypatch.setattr(orion_core, "VLM_ENABLED", True)
+    monkeypatch.setattr(lucas_core, "VLM_ENABLED", True)
     _fake_vision(monkeypatch, "bla " * 5000)
     messages = core_with_history._build_messages("c'est écrit quoi ?", "local")
 

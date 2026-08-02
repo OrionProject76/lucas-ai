@@ -10,8 +10,8 @@ from __future__ import annotations
 import pytest
 
 from config import RECENT_EVENTS_IN_PROMPT
-from core import orion_core
-from core.orion_core import OrionCore
+from core import lucas_core
+from core.lucas_core import LucasCore
 from core.world_model import format_events_for_prompt
 
 # ── format_events_for_prompt() ────────────────────────────────────────
@@ -35,7 +35,7 @@ def test_event_without_details_is_still_listed() -> None:
 
 def test_internal_tts_events_are_excluded() -> None:
     """
-    Les événements tts_* décrivent la plomberie d'Orion et contiennent des
+    Les événements tts_* décrivent la plomberie de Luca's et contiennent des
     extraits sensibles. Les réinjecter polluerait toutes les conversations
     suivantes.
     """
@@ -96,19 +96,19 @@ class _FakeMemory:
 
 
 @pytest.fixture
-def core_with_events(monkeypatch) -> tuple[OrionCore, _FakeMemory]:
-    monkeypatch.setattr(orion_core, "get_snapshot", dict)
+def core_with_events(monkeypatch) -> tuple[LucasCore, _FakeMemory]:
+    monkeypatch.setattr(lucas_core, "get_snapshot", dict)
     monkeypatch.setattr(
-        orion_core, "format_for_prompt",
+        lucas_core, "format_for_prompt",
         lambda snapshot, include_window=True: "[système]",
     )
-    monkeypatch.setattr(orion_core, "RAGManager", lambda: None)
+    monkeypatch.setattr(lucas_core, "RAGManager", lambda: None)
 
     memory = _FakeMemory([
         ("app_launched", "Chrome", "2026-08-01 10:00"),
         ("ram_alert", "RAM à 91%", "2026-08-01 09:58"),
     ])
-    core = OrionCore.__new__(OrionCore)
+    core = LucasCore.__new__(LucasCore)
     core.memory = memory
     return core, memory
 
@@ -124,13 +124,13 @@ def test_cloud_prompt_omits_window_title(monkeypatch) -> None:
     Intégration, avec le vrai format_for_prompt : le titre de fenêtre ne
     doit apparaître que dans le prompt local.
     """
-    monkeypatch.setattr(orion_core, "get_snapshot", lambda: {
+    monkeypatch.setattr(lucas_core, "get_snapshot", lambda: {
         "cpu_percent": 10.0,
         "ram_percent": 30.0,
         "active_window": "budget_2026.xlsx - Excel",
     })
 
-    core = OrionCore.__new__(OrionCore)
+    core = LucasCore.__new__(LucasCore)
     core.memory = _FakeMemory([])
 
     local = " ".join(m["content"] for m in core._build_messages("bonjour", "local"))
@@ -157,13 +157,13 @@ def test_event_limit_comes_from_config(core_with_events) -> None:
 
 def test_no_empty_system_message_when_no_events(monkeypatch) -> None:
     """Aucun événement pertinent : pas de message système vide dans le prompt."""
-    monkeypatch.setattr(orion_core, "get_snapshot", dict)
+    monkeypatch.setattr(lucas_core, "get_snapshot", dict)
     monkeypatch.setattr(
-        orion_core, "format_for_prompt",
+        lucas_core, "format_for_prompt",
         lambda snapshot, include_window=True: "[système]",
     )
 
-    core = OrionCore.__new__(OrionCore)
+    core = LucasCore.__new__(LucasCore)
     core.memory = _FakeMemory([])
     messages = core._build_messages("bonjour", "local")
 

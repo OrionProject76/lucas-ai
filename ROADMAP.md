@@ -381,31 +381,89 @@ note datait d'avant leur écriture — seuls `weather_manager.py` et
 `calculator.py` étaient réellement orphelins, tous deux couverts
 maintenant).
 
-## 6. Renommage Luca's — partie visible faite le 01/08/2026
+## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
-**Fait** : tout ce que Cyril voit affiche désormais « Luca's » — `SYSTEM_PROMPT`
-et `WINDOW_TITLE` dans `config.py`, titre de fenêtre, libellé de l'interlocuteur
-dans le chat, placeholder de saisie, infobulles TTS, message « réfléchit… »,
-titres et prose de `CLAUDE.md` et `README_INSTALL.md`.
+**Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
+`SYSTEM_PROMPT` et `WINDOW_TITLE` dans `config.py`, titre de fenêtre, libellé
+de l'interlocuteur dans le chat, placeholder de saisie, infobulles TTS,
+message « réfléchit… », titres et prose de `CLAUDE.md` et `README_INSTALL.md`.
 
-**Volontairement inchangé** : tous les noms techniques — `OrionCore`,
-`core/orion_core.py`, `orion_daemon.py`, `Orion3D/`, `memory/orion_memory.db`,
-le chemin `C:\OrionAI`, l'organisation GitHub `OrionProject76`. Les renommer
-casserait imports et chemins pour un gain nul.
+### Renommage technique — fait le 02/08/2026, après l'audit de fiabilité (§5.2)
 
-**Leçon de cette session** : une première tentative par expression régulière
-sur `\borion\b` a transformé `self.orion` en `self.luca's` — erreur de syntaxe
-immédiate. Un renommage se fait par remplacements exacts, chaîne par chaîne,
-jamais par motif générique sur du code.
+Exécuté à la demande explicite de Cyril, avec la même rigueur que d'habitude :
 
-### Ce qui reste (ancien contenu de cette section)
+- **Sauvegarde avant de toucher aux chemins** : archive complète du dépôt
+  (hors `venv/` et `.git/`) sur le Bureau, avant le premier `git mv`.
+- **Remplacements par identifiants exacts**, jamais un motif générique sur
+  "orion" seul (voir la leçon ci-dessous) — chaque token composé
+  (`OrionCore`, `orion_core`, `Orion3D`, etc.) remplacé séparément, puis les
+  mots isolés `orion`/`Orion` restants, uniquement dans les fichiers de
+  code (jamais dans les `.md`, pour préserver la narration historique).
+- **Imports vérifiés** : les 74 modules `.py` du dépôt importés un par un
+  après renommage — 0 échec.
+- **Suite de tests complète** : 575/575 (554 + les tests ajoutés lors de
+  l'audit §5.2), rejouée deux fois pour écarter un test à particules
+  (`test_avatar.py`) intermittent mais confirmé sans lien avec le
+  renommage (passe de façon fiable isolément).
+- **Démarrage réel vérifié**, pas seulement les tests : l'API relancée
+  avec le code renommé (`uvicorn api.server:app`), `GET /status` et
+  `GET /system` répondent, et un vrai `POST /chat` est passé de bout en
+  bout par `LucasCore.ask()` jusqu'à Ollama et retour — pas un mock.
 
-Renommage acté par Cyril le 29-30/07/2026. À faire une fois S2 stabilisé :
-- Titre fenêtre PySide6, prompts système du LLM, messages TTS
-- Éventuellement le nom du dossier projet (`C:\OrionAI` → autre chose) — optionnel
-- Mise à jour de `CLAUDE.md`, `ROADMAP.md`, `IDEAS.md` (remplacement des mentions "Orion"/"OrionAI")
+**Renommé** :
+- `OrionCore` → `LucasCore` ; `core/orion_core.py` → `core/lucas_core.py`
+- `OrionDaemon` → `LucasDaemon` ; `orion_daemon.py` → `lucas_daemon.py`
+- `Orion3D/` → `Lucas3D/` (dossier Godot, via `git mv` — historique préservé)
+- `memory/orion_memory.db` → `memory/lucas_memory.db` (fichier de données,
+  non suivi par git — renommé sur le disque, contenu intact)
+- `data/orion_daemon.db` → `data/lucas_daemon.db` (idem)
+- Le champ de protocole WebSocket `from_orion` → `from_lucas`, sur les DEUX
+  faces du contrat (`api/protocol.py` et `Lucas3D/scripts/websocket_client.gd`)
+  en même temps — c'était le seul renommage risqué côté GDScript, câblé
+  correctement dès le départ plutôt qu'en deux temps
+- Les signaux/variables Godot `Global.orion_state`, `orion_speaking`,
+  `orion_idle`, `orion_state_changed` → équivalents `lucas_*`
+- Quelques identifiants UI mineurs : `add_orion_button`, `play_orion_audio`
+  (`ui/chat_widget.py`), `last_orion_response` (`ui/main_window.py`)
+- Les binaires Godot exportés (stables, non suivis) et les entrées
+  `.gitignore` correspondantes
 
-Ne pas faire ce renommage avant S2 pour éviter de casser des chemins/imports en plein travail sur la mémoire enrichie.
+**Délibérément NON renommé** (décisions distinctes, documentées, pas des
+oublis) :
+- **Le chemin `C:\OrionAI`** — risque opérationnel direct : Claude Code
+  travaille dans ce dossier en continu au moment du renommage ; le renommer
+  sous ses propres pieds risquait de casser l'accès aux outils en plein
+  chantier, sans aucun moyen de le signaler si ça avait mal tourné. À faire
+  séparément, avec Cyril informé du risque avant de lancer.
+- **L'organisation GitHub `OrionProject76`** — identité externe partagée,
+  casse tous les liens/clones existants ; décision à trancher explicitement,
+  pas à exécuter en trouvant l'occasion.
+- **La collection ChromaDB `"orion_docs"`** (`modules/rag_manager.py`) —
+  nom de stockage interne persisté sur le disque de Cyril ; le renommer
+  orphelinerait ses documents déjà indexés pour un gain purement cosmétique,
+  invisible pour lui de toute façon.
+- **Les mentions historiques** dans `CLAUDE.md`/`ROADMAP.md` qui narrent le
+  passé ("ex-Orion", l'incident `orion3d_bridge.py` supprimé) — les
+  réécrire effacerait l'historique du projet sans raison.
+
+**Leçon de la session précédente, reconfirmée** : une première tentative par
+expression régulière sur `\borion\b` avait transformé `self.orion` en
+`self.luca's` — erreur de syntaxe immédiate, car l'apostrophe n'est pas
+valide dans un identifiant Python. Cette fois, "Lucas" (sans apostrophe) sert
+pour tout identifiant de code, "Luca's" (avec apostrophe) uniquement pour le
+texte visible par Cyril (placeholders, messages, prose) — les deux formes
+ont été distinguées à chaque remplacement, pas mélangées.
+
+### Ce qui reste (ancien contenu de cette section — statut au 02/08/2026)
+
+Renommage acté par Cyril le 29-30/07/2026, planifié pour après S2 stabilisé :
+- ~~Titre fenêtre PySide6, prompts système du LLM, messages TTS~~ — fait le 01/08/2026
+- Le nom du dossier projet (`C:\OrionAI` → autre chose) — **toujours optionnel,
+  toujours différé**, voir la section technique ci-dessus pour le risque précis
+- ~~Mise à jour de `CLAUDE.md`, `ROADMAP.md`, `IDEAS.md`~~ (remplacement des
+  mentions "Orion"/"OrionAI" pour les références techniques encore valides) —
+  fait le 02/08/2026, en gardant intactes les mentions qui narrent l'histoire
+  du projet
 
 ---
 

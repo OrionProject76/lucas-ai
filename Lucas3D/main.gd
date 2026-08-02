@@ -4,7 +4,7 @@ extends Node3D
 
 func _ready():
     _setup_noise()
-    print("Orion3D Desktop Pal demarre")
+    print("Lucas3D Desktop Pal demarre")
     _force_fullscreen()
     WindowManager.setup_window()
     Global.main_ready.emit()
@@ -215,7 +215,7 @@ func _handle_face_float(delta: float):
     warp_clock += delta
     drift_time += delta * _drift_speed()
 
-    var cible: float = 1.0 if Global.orion_state == "idle" else ATTENTION_DRIFT_SCALE
+    var cible: float = 1.0 if Global.lucas_state == "idle" else ATTENTION_DRIFT_SCALE
     attention = move_toward(attention, cible, ATTENTION_LERP_SPEED * delta)
 
     var amp: Vector2 = _drift_amplitude() * attention

@@ -63,7 +63,7 @@ class Guardian:
     Capteur de process. `scan()` retourne des signaux, jamais une action.
 
     `log_event` est injecté (même motif que VoiceManager) : security/ ne
-    doit pas importer OrionCore, ça créerait un cycle.
+    doit pas importer LucasCore, ça créerait un cycle.
     """
 
     def __init__(self, log_event: Callable[[str, str], None] | None = None) -> None:
@@ -168,7 +168,7 @@ class Guardian:
         """
         Trace les signaux non triviaux. Les événements security_* restent
         locaux : la table system_events ne part jamais vers le cloud
-        (voir OrionCore._build_messages).
+        (voir LucasCore._build_messages).
         """
         if self.log_event is None:
             return

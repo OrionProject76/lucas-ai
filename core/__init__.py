@@ -1,5 +1,5 @@
-"""OrionAI core package."""
+"""Luca's core package."""
 
-from core.orion_core import OrionCore
+from core.lucas_core import LucasCore
 
-__all__ = ["OrionCore"]
+__all__ = ["LucasCore"]

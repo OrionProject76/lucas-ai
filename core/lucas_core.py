@@ -1,4 +1,4 @@
-# core/orion_core.py — le chef d'orchestre
+# core/lucas_core.py — le chef d'orchestre
 
 from config import (
     CLOUD_HISTORY_MESSAGES,
@@ -24,7 +24,7 @@ from memory.memory_manager import MemoryManager
 from modules.rag_manager import RAGManager
 
 
-class OrionCore:
+class LucasCore:
     def __init__(self):
         self.memory = MemoryManager()
 

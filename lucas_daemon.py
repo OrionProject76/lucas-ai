@@ -1,13 +1,13 @@
 """
-Orion Daemon — Cerveau nocturne d'Orion AI
+Lucas Daemon — Cerveau nocturne de Luca's AI
 Tourne 24/7 en arrière-plan sur le PC maître.
 Gère : entraînement LoRA, indexation RAG, screenshots, cleanup, logs émotionnels.
 
 Lancement :
-    pythonw orion_daemon.py          (Windows, sans fenêtre)
-    ou : nssm install OrionDaemon ... (service Windows)
+    pythonw lucas_daemon.py          (Windows, sans fenêtre)
+    ou : nssm install LucasDaemon ... (service Windows)
 
-Auteur : Orion AI Project
+Auteur : Lucas AI Project
 """
 
 import os
@@ -24,12 +24,12 @@ from threading import Thread
 import schedule
 
 # ─── CONFIGURATION ─────────────────────────────────────────
-ORION_ROOT = Path("C:/OrionAI")
-DATA_DIR = ORION_ROOT / "data"
+LUCAS_ROOT = Path("C:/OrionAI")
+DATA_DIR = LUCAS_ROOT / "data"
 LOGS_DIR = DATA_DIR / "logs"
 SCREENSHOTS_DIR = DATA_DIR / "screenshots"
-MODELS_DIR = ORION_ROOT / "models"
-TRAINING_DIR = ORION_ROOT / "training"
+MODELS_DIR = LUCAS_ROOT / "models"
+TRAINING_DIR = LUCAS_ROOT / "training"
 REPORTS_DIR = DATA_DIR / "reports"
 
 # Créer les dossiers manquants
@@ -37,8 +37,8 @@ for d in [DATA_DIR, LOGS_DIR, SCREENSHOTS_DIR, MODELS_DIR, TRAINING_DIR, REPORTS
     d.mkdir(parents=True, exist_ok=True)
 
 LOG_FILE = LOGS_DIR / "daemon.log"
-DB_FILE = DATA_DIR / "orion_daemon.db"
-CONFIG_FILE = ORION_ROOT / "config.json"
+DB_FILE = DATA_DIR / "lucas_daemon.db"
+CONFIG_FILE = LUCAS_ROOT / "config.json"
 
 # ─── LOGGING ───────────────────────────────────────────────
 def log(msg: str, level: str = "INFO"):
@@ -102,15 +102,15 @@ def db_log_task(task_name: str, status: str, details: str = "", error: str = "")
 
 # ─── TÂCHES NOCTURNES ──────────────────────────────────────
 
-class OrionDaemon:
-    """Daemon principal d'Orion AI."""
+class LucasDaemon:
+    """Daemon principal de Luca's AI."""
 
     def __init__(self):
         self.running = True
         self.tasks_completed_today = 0
         self._monitor = None  # SecurityMonitor, chargé au premier balayage
         init_db()
-        log("🌌 Orion Daemon initialisé.")
+        log("🌌 Lucas Daemon initialisé.")
 
     # ── 1. Entraînement LoRA ────────────────────────────────
     def nightly_lora_training(self):
@@ -160,7 +160,7 @@ class OrionDaemon:
                 db_log_task("rag_indexing", "skipped", "Dossier vide")
                 return
 
-            index_script = ORION_ROOT / "memory" / "index_documents.py"
+            index_script = LUCAS_ROOT / "memory" / "index_documents.py"
             if index_script.exists():
                 result = subprocess.run(
                     [sys.executable, str(index_script)],
@@ -195,7 +195,7 @@ class OrionDaemon:
             log(f"🗑️ {deleted} screenshots anciens supprimés")
 
             # Vider cache Python
-            cache_dirs = list(ORION_ROOT.rglob("__pycache__"))
+            cache_dirs = list(LUCAS_ROOT.rglob("__pycache__"))
             for d in cache_dirs:
                 import shutil
                 shutil.rmtree(d, ignore_errors=True)
@@ -297,7 +297,7 @@ class OrionDaemon:
         log("🧪 [TÂCHE] Tests automatiques...")
         db_log_task("auto_tests", "started")
         try:
-            tests_dir = ORION_ROOT / "tests"
+            tests_dir = LUCAS_ROOT / "tests"
             if not tests_dir.exists():
                 db_log_task("auto_tests", "skipped", "Dossier tests/ non trouvé")
                 return
@@ -305,7 +305,7 @@ class OrionDaemon:
             result = subprocess.run(
                 [sys.executable, "-m", "pytest", str(tests_dir), "-v", "--tb=short"],
                 capture_output=True, text=True, timeout=300,
-                cwd=str(ORION_ROOT)
+                cwd=str(LUCAS_ROOT)
             )
             if result.returncode == 0:
                 log("✅ Tous les tests passent")
@@ -334,7 +334,7 @@ class OrionDaemon:
 
     def _save_security_event(self, event_type: str, details: str = ""):
         """
-        Les signaux vont dans memory/orion_memory.db, pas dans la base du
+        Les signaux vont dans memory/lucas_memory.db, pas dans la base du
         daemon : c'est cette table que Luca's injecte dans son contexte.
         Un capteur dont personne ne lit les résultats ne sert à rien.
 
@@ -406,7 +406,7 @@ class OrionDaemon:
 
             report = f"""
 ╔══════════════════════════════════════════════════════════════╗
-║           🌌 ORION AI — RAPPORT MATINAL                      ║
+║           🌌 LUCA'S AI — RAPPORT MATINAL                     ║
 ║           {datetime.now().strftime("%Y-%m-%d %H:%M")}                           ║
 ╠══════════════════════════════════════════════════════════════╣
 
@@ -474,7 +474,7 @@ class OrionDaemon:
     def run(self):
         """Boucle principale du daemon."""
         self.setup_schedule()
-        log("🚀 Orion Daemon démarré. Ctrl+C pour arrêter.")
+        log("🚀 Lucas Daemon démarré. Ctrl+C pour arrêter.")
         try:
             while self.running:
                 schedule.run_pending()
@@ -485,5 +485,5 @@ class OrionDaemon:
 
 
 if __name__ == "__main__":
-    daemon = OrionDaemon()
+    daemon = LucasDaemon()
     daemon.run()

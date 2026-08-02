@@ -36,7 +36,7 @@ func _hide():
     is_hidden = true
     var tween = create_tween()
     tween.tween_property(get_window(), "position:y", -50, 0.4)
-    print("Orion3D masque")
+    print("Lucas3D masque")
 
 func _show():
     if not is_hidden:
@@ -44,4 +44,4 @@ func _show():
     is_hidden = false
     var tween = create_tween()
     tween.tween_property(get_window(), "position:y", 0, 0.4)
-    print("Orion3D visible")
+    print("Lucas3D visible")

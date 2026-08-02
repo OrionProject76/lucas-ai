@@ -6,7 +6,7 @@ from pathlib import Path
 
 from config import MAX_HISTORY_MESSAGES
 
-DB_PATH = Path(__file__).parent / "orion_memory.db"
+DB_PATH = Path(__file__).parent / "lucas_memory.db"
 
 
 def save_event_from_any_thread(event_type: str, details: str = "") -> bool:
@@ -17,7 +17,7 @@ def save_event_from_any_thread(event_type: str, details: str = "") -> bool:
     ouvert la connexion. Partager une instance de MemoryManager entre le
     thread principal et un worker lève « SQLite objects created in a
     thread can only be used in that same thread » — c'est ce qui se
-    produisait quand l'UI passait son OrionCore.log_event au TTSWorker.
+    produisait quand l'UI passait son LucasCore.log_event au TTSWorker.
 
     Cette fonction ouvre sa propre connexion, écrit, referme. Le coût est
     négligeable et tout l'état vit dans le fichier, pas en mémoire Python

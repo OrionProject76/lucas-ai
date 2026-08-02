@@ -1,4 +1,4 @@
-"""OrionAI UI package."""
+"""Luca's UI package."""
 
 from ui.main_window import MainWindow
 

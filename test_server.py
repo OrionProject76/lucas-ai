@@ -5,8 +5,8 @@
 # indéfiniment. D'où son exclusion dans le justfile — exclusion désormais
 # inutile.
 #
-# OrionCore est mocké : aucun appel à Ollama, aucune écriture dans
-# memory/orion_memory.db.
+# LucasCore est mocké : aucun appel à Ollama, aucune écriture dans
+# memory/lucas_memory.db.
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ def client() -> TestClient:
 
 @pytest.fixture
 def fake_core(monkeypatch):
-    """Remplace OrionCore par un double qui n'ouvre ni base ni LLM."""
+    """Remplace LucasCore par un double qui n'ouvre ni base ni LLM."""
     calls: dict[str, object] = {}
 
     class _FakeCore:
@@ -37,7 +37,7 @@ def fake_core(monkeypatch):
         def close(self):
             calls["closed"] = True
 
-    monkeypatch.setattr("api.server.OrionCore", _FakeCore)
+    monkeypatch.setattr("api.server.LucasCore", _FakeCore)
     return calls
 
 
@@ -146,7 +146,7 @@ def test_websocket_also_emits_a_chat_message(client, fake_core) -> None:
         ws.send_json({"type": "chat", "message": "bonjour"})
         message = _next_of_type(ws, "chat")
 
-    assert message["from_orion"] is True
+    assert message["from_lucas"] is True
     assert "bonjour" in message["text"]
 
 
@@ -162,7 +162,7 @@ def test_websocket_accepts_the_godot_text_field(client, fake_core) -> None:
 def test_websocket_answers_the_godot_handshake(client) -> None:
     """websocket_client.gd envoie « hello » dès la connexion."""
     with client.websocket_connect("/ws") as ws:
-        ws.send_json({"type": "hello", "client": "orion3d_godot"})
+        ws.send_json({"type": "hello", "client": "lucas3d_godot"})
         message = _next_of_type(ws, "chat")
 
     assert "connectée" in message["text"]

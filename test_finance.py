@@ -111,7 +111,7 @@ def test_default_llm_is_local_only() -> None:
     """
     Garde anti-régression sur la sécurité : par défaut, la catégorisation
     doit appeler core.local_llm.ask_local (Ollama sur localhost), jamais
-    OrionCore.ask() qui route et pourrait choisir le cloud. Un libellé
+    LucasCore.ask() qui route et pourrait choisir le cloud. Un libellé
     bancaire ne sort pas de la machine (CLAUDE.md règle 3).
     """
     import inspect
@@ -121,7 +121,7 @@ def test_default_llm_is_local_only() -> None:
 
     source = inspect.getsource(finance_categorizer.categorize_by_llm)
     assert "ask_local" in source
-    assert "OrionCore" not in source
+    assert "LucasCore" not in source
     assert "ask_cloud" not in source
     assert callable(ask_local)
 

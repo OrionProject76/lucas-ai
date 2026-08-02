@@ -1,7 +1,7 @@
 # test_protocol.py — vocabulaire du canal WebSocket Luca's ↔ Godot
 #
 # Deux protocoles incompatibles coexistaient : celui de l'API (branché
-# sur OrionCore) et celui d'orion3d_bridge.py (un écho jamais connecté à
+# sur LucasCore) et celui d'orion3d_bridge.py (un écho jamais connecté à
 # Ollama, et qui ne démarre plus depuis websockets 12). Le client Godot
 # parlait au second.
 #
@@ -18,7 +18,7 @@ import pytest
 
 from api import protocol
 
-GODOT_CLIENT = Path("Orion3D/scripts/websocket_client.gd")
+GODOT_CLIENT = Path("Lucas3D/scripts/websocket_client.gd")
 
 
 # ── Construction des messages ─────────────────────────────────────────
@@ -50,7 +50,7 @@ def test_unknown_state_falls_back_to_idle() -> None:
 
 def test_chat_uses_the_field_names_godot_reads() -> None:
     message = protocol.chat("salut")
-    assert message == {"type": "chat", "text": "salut", "from_orion": True}
+    assert message == {"type": "chat", "text": "salut", "from_lucas": True}
 
 
 def test_system_rounds_and_defaults_gpu() -> None:
@@ -145,7 +145,7 @@ def test_the_dead_bridge_is_gone() -> None:
     Un service cassé laissé dans le dépôt ressemble à une alternative
     valable. Celui-ci ne démarrait plus depuis websockets 12.
     """
-    assert not Path("Orion3D/python_service/orion3d_bridge.py").exists()
+    assert not Path("Lucas3D/python_service/orion3d_bridge.py").exists()
 
 
 if __name__ == "__main__":

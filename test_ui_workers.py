@@ -24,7 +24,7 @@ def test_context_worker_creates_its_own_core(monkeypatch) -> None:
     """
     SQLite refuse d'être utilisé depuis un autre thread que celui qui a
     ouvert la connexion. Le worker doit donc instancier son propre
-    OrionCore, pas réutiliser celui de MainWindow.
+    LucasCore, pas réutiliser celui de MainWindow.
     """
     created: list[str] = []
 
@@ -38,7 +38,7 @@ def test_context_worker_creates_its_own_core(monkeypatch) -> None:
         def close(self):
             created.append("closed")
 
-    monkeypatch.setattr("ui.main_window.OrionCore", _FakeCore)
+    monkeypatch.setattr("ui.main_window.LucasCore", _FakeCore)
 
     worker = ContextWorker("bonjour")
     received: list[list] = []
@@ -60,7 +60,7 @@ def test_context_worker_always_closes_the_core(monkeypatch) -> None:
         def close(self):
             closed.append(True)
 
-    monkeypatch.setattr("ui.main_window.OrionCore", _BrokenCore)
+    monkeypatch.setattr("ui.main_window.LucasCore", _BrokenCore)
 
     worker = ContextWorker("bonjour")
     errors: list[str] = []
@@ -83,7 +83,7 @@ def test_context_failure_does_not_crash_the_ui(monkeypatch) -> None:
         def close(self):
             pass
 
-    monkeypatch.setattr("ui.main_window.OrionCore", _BrokenCore)
+    monkeypatch.setattr("ui.main_window.LucasCore", _BrokenCore)
 
     worker = ContextWorker("test")
     worker.error.connect(lambda msg: None)
@@ -162,7 +162,7 @@ def test_cancelled_context_never_emits(monkeypatch) -> None:
         def close(self):
             pass
 
-    monkeypatch.setattr("ui.main_window.OrionCore", _SlowCore)
+    monkeypatch.setattr("ui.main_window.LucasCore", _SlowCore)
 
     worker = ContextWorker("bonjour")
     received: list = []
@@ -182,7 +182,7 @@ def test_cancelled_context_swallows_errors(monkeypatch) -> None:
         def close(self):
             pass
 
-    monkeypatch.setattr("ui.main_window.OrionCore", _BrokenCore)
+    monkeypatch.setattr("ui.main_window.LucasCore", _BrokenCore)
 
     worker = ContextWorker("bonjour")
     errors: list = []
@@ -244,7 +244,7 @@ def app_window():
 
 def test_tts_worker_gets_a_thread_safe_logger() -> None:
     """
-    L'UI passait self.orion.log_event au TTSWorker. Ce worker tourne dans
+    L'UI passait self.lucas.log_event au TTSWorker. Ce worker tourne dans
     un autre thread, et SQLite refuse une connexion ouverte ailleurs :
     chaque lecture vocale levait « SQLite objects created in a thread can
     only be used in that same thread ».
@@ -255,12 +255,12 @@ def test_tts_worker_gets_a_thread_safe_logger() -> None:
 
     source = inspect.getsource(main_window.MainWindow._speak)
     # Les commentaires sont retirés : la docstring explique justement
-    # pourquoi self.orion.log_event est proscrit, et une recherche
+    # pourquoi self.lucas.log_event est proscrit, et une recherche
     # textuelle brute se déclencherait dessus.
     code_only = "\n".join(
         line.split("#", 1)[0] for line in source.splitlines()
     )
-    assert "self.orion.log_event" not in code_only
+    assert "self.lucas.log_event" not in code_only
     assert "save_event_from_any_thread" in code_only
 
 
@@ -313,7 +313,7 @@ def test_prepare_is_not_called_on_the_main_thread() -> None:
     from ui import main_window
 
     source = inspect.getsource(main_window.MainWindow.send_message)
-    assert "self.orion.prepare" not in source
+    assert "self.lucas.prepare" not in source
     assert "ContextWorker" in source
 
 

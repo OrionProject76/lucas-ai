@@ -321,7 +321,7 @@ CONTEXT_TURNS: int = 2
 CONTEXT_MAX_CHARS: int = 200
 
 # --- Mémoire ---
-DB_PATH = "memory/orion_memory.db"
+DB_PATH = "memory/lucas_memory.db"
 MAX_HISTORY_MESSAGES = 100      # garde les 100 derniers messages max
 
 # Historique joint à une requête CLOUD : volontairement bien plus court que
@@ -332,7 +332,7 @@ CLOUD_HISTORY_MESSAGES: int = 6
 # Nombre d'événements système récents injectés dans le prompt (mémoire
 # enrichie, ROADMAP Phase 2). Volontairement bas : il s'agit de donner du
 # contexte au LLM, pas de lui déverser un journal. Jamais joint à une
-# requête cloud — voir OrionCore._build_messages().
+# requête cloud — voir LucasCore._build_messages().
 RECENT_EVENTS_IN_PROMPT: int = 5
 
 # Historique joint quand une SOURCE EXTERNE est injectée — écran (vision)

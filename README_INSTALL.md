@@ -3,9 +3,13 @@
 Ce document couvre l'installation complète : l'application principale
 (interface + API) et, en option, le daemon 24/7.
 
-> Le projet s'appelle désormais **Luca's**. Le renommage technique (chemins,
-> titres de fenêtre, prompts) est volontairement différé — voir `ROADMAP.md`
-> section 6. Les chemins ci-dessous restent donc en `OrionAI`.
+> Le projet s'appelle désormais **Luca's**. Le renommage technique du code
+> (classes, fichiers, dossier `Orion3D/`, base de données) est fait le
+> 02/08/2026 — voir `ROADMAP.md` section 6. Restent volontairement différés,
+> pour ne pas casser un environnement déjà installé sans supervision directe :
+> le dossier racine `C:\OrionAI` et l'organisation GitHub `OrionProject76`.
+> Les chemins ci-dessous restent donc en `OrionAI` pour ces deux éléments
+> seulement.
 
 ---
 
@@ -17,8 +21,8 @@ Ce document couvre l'installation complète : l'application principale
 | `api/server.py` | API FastAPI (REST + WebSocket) — mobile et Godot |
 | `core/` | Cerveau de Luca's : routage local/cloud, mémoire, World Model |
 | `modules/` | RAG, vision, voix, web, finance |
-| `orion_daemon.py` | Daemon 24/7 optionnel (tâches de fond) |
-| `Orion3D/` | Frontend Godot 4 (avatar holographique) |
+| `lucas_daemon.py` | Daemon 24/7 optionnel (tâches de fond) |
+| `Lucas3D/` | Frontend Godot 4 (avatar holographique) |
 | `missions/` | 10 fiches de spécification pour Claude Code |
 | `justfile` | Raccourcis de commandes |
 
@@ -124,7 +128,7 @@ L'API expose `GET /status`, `GET /system`, `POST /chat` et `WS /ws`.
 ```powershell
 just test-quick                   # suite complète, ~3 s, tout mocké
 just test-integration             # chaîne réelle avec Ollama, ~20 s
-python -c "import config, core.orion_core, main; print('imports OK')"
+python -c "import config, core.lucas_core, main; print('imports OK')"
 ```
 
 Les tests d'intégration parlent aux vrais services — Ollama, Piper, le
@@ -142,8 +146,8 @@ rapports). Il n'est pas nécessaire pour utiliser Luca's.
 
 ```powershell
 pip install -r requirements_daemon.txt
-python orion_daemon.py            # mode visible, pour voir les logs
-pythonw orion_daemon.py           # mode invisible, arrière-plan
+python lucas_daemon.py            # mode visible, pour voir les logs
+pythonw lucas_daemon.py           # mode invisible, arrière-plan
 ```
 
 > `requirements_daemon.txt` déclare aujourd'hui plus que ce que le code
@@ -167,10 +171,10 @@ Get-Content C:\OrionAI\data\logs\daemon.log -Tail 20 -Wait
 3. En PowerShell admin :
 
 ```powershell
-nssm install OrionDaemon
+nssm install LucasDaemon
 # Path      : C:\OrionAI\venv\Scripts\pythonw.exe
-# Arguments : C:\OrionAI\orion_daemon.py
-nssm start OrionDaemon
+# Arguments : C:\OrionAI\lucas_daemon.py
+nssm start LucasDaemon
 ```
 
 ---

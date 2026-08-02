@@ -5,8 +5,8 @@
 # Il existait deux protocoles incompatibles :
 #
 #   • api/server.py  — « avatar_state » / « chat », port 8000, branché
-#     sur OrionCore, donc sur le vrai routage et les vraies gardes
-#   • Orion3D/python_service/orion3d_bridge.py — « speak » / « idle » /
+#     sur LucasCore, donc sur le vrai routage et les vraies gardes
+#   • Lucas3D/python_service/orion3d_bridge.py — « speak » / « idle » /
 #     « system », port 8765, simple écho jamais connecté à Ollama
 #
 # Le client Godot pointait sur le second. Résultat : l'avatar 3D ne
@@ -55,12 +55,11 @@ def chat(text: str, from_luca: bool = True) -> dict:
     """
     Message de conversation.
 
-    Le champ garde le nom « from_orion » : c'est celui que le client
-    Godot lit déjà (scripts/websocket_client.gd). Le renommer casserait
-    l'affichage sans rien apporter — le renommage technique est différé,
-    voir ROADMAP §6.
+    Le champ s'appelait « from_orion » avant le renommage technique du
+    02/08/2026 (voir ROADMAP §6) — renommé en même temps que le client
+    Godot (scripts/websocket_client.gd), sur les deux faces du contrat.
     """
-    return {"type": "chat", "text": text, "from_orion": from_luca}
+    return {"type": "chat", "text": text, "from_lucas": from_luca}
 
 
 def system(cpu: float, ram: float, gpu: float = 0.0) -> dict:

@@ -2,7 +2,7 @@
 #
 # ⚠️ SÉCURITÉ : les libellés de transaction sont des données ultra-sensibles
 # (CLAUDE.md règle 3). La catégorisation par LLM passe donc EXCLUSIVEMENT par
-# ask_local() — jamais par OrionCore.ask(), qui route et pourrait choisir le
+# ask_local() — jamais par LucasCore.ask(), qui route et pourrait choisir le
 # cloud. Aucun libellé bancaire ne doit atteindre un serveur externe.
 #
 # Deux étages : règles par mots-clés d'abord (déterministe, gratuit, hors

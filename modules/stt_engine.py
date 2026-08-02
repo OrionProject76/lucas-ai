@@ -74,7 +74,7 @@ class STTEngine:
     Transcrit de l'audio en texte, en local.
 
     `log_event` est injecté comme ailleurs : modules/ ne connaît pas
-    OrionCore.
+    LucasCore.
     """
 
     def __init__(

@@ -57,7 +57,7 @@ class PrivacyShield:
     """
     Capteur réseau. `scan()` retourne des signaux, jamais une action.
 
-    `log_event` est injecté : security/ ne doit pas importer OrionCore.
+    `log_event` est injecté : security/ ne doit pas importer LucasCore.
     """
 
     def __init__(

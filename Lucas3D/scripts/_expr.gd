@@ -24,7 +24,7 @@ func _ready():
     m.face_root.position = Vector3.ZERO
     m.face_root.rotation = Vector3.ZERO
     for e in etats:
-        Global.orion_state = e
+        Global.lucas_state = e
         # Laisser la pose converger (POSE_LERP 2.5 -> ~1.6 s pour 98 %)
         await get_tree().create_timer(2.5).timeout
         var img := get_viewport().get_texture().get_image()

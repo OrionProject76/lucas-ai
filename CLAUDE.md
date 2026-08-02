@@ -258,8 +258,8 @@ C:/OrionAI/
 ├── requirements_daemon.txt    # Dépendances daemon
 ├── justfile                   # Commandes rapides
 ├── CLAUDE.md                  # CE FICHIER
-├── orion_daemon.py            # Daemon 24/7
-├── orion_report.py            # Rapport matinal standalone
+├── lucas_daemon.py            # Daemon 24/7
+├── lucas_report.py            # Rapport matinal standalone
 ├── core/                      # Logique métier
 │   ├── __init__.py
 │   ├── llm_manager.py         # Gestion multi-modèles Ollama
@@ -284,7 +284,7 @@ C:/OrionAI/
 │   ├── main_window.py         # Fenêtre principale
 │   ├── chat_widget.py         # Widget chat streaming
 │   ├── avatar_widget.py       # Avatar 2D QPainter
-│   └── barre_orion.py         # Barre Luca's remplaçant la taskbar
+│   └── barre_lucas.py         # Barre Luca's remplaçant la taskbar
 ├── godot/                     # Couche 5 — Interface 3D (Godot)
 │   ├── project.godot
 │   ├── scenes/
@@ -320,7 +320,7 @@ C:/OrionAI/
 │   ├── screenshots/           # Time Travel captures
 │   ├── logs/                  # Logs daemon
 │   ├── reports/               # Rapports matinaux
-│   └── orion.db               # SQLite principal
+│   └── lucas_memory.db        # SQLite principal (memory/lucas_memory.db en réalité — voir §6)
 ├── tests/                     # Tests unitaires
 │   ├── __init__.py
 │   ├── test_screen_watcher.py
@@ -399,10 +399,20 @@ C:/OrionAI/
 ## Renommage du projet : Orion → Luca's
 
 Le projet s'appelle désormais **Luca's** (décidé par Cyril le 29-30/07/2026).
-Le nom "OrionAI"/"Orion" reste utilisé dans le code et les chemins existants
-jusqu'au renommage technique complet, prévu après stabilisation de S2.
-Ne pas renommer partiellement (risque de casser des imports ou des chemins
-de fichiers en plein travail) — le renommage se fera en un seul bloc, dédié.
+
+**Renommage technique du code fait le 02/08/2026** (`OrionCore`→`LucasCore`,
+`core/orion_core.py`→`core/lucas_core.py`, `orion_daemon.py`→`lucas_daemon.py`,
+`Orion3D/`→`Lucas3D/`, `memory/orion_memory.db`→`memory/lucas_memory.db`,
+et les identifiants internes qui en dépendaient) — voir ROADMAP.md §6 pour le
+détail complet et la vérification (imports, suite de tests, démarrage réel).
+
+**Restent volontairement non renommés**, décision distincte de la précédente
+et non tranchée seule : le dossier racine `C:\OrionAI` (risque opérationnel —
+Claude Code travaille dans ce dossier en continu) et l'organisation GitHub
+`OrionProject76` (identité externe partagée, casse les liens existants). Le
+nom de collection ChromaDB `"orion_docs"` reste aussi inchangé — c'est un nom
+de stockage interne sur le disque de Cyril, le renommer orphelinerait ses
+documents déjà indexés pour un gain cosmétique.
 
 ## Leçons d'infrastructure (30/07/2026)
 

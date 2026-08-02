@@ -53,11 +53,11 @@ def _requires_model(name: str) -> None:
 
 @pytest.fixture
 def temp_core():
-    """OrionCore sur une base temporaire : on ne touche pas à orion_memory.db."""
-    from core.orion_core import OrionCore
+    """LucasCore sur une base temporaire : on ne touche pas à lucas_memory.db."""
+    from core.lucas_core import LucasCore
     from memory.memory_manager import MemoryManager
 
-    core = OrionCore.__new__(OrionCore)
+    core = LucasCore.__new__(LucasCore)
     core.memory = MemoryManager(db_path=Path(tempfile.mkdtemp()) / "integration.db")
     yield core
     core.close()

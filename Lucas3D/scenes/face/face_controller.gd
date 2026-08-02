@@ -86,8 +86,8 @@ func _ready():
     mouth_base_scale = mouth.scale
     blink_timer.timeout.connect(_on_blink)
     speak_timer.timeout.connect(_on_speak_tick)
-    Global.orion_speaking.connect(_on_orion_speaking)
-    Global.orion_idle.connect(_on_orion_idle)
+    Global.lucas_speaking.connect(_on_lucas_speaking)
+    Global.lucas_idle.connect(_on_lucas_idle)
     _programmer_saccade()
 
 
@@ -112,7 +112,7 @@ func _process(delta: float):
 
 
 func _maj_pose(delta: float):
-    var p: Dictionary = POSES.get(Global.orion_state, POSES["idle"])
+    var p: Dictionary = POSES.get(Global.lucas_state, POSES["idle"])
     pose_eye = lerp(pose_eye, float(p["eye"]), delta * POSE_LERP)
     pose_tilt = lerp(pose_tilt, float(p["tilt"]), delta * POSE_LERP)
     pose_mouth = lerp(pose_mouth, float(p["mouth"]), delta * POSE_LERP)
@@ -180,16 +180,16 @@ func _on_blink():
 
 
 func _on_speak_tick():
-    if Global.orion_state == "speaking" and AudioVisualizer:
+    if Global.lucas_state == "speaking" and AudioVisualizer:
         var intensity = AudioVisualizer.get_speech_intensity()
         mouth_target_scale = clamp(0.3 + intensity * 2.5, 0.3, 2.5)
     else:
         mouth_target_scale = 1.0
 
 
-func _on_orion_speaking(intensity: float):
+func _on_lucas_speaking(intensity: float):
     mouth_target_scale = 0.3 + intensity * 2.0
 
 
-func _on_orion_idle():
+func _on_lucas_idle():
     mouth_target_scale = 1.0

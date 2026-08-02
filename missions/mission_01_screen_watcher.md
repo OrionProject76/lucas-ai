@@ -23,7 +23,7 @@ Créer `perception/screen_watcher.py` + `tests/test_screen_watcher.py`
   "data": {
     "text": "texte extrait par OCR...",
     "app_active": "Visual Studio Code",
-    "window_title": "main.py - OrionAI",
+    "window_title": "main.py - Luca's",
     "screen_hash": "abc123..."
   }
 }

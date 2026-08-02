@@ -22,7 +22,7 @@ Créer `perception/system_watcher.py` + `tests/test_system_watcher.py`
   "timestamp": "2026-07-29T08:30:00",
   "data": {
     "active_window": "Visual Studio Code",
-    "window_title": "main.py - OrionAI",
+    "window_title": "main.py - Luca's",
     "browser_url": "https://github.com/...",
     "top_processes": [
       {"name": "code.exe", "cpu": 12.5, "ram_mb": 450},
