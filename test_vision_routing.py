@@ -640,5 +640,107 @@ def test_the_vlm_description_is_capped(core_with_history, monkeypatch):
     assert block["content"].count("bla") <= VLM_MAX_CHARS
 
 
+# ── Photo du téléphone (pont mobile, Phase 4) ──────────────────────────
+#
+# VISION_LONG_TERME.md §2 Pilier 3, précision du 02/08/2026 : MÊME
+# pipeline OCR/VLM que l'écran, jamais un second chemin. Ce qui change,
+# c'est uniquement la SOURCE de l'image (donnée directement, pas
+# capturée) et le déclenchement (forcé, pas le classifieur).
+
+def test_camera_image_is_analyzed_without_the_classifier(core, monkeypatch) -> None:
+    """
+    Une question ordinaire, qui ne déclencherait normalement PAS la
+    vision (voir test_ordinary_questions_do_not_trigger_vision), doit
+    quand même produire un bloc vision dès qu'une photo est fournie —
+    le bouton caméra est le signal, pas le texte de la question.
+    """
+    _fake_vision(monkeypatch, "un panneau de signalisation")
+    _fake_ocr(monkeypatch, "SENS INTERDIT")
+
+    messages = core._build_messages(
+        "merci, c'est parfait", "local", image_path="data/photo.jpg"
+    )
+    block = next(m["content"] for m in messages if VISION_MARKER in m["content"])
+
+    assert "SENS INTERDIT" in block
+
+
+def test_camera_image_does_not_capture_the_screen(core, monkeypatch) -> None:
+    """
+    Une photo du téléphone existe déjà sur disque : capturer l'écran du
+    PC en plus serait un second appareil photo pour rien, et lirait le
+    mauvais écran.
+    """
+    _fake_vision(monkeypatch, "peu importe")
+    _fake_ocr(monkeypatch, "peu importe")
+
+    class _CaptureNeDoitPasEtreAppelee:
+        def __init__(self, model=None):
+            pass
+
+        def capture_screen(self, output_path=None):
+            raise AssertionError("capture_screen() appelé alors qu'une photo était fournie")
+
+        def analyze_image(self, path, prompt=None):
+            return "peu importe"
+
+    monkeypatch.setattr(
+        "modules.vision_manager.VisionManager", _CaptureNeDoitPasEtreAppelee
+    )
+
+    core._build_messages("une question", "local", image_path="data/photo.jpg")
+
+
+def test_camera_image_path_reaches_the_ocr_and_vlm(core, monkeypatch) -> None:
+    """L'OCR et le VLM doivent lire la photo fournie, pas un chemin différent."""
+    captured_vlm: dict = {}
+    _fake_vision(monkeypatch, "une facture", captured=captured_vlm)
+
+    captured_ocr: dict = {}
+
+    class _FakeOCREngine:
+        def extract_text(self, path):
+            from modules.ocr_engine import OCRResult
+
+            captured_ocr["path"] = path
+            return OCRResult(text="TOTAL 42,00 EUR", lines=["TOTAL 42,00 EUR"])
+
+    monkeypatch.setattr("modules.ocr_engine.OCREngine", _FakeOCREngine)
+
+    core._build_messages("c'est combien ?", "local", image_path="data/photo_facture.jpg")
+
+    assert captured_ocr["path"] == "data/photo_facture.jpg"
+    assert captured_vlm["path"] == "data/photo_facture.jpg"
+
+
+def test_camera_image_is_never_sent_to_the_cloud(core, monkeypatch) -> None:
+    """Même garde que l'écran : la vision ne s'active jamais côté cloud."""
+    _fake_vision(monkeypatch, "peu importe")
+
+    def must_not_be_called(*args, **kwargs):
+        raise AssertionError("VisionManager instancié alors que destination='cloud'")
+
+    monkeypatch.setattr("modules.vision_manager.VisionManager", must_not_be_called)
+
+    messages = core._build_messages(
+        "analyse ce document", "cloud", image_path="data/photo.jpg"
+    )
+
+    assert not any(VISION_MARKER in m["content"] for m in messages)
+
+
+def test_camera_image_without_ocr_or_vlm_result_produces_no_block(core, monkeypatch) -> None:
+    """Dégrade silencieusement — comme l'écran quand ni l'OCR ni le VLM n'aboutissent."""
+    _fake_vision(monkeypatch, "Erreur analyse")
+    _fake_ocr(monkeypatch, "", raises=RuntimeError("absent"))
+
+    messages = core._build_messages(
+        "que vois-tu ?", "local", image_path="data/photo.jpg"
+    )
+
+    assert not any(VISION_MARKER in m["content"] for m in messages)
+    assert "vision_failed" in [t for t, _ in core.memory.events]
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

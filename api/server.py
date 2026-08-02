@@ -7,8 +7,10 @@
 # voir VISION_LONG_TERME.md §2, Pilier 3 — le corps étendu PC + mobile).
 
 import asyncio
+import base64
 import secrets
 import sys
+import tempfile
 from pathlib import Path
 
 # Permet de lancer ce fichier directement (uvicorn api.server:app depuis la racine)
@@ -17,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from api import protocol
@@ -194,6 +197,23 @@ async def _push_system_state(websocket: WebSocket) -> None:
         await asyncio.sleep(SYSTEM_PUSH_INTERVAL)
 
 
+def _save_base64_image(image_base64: str) -> str:
+    """
+    Décode une photo base64 (message WebSocket "image", pont mobile) vers
+    un fichier temporaire. Même logique que STTEngine.transcribe_base64()
+    pour l'audio — décodage et écriture disque, la suppression reste à la
+    charge de l'appelant, une fois LucasCore.ask() terminé.
+
+    Lève sur base64 invalide plutôt que de rendre un chemin bidon : mieux
+    vaut un message d'erreur clair côté client qu'un fichier vide envoyé
+    à l'OCR.
+    """
+    raw = base64.b64decode(image_base64, validate=True)
+    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+        tmp.write(raw)
+        return tmp.name
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     # Vérifié AVANT accept() : un jeton absent/invalide ferme la connexion
@@ -215,6 +235,9 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             data = await websocket.receive_json()
             message_type = data.get("type", "")
+            # Chemin d'une photo décodée (message "image" ci-dessous) — None
+            # pour "chat"/"audio", qui n'en fournissent pas.
+            image_path = None
 
             # Poignée de main du client Godot (scripts/websocket_client.gd).
             if message_type == "hello":
@@ -225,6 +248,27 @@ async def websocket_endpoint(websocket: WebSocket):
 
             if message_type == "chat":
                 message = protocol.read_user_text(data)
+
+            elif message_type == "image":
+                # Pont mobile (Phase 4) : le téléphone photographie ce que
+                # le PC ne peut pas voir lui-même (pas de caméra — voir
+                # VISION_LONG_TERME.md §2 Pilier 3). MÊME pipeline vision que
+                # l'écran (core.LucasCore._describe_image_at), jamais un
+                # second chemin OCR/VLM parallèle.
+                image_base64 = protocol.read_user_image(data)
+                if not image_base64:
+                    continue
+
+                try:
+                    image_path = _save_base64_image(image_base64)
+                except Exception as exc:  # noqa: BLE001 — base64 invalide
+                    await websocket.send_json(
+                        protocol.error(f"Image illisible : {exc}")
+                    )
+                    await websocket.send_json(protocol.avatar_state(protocol.STATE_IDLE))
+                    continue
+
+                message = protocol.read_user_text(data) or "Décris ce que tu vois."
 
             elif message_type == "audio":
                 # Pont mobile (Phase 4) : le S25 Ultra envoie l'audio, le PC
@@ -278,11 +322,18 @@ async def websocket_endpoint(websocket: WebSocket):
             # l'écran à l'intérieur, et prévenir après coup n'aurait aucun
             # intérêt — c'est pendant la capture que le témoin compte.
             lucas = LucasCore()
-            try:
-                regarde = should_use_vision(message, lucas.recent_context())
-            except Exception:  # noqa: BLE001 — un doute sur l'état ne doit
-                # jamais empêcher de répondre.
-                regarde = False
+            if image_path is not None:
+                # Photo du téléphone : le bouton caméra EST le signal, pas
+                # besoin du classifieur — même témoin WATCHING que pour
+                # l'écran, réutilisé à l'identique (voir
+                # VISION_LONG_TERME.md §2 Pilier 3, précision du 02/08/2026).
+                regarde = True
+            else:
+                try:
+                    regarde = should_use_vision(message, lucas.recent_context())
+                except Exception:  # noqa: BLE001 — un doute sur l'état ne doit
+                    # jamais empêcher de répondre.
+                    regarde = False
 
             await websocket.send_json(
                 protocol.avatar_state(
@@ -291,9 +342,11 @@ async def websocket_endpoint(websocket: WebSocket):
             )
 
             try:
-                answer = lucas.ask(message)
+                answer = lucas.ask(message, image_path=image_path)
             finally:
                 lucas.close()
+                if image_path is not None:
+                    Path(image_path).unlink(missing_ok=True)
 
             # Deux messages plutôt qu'un : l'état pilote l'animation du
             # visage, le message de chat alimente la bulle du HUD. Le
@@ -308,6 +361,20 @@ async def websocket_endpoint(websocket: WebSocket):
         pass
     finally:
         pusher.cancel()
+
+
+# ── PWA mobile (pont mobile, Phase 4) ──────────────────────────────────
+#
+# Montée à /app plutôt qu'à la racine, pour ne jamais entrer en collision
+# avec les routes JSON ci-dessus (/status, /chat, /history, /system) ni
+# avec /ws. html=True sert index.html sur /app/ et sur tout chemin non
+# trouvé sous /app — nécessaire pour une PWA à page unique.
+#
+# Montée en DERNIER : FastAPI résout les routes dans l'ordre de
+# déclaration, et un mount capte tout ce qui commence par son préfixe —
+# la déclarer avant les routes ci-dessus les aurait rendues inatteignables.
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+app.mount("/app", StaticFiles(directory=STATIC_DIR, html=True), name="pwa")
 
 
 if __name__ == "__main__":

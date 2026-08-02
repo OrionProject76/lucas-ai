@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Luca's</title>
+    <link rel="manifest" href="/app/manifest.json" />
+    <link rel="icon" href="/app/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/app/icons/icon-192.png" />
+    <meta name="theme-color" content="#00050a" />
+    <link rel="stylesheet" href="/app/css/style.css" />
+</head>
+<body>
+    <div id="app">
+        <div id="connection-banner"></div>
+
+        <div id="avatar-panel">
+            <canvas id="avatar-canvas" width="140" height="140"></canvas>
+            <div id="avatar-label">prête</div>
+        </div>
+
+        <div id="chat-log"></div>
+
+        <form id="input-bar">
+            <button type="button" id="camera-btn" class="icon-btn" title="Montrer à Luca's">📷</button>
+            <button type="button" id="mic-btn" class="icon-btn" title="Parler à Luca's">🎙️</button>
+            <input type="text" id="text-input" placeholder="Parler à Luca's..." autocomplete="off" />
+            <button type="submit" id="send-btn" class="icon-btn" title="Envoyer">➤</button>
+        </form>
+    </div>
+
+    <script src="/app/js/avatar.js"></script>
+    <script src="/app/js/websocket.js"></script>
+    <script src="/app/js/chat.js"></script>
+    <script src="/app/js/audio.js"></script>
+    <script src="/app/js/camera.js"></script>
+    <script src="/app/js/app.js"></script>
+</body>
+</html>

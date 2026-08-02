@@ -10,6 +10,9 @@
 
 from __future__ import annotations
 
+import base64
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -27,8 +30,14 @@ def fake_core(monkeypatch):
     calls: dict[str, object] = {}
 
     class _FakeCore:
-        def ask(self, message: str) -> str:
+        def ask(self, message: str, image_path: str | None = None) -> str:
             calls["asked"] = message
+            calls["asked_image_path"] = image_path
+            # Capturé PENDANT l'appel : le fichier temporaire est supprimé
+            # juste après, dans le finally de websocket_endpoint.
+            calls["image_existed_during_call"] = (
+                image_path is not None and os.path.exists(image_path)
+            )
             return f"réponse à « {message} »"
 
         def history(self):
@@ -374,6 +383,120 @@ def test_websocket_without_token_configured_still_works(client) -> None:
     with client.websocket_connect("/ws") as ws:
         first = _next_of_type(ws, "avatar_state")
     assert first["state"] == "idle"
+
+
+# ── WebSocket : image (pont mobile, Phase 4) ───────────────────────────
+#
+# Photo envoyée par le téléphone (pas de caméra sur le PC — voir
+# VISION_LONG_TERME.md §2 Pilier 3). LucasCore est doublé (fake_core) :
+# ces tests vérifient le CHEMIN serveur — décodage, témoin WATCHING,
+# nettoyage du fichier temporaire — pas la qualité de l'OCR/VLM, qui a
+# ses propres tests dans test_vision_routing.py.
+
+FAKE_IMAGE_B64 = base64.b64encode(b"fausses donnees d'image, jamais un vrai jpeg").decode()
+
+
+def test_websocket_image_is_analyzed_and_answered(client, fake_core) -> None:
+    """Le cycle attendu : watching → speaking → idle, pas listening (audio only)."""
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "image", "image_base64": FAKE_IMAGE_B64})
+
+        states = []
+        answer = None
+        for _ in range(20):
+            message = ws.receive_json()
+            if message.get("type") == "avatar_state":
+                states.append(message["state"])
+                if message["state"] == "speaking":
+                    answer = message.get("text", "")
+            if states[-3:] == ["watching", "speaking", "idle"]:
+                break
+
+    assert states[-3:] == ["watching", "speaking", "idle"]
+    assert answer is not None
+
+
+def test_websocket_image_without_caption_uses_a_default(client, fake_core) -> None:
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "image", "image_base64": FAKE_IMAGE_B64})
+        _next_of_type(ws, "chat")
+
+    assert fake_core["asked"] == "Décris ce que tu vois."
+
+
+def test_websocket_image_with_a_caption_uses_it(client, fake_core) -> None:
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json(
+            {"type": "image", "image_base64": FAKE_IMAGE_B64, "text": "c'est quoi ce panneau ?"}
+        )
+        _next_of_type(ws, "chat")
+
+    assert fake_core["asked"] == "c'est quoi ce panneau ?"
+
+
+def test_websocket_image_reaches_lucas_core_with_a_real_path(client, fake_core) -> None:
+    """
+    Le fichier temporaire doit exister PENDANT l'appel — c'est de là que
+    LucasCore._describe_camera_image() lit l'image.
+    """
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "image", "image_base64": FAKE_IMAGE_B64})
+        _next_of_type(ws, "chat")
+
+    assert fake_core["asked_image_path"] is not None
+    assert fake_core["image_existed_during_call"] is True
+
+
+def test_websocket_image_temp_file_is_deleted_after_use(client, fake_core) -> None:
+    """
+    Ce sont potentiellement des photos de documents personnels : elles ne
+    doivent pas traîner dans le dossier temporaire du système au-delà de
+    l'appel — même principe que pour les PDF scannés (memory/index_documents.py).
+    """
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "image", "image_base64": FAKE_IMAGE_B64})
+        _next_of_type(ws, "chat")
+
+    path = fake_core["asked_image_path"]
+    assert not os.path.exists(path)
+
+
+def test_websocket_ignores_image_without_the_field(client, fake_core) -> None:
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "image"})
+        ws.send_json({"type": "chat", "message": "vrai message"})
+        message = _next_of_type(ws, "chat", limit=20)
+
+    assert "vrai message" in message["text"]
+
+
+def test_websocket_bad_base64_image_reports_an_error_not_a_crash(client, fake_core) -> None:
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "image", "image_base64": "!!! pas du base64 valide !!!"})
+        error = _next_of_type(ws, "error")
+        idle = _next_of_type(ws, "avatar_state")
+
+    assert "Image illisible" in error["detail"]
+    assert idle["state"] == "idle"
+
+
+# ── PWA statique ────────────────────────────────────────────────────────
+
+def test_pwa_index_is_served(client) -> None:
+    response = client.get("/app/")
+    assert response.status_code == 200
+    assert "manifest.json" in response.text
+
+
+def test_pwa_manifest_is_served(client) -> None:
+    response = client.get("/app/manifest.json")
+    assert response.status_code == 200
+    assert response.json()["name"] == "Luca's"
+
+
+def test_pwa_does_not_shadow_the_json_api(client) -> None:
+    """Le mount /app est déclaré en dernier : les routes JSON doivent rester atteignables."""
+    assert client.get("/status").status_code == 200
 
 
 # ── Cohérence avec le reste du projet ─────────────────────────────────

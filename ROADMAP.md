@@ -299,6 +299,75 @@ jeton par le temps de réponse.
 passer `API_HOST` à `0.0.0.0` — deux actions liées, jamais l'une sans
 l'autre — puis les points 1 (PWA) et 3 (tunnel) ci-dessus.
 
+### 🟢 Session du 02/08/2026 (suite) — scaffold PWA : chat + micro + caméra + avatar léger
+
+Point 1 ci-dessus (PWA) fait, en vanilla JS/HTML/CSS sans build step —
+choix validé par Cyril, cohérent avec l'absence de toute chaîne d'outils
+JS dans le reste du projet.
+
+**Fait** :
+- `static/` : `manifest.json`, `sw.js` (cache l'app shell uniquement,
+  jamais `/ws` ni un futur appel REST), `index.html`, `css/style.css`,
+  `js/{avatar,websocket,chat,audio,camera,app}.js`, icônes PNG générées
+  par script (PIL).
+- Monté à `/app` dans `api/server.py` (`StaticFiles`, en dernier pour ne
+  jamais capter les routes JSON existantes) — testé.
+- **Avatar** : palette et logique reprises EXACTEMENT de
+  `ui/avatar_widget.py` (PySide6), pas réinventées — mêmes dégradés par
+  état, même ambre pour WATCHING (choix de sécurité, témoin de capture),
+  même témoin clignotant en renfort. Les trois clients (PySide6, Godot,
+  PWA) doivent se ressembler pour la même Luca's.
+- **Micro** : bouton → `MediaRecorder` → base64 → message `"audio"`
+  existant (aucun second pipeline STT, voir la session précédente).
+- **Caméra** — ajoutée en cours de scaffold, à la demande de Cyril : bouton
+  → `getUserMedia({video})` → une frame capturée sur `<canvas>` → base64
+  → nouveau message WebSocket `"image"`. Réutilise le pipeline vision
+  EXISTANT plutôt qu'un système séparé :
+  - `core/lucas_core.py` : `_describe_screen()` découpé en capture +
+    `_describe_image_at()` (coeur OCR/VLM partagé). Nouvelle
+    `_describe_camera_image(image_path, user_message)` appelle ce même
+    coeur sans capturer l'écran. `ask()`/`_build_messages()` acceptent
+    un `image_path` optionnel qui FORCE la vision (le bouton caméra est
+    le signal, pas besoin de `should_use_vision()`), et reste sous la
+    même garde `not is_cloud` que l'écran.
+  - `api/server.py` : message `"image"` → décodage base64 vers fichier
+    temporaire (même logique que `STTEngine.transcribe_base64`) →
+    **réutilise l'état WATCHING** existant (validé par Cyril : même
+    témoin que la capture d'écran, "Luca's regarde quelque chose") →
+    `lucas.ask(message, image_path=...)` → fichier temporaire supprimé
+    dans tous les cas.
+  - **VLM reste désactivé** (`VLM_ENABLED = False`, décision v1.0
+    inchangée) — validé explicitement par Cyril. Conséquence connue :
+    une photo sans texte (objet, visage, paysage) ne produit aucun
+    contexte visuel pour l'instant, seul l'OCR fonctionne. Limitation
+    documentée, pas un bug.
+- **Tests** : 6 nouveaux dans `test_server.py` (message `"image"` :
+  cycle watching→speaking→idle, légende par défaut/fournie, fichier
+  temporaire présent pendant l'appel puis supprimé, image absente/base64
+  invalide gérées sans planter), 5 nouveaux dans `test_vision_routing.py`
+  (photo force la vision sans le classifieur, ne recapture pas l'écran,
+  le chemin donné atteint bien l'OCR et le VLM, jamais vers le cloud,
+  dégrade silencieusement si rien n'est exploitable), 3 pour le montage
+  statique. 605 tests, tous verts.
+- **Validation en conditions réelles** (pas seulement les tests) : API
+  relancée avec le code du jour, PWA ouverte dans un vrai navigateur
+  (Chrome via l'extension) — cycle de chat complet vérifié de bout en
+  bout jusqu'à Ollama (pas un mock), bulles stylées correctement, avatar
+  revenu à `idle`. Bouton micro testé réellement : `NotFoundError`
+  (aucun micro sur ce PC — cohérent avec toute la prémisse du projet),
+  message d'erreur affiché proprement, pas de plantage. Bouton caméra :
+  confirmé en attente du dialogue de permission natif du navigateur
+  (`navigator.permissions.query` → `"prompt"`) — chemin non poussé plus
+  loin (dialogue natif, pas interactif depuis l'automatisation), mais le
+  code de gestion d'erreur est identique à celui du micro, déjà validé.
+
+**Pas fait, pas changé** : `API_HOST` reste `127.0.0.1` (la PWA n'est
+donc testable que sur cette machine pour l'instant, pas depuis un vrai
+téléphone) ; aucun test avec un vrai micro/caméra téléphone puisqu'aucun
+n'est branché ; format audio du navigateur (`audio/webm;codecs=opus`) non
+vérifié contre le vrai backend Whisper — seul un WAV synthétique l'a été
+jusqu'ici (session précédente).
+
 ---
 
 ## 4. Principe directeur

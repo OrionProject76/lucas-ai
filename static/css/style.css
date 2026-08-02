@@ -1,0 +1,174 @@
+/* static/css/style.css — thème repris de Lucas3D (Godot) et ui/avatar_widget.py
+   (PySide6) : fond quasi noir, accents cyan/ambre. Les TROIS clients (PySide6,
+   Godot, PWA) doivent se ressembler — pas trois identités visuelles distinctes
+   pour la même Luca's. */
+
+:root {
+    --bg: #00050a;
+    --panel-bg: rgba(0, 20, 30, 0.55);
+    --border-cyan: rgba(0, 212, 255, 0.65);
+    --text: #e8fbff;
+    --text-dim: #6fa8b8;
+    --bubble-user: rgba(0, 40, 55, 0.9);
+    --bubble-lucas: rgba(0, 60, 75, 0.55);
+    --error: #ff5566;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh; /* évite que la barre d'adresse mobile ne coupe le bas */
+}
+
+/* ── Avatar ─────────────────────────────────────────────────────────── */
+
+#avatar-panel {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 0 8px;
+}
+
+#avatar-canvas {
+    width: 140px;
+    height: 140px;
+}
+
+#avatar-label {
+    margin-top: 4px;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+
+/* ── Chat ───────────────────────────────────────────────────────────── */
+
+#chat-log {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.bubble {
+    max-width: 82%;
+    padding: 10px 14px;
+    border-radius: 14px;
+    line-height: 1.35;
+    font-size: 0.95rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.bubble.user {
+    align-self: flex-end;
+    background: var(--bubble-user);
+    border: 1px solid var(--border-cyan);
+    border-bottom-right-radius: 3px;
+}
+
+.bubble.lucas {
+    align-self: flex-start;
+    background: var(--bubble-lucas);
+    border: 1px solid rgba(0, 212, 255, 0.25);
+    border-bottom-left-radius: 3px;
+}
+
+.bubble.error {
+    align-self: center;
+    background: rgba(255, 60, 80, 0.12);
+    border: 1px solid var(--error);
+    color: var(--error);
+    font-size: 0.85rem;
+}
+
+/* ── Barre de saisie ────────────────────────────────────────────────── */
+
+#input-bar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    background: var(--panel-bg);
+    border-top: 1px solid var(--border-cyan);
+}
+
+#text-input {
+    flex: 1 1 auto;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(0, 212, 255, 0.35);
+    border-radius: 20px;
+    padding: 10px 16px;
+    color: var(--text);
+    font-size: 1rem;
+    outline: none;
+}
+
+#text-input:focus {
+    border-color: var(--border-cyan);
+}
+
+button.icon-btn {
+    flex: 0 0 auto;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid var(--border-cyan);
+    background: rgba(0, 212, 255, 0.08);
+    color: var(--text);
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+button.icon-btn:active {
+    background: rgba(0, 212, 255, 0.25);
+}
+
+/* Micro en cours d'enregistrement : rouge franc, pas d'ambiguïté possible
+   avec l'ambre de WATCHING — deux signaux différents, deux couleurs. */
+#mic-btn.recording {
+    background: rgba(255, 60, 80, 0.25);
+    border-color: var(--error);
+    animation: mic-pulse 1s ease-in-out infinite;
+}
+
+@keyframes mic-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 60, 80, 0.5); }
+    50% { box-shadow: 0 0 0 8px rgba(255, 60, 80, 0); }
+}
+
+#connection-banner {
+    flex: 0 0 auto;
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--error);
+    background: rgba(255, 60, 80, 0.08);
+    padding: 4px;
+    display: none;
+}
+
+#connection-banner.visible {
+    display: block;
+}

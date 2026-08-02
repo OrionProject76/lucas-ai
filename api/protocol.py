@@ -112,3 +112,18 @@ def read_user_audio(data: dict) -> str:
         return ""
     value = data.get("audio_base64")
     return value.strip() if isinstance(value, str) and value.strip() else ""
+
+
+def read_user_image(data: dict) -> str:
+    """
+    Extrait l'image base64 d'un message entrant de type « image ».
+
+    Photo envoyée par le téléphone (pont mobile, Phase 4) pour alimenter
+    le pipeline vision existant (OCR, VLM si activé) — voir
+    VISION_LONG_TERME.md §2 Pilier 3. Un seul champ, « image_base64 »,
+    même logique que read_user_audio().
+    """
+    if not isinstance(data, dict):
+        return ""
+    value = data.get("image_base64")
+    return value.strip() if isinstance(value, str) and value.strip() else ""

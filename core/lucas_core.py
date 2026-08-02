@@ -28,7 +28,12 @@ class LucasCore:
     def __init__(self):
         self.memory = MemoryManager()
 
-    def _build_messages(self, user_message: str, destination: str = "local") -> list[dict]:
+    def _build_messages(
+        self,
+        user_message: str,
+        destination: str = "local",
+        image_path: str | None = None,
+    ) -> list[dict]:
         """
         Construit la liste de messages envoyée au LLM.
         Ordre : prompt système → contexte système (World Model) →
@@ -38,6 +43,11 @@ class LucasCore:
         `destination` ("local" ou "cloud") restreint ce qui est joint quand la
         requête sort de la machine : pas de contexte RAG, pas d'événements
         système, historique tronqué.
+
+        `image_path` : photo envoyée par le téléphone (pont mobile). Quand
+        elle est fournie, la vision est FORCÉE — pas besoin du classifieur
+        should_use_vision(), l'appui sur le bouton caméra est déjà un signal
+        sans ambiguïté. Voir _describe_camera_image().
         """
         is_cloud = destination == "cloud"
 
@@ -72,8 +82,11 @@ class LucasCore:
         # La vision est décidée AVANT de charger l'historique : quand elle
         # se déclenche, l'historique doit être raccourci (voir plus bas).
         vision_context = ""
-        if not is_cloud and VISION_ENABLED and should_use_vision(user_message, context):
-            vision_context = self._describe_screen(user_message)
+        if not is_cloud and VISION_ENABLED:
+            if image_path is not None:
+                vision_context = self._describe_camera_image(image_path, user_message)
+            elif should_use_vision(user_message, context):
+                vision_context = self._describe_screen(user_message)
 
         history = self.memory.load_history()
         if is_cloud:
@@ -234,16 +247,42 @@ class LucasCore:
             self.log_event("vision_failed", str(e)[:200])
             return ""
 
-        screen_text = self._read_screen_text(screenshot)
-        visual = self._describe_visual_context(vision, screenshot, user_message)
+        return self._describe_image_at(vision, screenshot, user_message)
+
+    def _describe_camera_image(self, image_path: str, user_message: str) -> str:
+        """
+        Photo envoyée par le téléphone (pont mobile, Phase 4, message
+        WebSocket "image" — voir api/server.py) : MÊME pipeline OCR/VLM que
+        _describe_screen(), sans l'étape de capture puisque l'image existe
+        déjà sur disque. Jamais un second chemin de vision parallèle — voir
+        VISION_LONG_TERME.md §2 Pilier 3, précision du 02/08/2026.
+        """
+        try:
+            from modules.vision_manager import VisionManager
+
+            vision = VisionManager(model=VLM_MODEL)
+        except Exception as e:  # noqa: BLE001 — voir _describe_screen
+            self.log_event("vision_failed", str(e)[:200])
+            return ""
+
+        return self._describe_image_at(vision, image_path, user_message)
+
+    def _describe_image_at(self, vision, image_path: str, user_message: str) -> str:
+        """
+        Coeur partagé : OCR + VLM sur une image déjà sur disque, qu'elle
+        vienne d'une capture d'écran ou d'une photo du téléphone.
+        """
+        screen_text = self._read_screen_text(image_path)
+        visual = self._describe_visual_context(vision, image_path, user_message)
 
         if not screen_text and not visual:
             self.log_event("vision_failed", "ni OCR ni VLM exploitables")
             return ""
 
         # ⚠️ On journalise l'usage, JAMAIS le contenu. Le texte OCR est du
-        # verbatim d'écran — mot de passe affiché, relevé ouvert. La table
-        # d'événements ne doit pas en devenir une copie.
+        # verbatim d'écran (ou de photo) — mot de passe affiché, relevé
+        # ouvert, document personnel photographié. La table d'événements
+        # ne doit pas en devenir une copie.
         self.log_event("vision_used", user_message[:80])
         return self._compose_vision_block(screen_text, visual)
 
@@ -340,10 +379,10 @@ class LucasCore:
         )
         return "\n".join(parts)
 
-    def ask(self, user_message: str) -> str:
+    def ask(self, user_message: str, image_path: str | None = None) -> str:
         self.memory.save_message("user", user_message)
         destination = route(user_message, self.recent_context())
-        messages = self._build_messages(user_message, destination)
+        messages = self._build_messages(user_message, destination, image_path=image_path)
 
         if destination == "cloud":
             answer = ask_cloud(messages)
