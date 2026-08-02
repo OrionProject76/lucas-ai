@@ -439,3 +439,55 @@ attaquant.
 par exemple une révocation à distance via les listes de contrôle d'accès
 Tailscale plutôt qu'une auto-destruction, ou une confirmation par un
 second canal avant tout verrouillage définitif.
+
+---
+
+# Addendum IDEAS.md — Session du 02/08/2026 — Idées d'interface et d'outillage supplémentaires
+
+À intégrer dans IDEAS.md, à la suite de l'entrée #70 (centre de commande
+mobile). Ces éléments sont nouveaux par rapport à ce qui était déjà
+catalogué le même jour — le reste du document source recoupait #70 et
+n'a pas été redupliqué.
+
+## 73. Interface "CLI/HUD Cognitif" — alternative minimaliste à l'avatar
+
+Concept d'interface radicalement différente de l'avatar + HUD déjà
+choisi pour la PWA (construit le 02/08/2026) : un flux de texte/logs
+minimaliste façon terminal, une simple onde d'écoute SVG, quasi aucune
+empreinte visuelle. Pas adopté — l'avatar reste le choix retenu — mais
+une vraie piste esthétique alternative à garder en tête si le style
+avatar déçoit à l'usage un jour.
+
+## 74. "Generative UI" à la demande — écran vide sauf besoin ponctuel
+
+Pattern d'interface où l'écran reste neutre/vide en permanence, et un
+élément visuel (tableau, graphique) apparaît seulement quand Luca's a
+besoin de montrer quelque chose de précis, puis disparaît. Différent de
+l'interface "toujours affichée" actuelle — à explorer pour des cas
+d'usage ponctuels (ex. afficher un calcul financier le temps de la
+réponse, pas en permanence).
+
+## 75. Tauri — alternative technique à surveiller, pas adoptée
+
+Framework pour applications natives-web plus léger qu'Electron. Piste
+technique de secours si le choix vanilla JS/PWA (acté le 02/08/2026 pour
+static/) montre ses limites plus tard — ne remet pas en cause le choix
+déjà fait, juste une carte en réserve.
+
+## 76. "Téléportation de fichiers sémantique" — photo → classement intelligent
+
+Cas d'usage concret : prendre une photo d'un document avec le S25 Ultra,
+dire "range ça avec mes factures de la maison", et Luca's l'analyse par
+vision, le renomme intelligemment et le classe dans le bon répertoire
+côté PC. S'appuie sur la vision déjà en place (OCR) et le futur chemin
+caméra mobile déjà en construction — bon exemple d'usage concret à
+viser une fois ces briques stables.
+
+---
+
+**Point de vigilance déjà signalé, reconfirmé ici** : l'écoute des
+notifications Android via l'API d'accessibilité (mentionnée dans le
+document source) est une permission très puissante et très surveillée
+par Google — mal utilisée, elle peut faire bannir une application du
+Play Store. À traiter comme un vrai sujet à part entière avec ses
+propres contraintes de plateforme, pas un détail d'implémentation.
