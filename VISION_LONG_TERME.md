@@ -94,6 +94,37 @@ construis exactement ça, mais en vrai."*
   (notes, contexte) alimente le même cerveau que celui consulté le soir
   sur PC
 
+> **Précision — un seul pont audio, quelle que soit l'interface qui
+> écoute (clarifié le 02/08/2026, avant le scaffold de la PWA).**
+>
+> « S25 Ultra = capteurs sensoriels » ci-dessus ne concerne pas que l'appli
+> mobile elle-même : **le téléphone est LA source unique de perception
+> audio/vidéo pour Luca's, point.** Que Cyril parle à l'avatar Godot sur
+> son PC ou à l'interface de l'appli sur son téléphone, c'est le **même
+> cerveau** (`LucasCore`) et la **même paire de capteurs** (le micro/la
+> caméra du S25 Ultra) qui traitent la demande — jamais un micro ou une
+> caméra séparée construite pour un client en particulier. Le PC reste
+> sourd et aveugle par construction (contrainte matérielle, `IDEAS.md`
+> #69) ; c'est le téléphone qui prête ses capteurs à l'ensemble du
+> système, pas seulement à sa propre fenêtre.
+>
+> **Mécanisme canonique, ne pas dupliquer** : le message WebSocket
+> `"audio"` → `STTEngine.transcribe_base64()` → `LucasCore.ask()`, construit
+> le 02/08/2026 dans `api/server.py` (voir ROADMAP.md §2), EST ce pont
+> partagé. Toute interface qui capte de l'audio (PWA mobile aujourd'hui,
+> potentiellement un mode mains-libres plus tard) passe par ce même
+> chemin — jamais un second pipeline STT parallèle, même partiel.
+>
+> ⚠️ **Limite actuelle, non résolue, à garder en tête** : aujourd'hui,
+> une connexion WebSocket ne répond qu'à son propre expéditeur — si le
+> téléphone envoie l'audio, la réponse (états d'avatar, texte) revient
+> sur la connexion du téléphone, pas sur celle de Godot ouverte en
+> parallèle sur le PC. Faire apparaître la réponse sur l'avatar PC
+> pendant que le micro du téléphone capte la voix demandera de diffuser
+> les messages de sortie à toutes les connexions actives, pas seulement
+> de renvoyer à l'expéditeur — pas encore construit, à traiter quand ce
+> scénario devient réel plutôt que par anticipation.
+
 ---
 
 ## 3. Décision moteur de rendu — actée le 30/07/2026
