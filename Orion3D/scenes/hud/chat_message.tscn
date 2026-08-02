@@ -1,6 +1,9 @@
-[gd_scene load_steps=1 format=3]
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scenes/hud/chat_message.gd" id="1_msg"]
 
 [node name="ChatMessage" type="HBoxContainer"]
+script = ExtResource("1_msg")
 offset_right = 300.0
 offset_bottom = 30.0
 

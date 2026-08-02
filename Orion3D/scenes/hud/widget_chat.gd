@@ -9,8 +9,13 @@ func _ready():
 
 func _add_message(text: String, from_orion: bool):
     var msg = message_scene.instantiate()
-    msg.set_message(text, from_orion)
+    # ⚠️ add_child AVANT set_message. Les @onready de
+    # chat_message.gd ne sont résolus qu'à l'entrée dans l'arbre :
+    # appelés sur un nœud seulement instancié, `icon` et
+    # `text_label` valent null, et chaque message reçu levait
+    # « Invalid assignment ... on a base object of type 'Nil' ».
     messages_container.add_child(msg)
+    msg.set_message(text, from_orion)
     await get_tree().process_frame
     $Scroll.scroll_vertical = $Scroll.get_v_scroll_bar().max_value
     while messages_container.get_child_count() > 50:

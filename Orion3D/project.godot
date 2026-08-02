@@ -33,7 +33,15 @@ AudioVisualizer="*res://scripts/audio_visualizer.gd"
 
 window/size/viewport_width=1920
 window/size/viewport_height=1080
-window/size/mode=4
+; ⚠️ 0 = fenêtré, et surtout PAS 4 (plein écran EXCLUSIF).
+; Le plein écran exclusif prend le contrôle direct de l'affichage : il
+; court-circuite le compositeur de Windows, donc la transparence par
+; pixel ne peut pas fonctionner et la fenêtre devient opaque. Tous les
+; autres réglages de transparence ci-dessous étaient corrects — c'est
+; cette seule ligne qui les annulait.
+; La couverture plein écran est obtenue autrement, par main.gd
+; _force_fullscreen() qui dimensionne et positionne la fenêtre à la main.
+window/size/mode=0
 window/size/borderless=true
 window/size/always_on_top=true
 window/size/transparent=true

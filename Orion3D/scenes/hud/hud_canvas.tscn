@@ -27,6 +27,8 @@ shader_parameter/line_width = 1.5
 shader_parameter/speed = 0.4
 shader_parameter/fade_distance = 0.4
 
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_transparent"]
+
 [node name="HUD" type="CanvasLayer"]
 layer = 10
 
@@ -49,6 +51,7 @@ grow_vertical = 2
 script = ExtResource("1_mgr")
 
 [node name="TopBar" type="Panel" parent="HUDManager"]
+theme_override_styles/panel = SubResource("StyleBoxEmpty_transparent")
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
@@ -112,6 +115,7 @@ text = "EN LIGNE"
 horizontal_alignment = 2
 
 [node name="LeftPanel" type="Panel" parent="HUDManager"]
+theme_override_styles/panel = SubResource("StyleBoxEmpty_transparent")
 layout_mode = 1
 anchors_preset = 9
 anchor_bottom = 1.0
@@ -144,6 +148,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="RightPanel" type="Panel" parent="HUDManager"]
+theme_override_styles/panel = SubResource("StyleBoxEmpty_transparent")
 layout_mode = 1
 anchors_preset = 11
 anchor_left = 1.0
@@ -179,6 +184,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="BottomBar" type="Panel" parent="HUDManager"]
+theme_override_styles/panel = SubResource("StyleBoxEmpty_transparent")
 layout_mode = 1
 anchors_preset = 12
 anchor_top = 1.0

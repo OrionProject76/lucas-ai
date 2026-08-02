@@ -22,74 +22,80 @@ var connected: bool = false
 var reconnect_timer: float = 0.0
 
 func _ready():
-    _connect_to_server()
-    Global.main_ready.connect(_on_main_ready)
+	_connect_to_server()
+	Global.main_ready.connect(_on_main_ready)
 
 func _on_main_ready():
-    print("WebSocket pret sur ", websocket_url)
+	print("WebSocket pret sur ", websocket_url)
 
 func _process(delta: float):
-    if socket:
-        socket.poll()
-        var state = socket.get_ready_state()
-        match state:
-            WebSocketPeer.STATE_OPEN:
-                if not connected:
-                    connected = true
-                    print("Connecte a Orion Backend")
-                    _send_heartbeat()
-                while socket.get_available_packets() > 0:
-                    _handle_message(socket.get_packet().get_string_from_utf8())
-            WebSocketPeer.STATE_CLOSED:
-                if connected:
-                    connected = false
-                    print("Deconnecte")
-                _reconnect_timer(delta)
-            WebSocketPeer.STATE_CONNECTING:
-                pass
+	if socket:
+		socket.poll()
+		var state = socket.get_ready_state()
+		match state:
+			WebSocketPeer.STATE_OPEN:
+				if not connected:
+					connected = true
+					print("Connecte a Orion Backend")
+					_send_heartbeat()
+				# ⚠️ get_available_packets() N'EXISTE PAS. La méthode est
+				# get_available_packet_count(). L'erreur ne se voyait pas à
+				# la compilation — GDScript ne vérifie pas les appels
+				# dynamiques — mais elle se déclenchait à CHAQUE FRAME dès
+				# que la connexion s'ouvrait, remplissant le débogueur.
+				# C'est ce texte qui apparaissait en surimpression.
+				while socket.get_available_packet_count() > 0:
+					_handle_message(socket.get_packet().get_string_from_utf8())
+			WebSocketPeer.STATE_CLOSED:
+				if connected:
+					connected = false
+					print("Deconnecte")
+				_reconnect_timer(delta)
+			WebSocketPeer.STATE_CONNECTING:
+				pass
 
 func _connect_to_server():
-    socket = WebSocketPeer.new()
-    var err = socket.connect_to_url(websocket_url)
-    if err != OK:
-        print("Erreur connexion : ", err)
-    else:
-        print("Connexion en cours...")
+	socket = WebSocketPeer.new()
+	var err = socket.connect_to_url(websocket_url)
+	if err != OK:
+		print("Erreur connexion : ", err)
+	else:
+		print("Connexion en cours...")
 
 func _reconnect_timer(delta: float):
-    reconnect_timer += delta
-    if reconnect_timer >= reconnect_interval:
-        reconnect_timer = 0.0
-        print("Reconnexion...")
-        _connect_to_server()
+	reconnect_timer += delta
+	if reconnect_timer >= reconnect_interval:
+		reconnect_timer = 0.0
+		print("Reconnexion...")
+		_connect_to_server()
 
 func _handle_message(msg: String):
-    var json = JSON.new()
-    var err = json.parse(msg)
-    if err != OK:
-        return
-    var data = json.get_data()
-    if data is Dictionary:
-        match data.get("type", ""):
-            "avatar_state":
-                _apply_state(data.get("state", "idle"), data.get("text", ""))
-            "chat":
-                Global.chat_message_received.emit(data.get("text", ""), data.get("from_orion", true))
-            "system":
-                Global.system_data_updated.emit(data.get("cpu", 0.0), data.get("ram", 0.0), data.get("gpu", 0.0))
-            "error":
-                Global.chat_message_received.emit("[Erreur] " + str(data.get("detail", "")), true)
-            # « speak » et « idle » étaient le vocabulaire du bridge
-            # supprimé. Conservés le temps que d'éventuels clients tiers
-            # migrent ; l'API n'émet plus que « avatar_state ».
-            "speak":
-                _apply_state("speaking", "")
-            "idle":
-                _apply_state("idle", "")
-            "show":
-                WindowManager.toggle_visibility()
-            "hide":
-                WindowManager.toggle_visibility()
+	var json = JSON.new()
+	var err = json.parse(msg)
+	if err != OK:
+		return
+	var data = json.get_data()
+	if data is Dictionary:
+		match data.get("type", ""):
+			"avatar_state":
+				_apply_state(data.get("state", "idle"), data.get("text", ""))
+			"chat":
+				Global.chat_message_received.emit(data.get("text", ""), data.get("from_orion", true))
+			"system":
+				Global.system_data_updated.emit(data.get("cpu", 0.0), data.get("ram", 0.0), data.get("gpu", 0.0))
+			"error":
+				Global.chat_message_received.emit("[Erreur] " + str(data.get("detail", "")), true)
+			# « speak » et « idle » étaient le vocabulaire du bridge
+			# supprimé. Conservés le temps que d'éventuels clients tiers
+			# migrent ; l'API n'émet plus que « avatar_state ».
+			"speak":
+				_apply_state("speaking", "")
+			"idle":
+				_apply_state("idle", "")
+			"show":
+				WindowManager.toggle_visibility()
+			"hide":
+				WindowManager.toggle_visibility()
 
 # Traduit un état de présence en signaux du bus Global.
 #
@@ -100,24 +106,24 @@ func _handle_message(msg: String):
 # face_controller puisse s'en saisir, sans forcer la bouche à bouger
 # comme si Luca's parlait.
 func _apply_state(state: String, text: String):
-    Global.orion_state = state
-    Global.orion_state_changed.emit(state)
+	Global.orion_state = state
+	Global.orion_state_changed.emit(state)
 
-    match state:
-        "speaking":
-            Global.orion_speaking.emit(0.8)
-            if text != "":
-                Global.chat_message_received.emit(text, true)
-        "idle":
-            Global.orion_idle.emit()
-        _:
-            # thinking / watching / listening : le visage cesse de parler
-            # sans repasser en repos complet.
-            Global.orion_idle.emit()
+	match state:
+		"speaking":
+			Global.orion_speaking.emit(0.8)
+			if text != "":
+				Global.chat_message_received.emit(text, true)
+		"idle":
+			Global.orion_idle.emit()
+		_:
+			# thinking / watching / listening : le visage cesse de parler
+			# sans repasser en repos complet.
+			Global.orion_idle.emit()
 
 func send_message(data: Dictionary):
-    if connected and socket:
-        socket.send_text(JSON.stringify(data))
+	if connected and socket:
+		socket.send_text(JSON.stringify(data))
 
 func _send_heartbeat():
-    send_message({"type": "hello", "client": "orion3d_godot", "version": "1.0"})
+	send_message({"type": "hello", "client": "orion3d_godot", "version": "1.0"})
