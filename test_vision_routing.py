@@ -304,13 +304,29 @@ def test_vlm_failure_leaves_the_ocr_alone(core, monkeypatch) -> None:
     assert "spécule pas" in block
 
 
-def test_both_failing_produces_no_block(core, monkeypatch) -> None:
+def test_both_failing_produces_an_explicit_failure_block(core, monkeypatch) -> None:
+    """
+    Ce test affirmait l'inverse : « les deux qui échouent ne produisent
+    aucun bloc ». C'était le bug — un silence total ici laissait le
+    modèle deviner, et deviner une image illisible veut dire inventer un
+    numéro, un montant, un nom de commerce. Trouvé en usage réel (Cyril,
+    02/08/2026) : une photo sans texte exploitable a produit un relevé
+    bancaire entièrement fabriqué. Même mécanisme que le RAG sans
+    résultat — voir _describe_image_at() dans core/lucas_core.py.
+    """
     _fake_vision(monkeypatch, "Erreur analyse")
     _fake_ocr(monkeypatch, "", raises=RuntimeError("absent"))
 
     messages = core._build_messages("regarde mon écran", "local")
+    block = next(
+        m["content"] for m in messages
+        if "AUCUN TEXTE NI CONTEXTE VISUEL" in m["content"]
+    )
 
-    assert not any(VISION_MARKER in m["content"] for m in messages)
+    # Pas VISION_MARKER : Cyril n'a PAS vraiment "vu son écran" ici, lui
+    # dire le contraire serait aussi trompeur que l'absence de bloc.
+    assert VISION_MARKER not in block
+    assert "INTERDIT" in block
     assert "vision_failed" in [t for t, _ in core.memory.events]
 
 
@@ -391,18 +407,20 @@ def test_the_screen_is_captured_only_once(core, monkeypatch) -> None:
 def test_vlm_failure_does_not_block_the_answer(core, monkeypatch) -> None:
     """
     Une vision indisponible doit dégrader la réponse, pas empêcher
-    Luca's de répondre.
+    Luca's de répondre — mais « dégrader » veut dire un aveu explicite
+    d'échec, pas un silence qui laisse deviner (voir
+    test_both_failing_produces_an_explicit_failure_block).
 
-    Depuis l'arrivée de l'OCR, un VLM en panne ne supprime plus le bloc :
-    le texte lu à l'écran suffit. Il faut donc couper les DEUX sources
-    pour retrouver l'absence de bloc — c'est ce que vérifie
-    test_both_failing_produces_no_block.
+    Depuis l'arrivée de l'OCR, un VLM en panne ne suffit plus à
+    déclencher ce bloc d'échec : le texte lu à l'écran suffit. Il faut
+    donc couper les DEUX sources pour l'obtenir.
     """
     _fake_vision(monkeypatch, "Erreur analyse (modèle llava peut-être non installé)")
     _fake_ocr(monkeypatch, "", raises=RuntimeError("moteur absent"))
 
     messages = core._build_messages("regarde mon écran", "local")
 
+    assert any("AUCUN TEXTE NI CONTEXTE VISUEL" in m["content"] for m in messages)
     assert not any(VISION_MARKER in m["content"] for m in messages)
     assert messages, "le prompt doit rester exploitable"
     assert "vision_failed" in [t for t, _ in core.memory.events]
@@ -752,16 +770,32 @@ def test_camera_image_is_never_sent_to_the_cloud(core, monkeypatch) -> None:
     assert not any(VISION_MARKER in m["content"] for m in messages)
 
 
-def test_camera_image_without_ocr_or_vlm_result_produces_no_block(core, monkeypatch) -> None:
-    """Dégrade silencieusement — comme l'écran quand ni l'OCR ni le VLM n'aboutissent."""
+def test_camera_image_without_ocr_or_vlm_result_produces_a_failure_block(core, monkeypatch) -> None:
+    """
+    Ce test disait « dégrade silencieusement », comme si le silence
+    total était le comportement correct. C'était exactement le bug
+    trouvé par Cyril en usage réel (02/08/2026) : une photo prise avec
+    le bouton caméra, sans texte ni contexte visuel exploitable, a
+    produit un relevé bancaire entièrement inventé ("123456789, VISA,
+    10/08/2023, Débit, 250.00, Magasin XYZ") — la question posée était
+    juste "Décris ce que tu vois." (texte par défaut du bouton caméra
+    sans légende), rien n'indiquait au modèle que la photo n'avait rien
+    donné, donc il a deviné. Voir _describe_image_at() dans
+    core/lucas_core.py.
+    """
     _fake_vision(monkeypatch, "Erreur analyse")
     _fake_ocr(monkeypatch, "", raises=RuntimeError("absent"))
 
     messages = core._build_messages(
-        "que vois-tu ?", "local", image_path="data/photo.jpg"
+        "Décris ce que tu vois.", "local", image_path="data/photo.jpg"
+    )
+    block = next(
+        m["content"] for m in messages
+        if "AUCUN TEXTE NI CONTEXTE VISUEL" in m["content"]
     )
 
-    assert not any(VISION_MARKER in m["content"] for m in messages)
+    assert VISION_MARKER not in block
+    assert "INTERDIT" in block
     assert "vision_failed" in [t for t, _ in core.memory.events]
 
 

@@ -68,6 +68,7 @@ def test_window_title_is_omitted_when_asked() -> None:
         "cpu_percent": 12.0,
         "ram_percent": 44.0,
         "active_window": "releve_bancaire_2026.pdf - Acrobat",
+        "local_time": "samedi 02/08/2026 21:00",
     }
 
     with_window = format_for_prompt(snapshot)
@@ -128,6 +129,7 @@ def test_cloud_prompt_omits_window_title(monkeypatch) -> None:
         "cpu_percent": 10.0,
         "ram_percent": 30.0,
         "active_window": "budget_2026.xlsx - Excel",
+        "local_time": "samedi 02/08/2026 21:00",
     })
 
     core = LucasCore.__new__(LucasCore)

@@ -189,7 +189,7 @@ def test_system_returns_the_world_model_snapshot(client) -> None:
     response = client.get("/system")
     assert response.status_code == 200
     assert set(response.json()) == {
-        "cpu_percent", "ram_percent", "gpu_percent", "active_window",
+        "cpu_percent", "ram_percent", "gpu_percent", "active_window", "local_time",
     }
 
 

@@ -8,7 +8,17 @@
 # l'API et LucasCore (donc l'UI PySide6 aussi) utilisent exactement la
 # même logique, sans divergence possible entre les deux.
 
+from datetime import datetime
+
 import psutil
+
+# Jour de semaine construit à la main, pas via strftime("%A") : ce dernier
+# dépend de la locale du système, qui peut rendre "Saturday" au lieu de
+# "samedi" selon la machine — un détail invisible en dev, qui aurait fait
+# halluciner le jour en plus de l'heure sur une machine mal localisée.
+_WEEKDAYS_FR = (
+    "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche",
+)
 
 
 def get_snapshot() -> dict:
@@ -18,12 +28,28 @@ def get_snapshot() -> dict:
     "snapshots" — seuls les événements significatifs sont persistés,
     voir memory/memory_manager.py::save_event).
     """
+    now = datetime.now()
     return {
         "cpu_percent": psutil.cpu_percent(interval=0.3),
         "ram_percent": psutil.virtual_memory().percent,
         "gpu_percent": _get_gpu_load(),
         "active_window": _get_active_window_title(),
+        # ⚠️ Trouvé en usage réel (Cyril, 02/08/2026) : Luca's n'avait
+        # accès à l'heure réelle NULLE PART dans son contexte. Face à une
+        # question sur l'heure, elle inventait une valeur plausible ("il
+        # est environ 14h30") ou, une fois, recopiait un gabarit de
+        # placeholder issu de son propre entraînement au lieu d'un vrai
+        # chiffre ("il est [heure actuelle]"). Les deux sont le même
+        # symptôme que le RAG ou la vision sans résultat : rien ne
+        # l'empêchait de deviner. L'horloge réelle règle la question à la
+        # racine — plus besoin de deviner ce qu'on peut lire.
+        "local_time": f"{_WEEKDAYS_FR[now.weekday()]} {now.strftime('%d/%m/%Y %H:%M')}",
     }
+
+
+_WEEKDAYS_FR = (
+    "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche",
+)
 
 
 def _get_gpu_load() -> float:
@@ -104,12 +130,13 @@ def format_for_prompt(snapshot: dict, include_window: bool = True) -> str:
     `include_window=False` retire le titre de la fenêtre active. À utiliser
     pour toute requête cloud : un titre comme « budget_2026.xlsx - Excel »
     ou « releve_bancaire.pdf » est une donnée personnelle en soi, même
-    quand la question posée est anodine. CPU et RAM ne disent rien de
-    Cyril et restent joints. Voir CLAUDE.md règle 3.
+    quand la question posée est anodine. CPU, RAM et l'heure ne disent
+    rien de Cyril et restent joints, cloud compris. Voir CLAUDE.md règle 3.
     """
     parts = [
         f"CPU {snapshot['cpu_percent']}%",
         f"RAM {snapshot['ram_percent']}%",
+        f"date et heure actuelles : {snapshot['local_time']}",
     ]
     if include_window:
         parts.append(f"fenêtre active « {snapshot['active_window']} »")

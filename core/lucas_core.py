@@ -451,7 +451,27 @@ class LucasCore:
 
         if not screen_text and not visual:
             self.log_event("vision_failed", "ni OCR ni VLM exploitables")
-            return ""
+            # ⚠️ NE PAS SE TAIRE — même bug que le RAG sans résultat
+            # (voir rag_context plus bas dans _build_messages). Un
+            # silence ici laisse le modèle deviner, et deviner une
+            # photo/capture illisible veut dire inventer un numéro, un
+            # montant, un nom de commerce. Trouvé en usage réel (Cyril,
+            # 02/08/2026) : une photo du téléphone sans texte exploitable
+            # a produit un relevé bancaire entièrement fabriqué
+            # ("123456789, VISA, 10/08/2023, Débit, 250.00, Magasin XYZ")
+            # — aucune de ces valeurs n'existait sur la photo, l'OCR
+            # n'avait rien trouvé du tout.
+            return (
+                "TENTATIVE DE LECTURE (écran ou photo du téléphone) : "
+                "AUCUN TEXTE NI CONTEXTE VISUEL EXPLOITABLE N'A ÉTÉ TROUVÉ.\n\n"
+                "Ta réponse doit dire clairement que tu n'as rien pu lire "
+                "d'exploitable sur cette image, et proposer de reprendre "
+                "la photo ou la capture si besoin.\n"
+                "INTERDIT : citer un numéro, un montant, un nom de "
+                "commerce, une date ou tout autre détail — une image "
+                "illisible ne permet de connaître AUCUN de ces faits, et "
+                "les inventer serait indiscernable d'une vraie lecture."
+            )
 
         # ⚠️ On journalise l'usage, JAMAIS le contenu. Le texte OCR est du
         # verbatim d'écran (ou de photo) — mot de passe affiché, relevé
