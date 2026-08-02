@@ -491,3 +491,37 @@ document source) est une permission très puissante et très surveillée
 par Google — mal utilisée, elle peut faire bannir une application du
 Play Store. À traiter comme un vrai sujet à part entière avec ses
 propres contraintes de plateforme, pas un détail d'implémentation.
+
+## 77. Console de flux — journal d'activité en direct
+
+Ajout proposé à la PWA existante : une zone de texte qui affiche en
+temps réel ce que Luca's fait en arrière-plan, dans un style journal
+système (ex. "Analyse du bulletin de salaire en cours...", "Tunnel
+sécurisé", "Connexion réseau externe isolée"). Vient compléter
+l'avatar et le chat déjà en place, pas les remplacer. Renforce la
+transparence déjà actée comme principe (témoin WATCHING) — Cyril voit
+concrètement ce qui se passe, pas seulement un état abstrait.
+
+Techniquement : s'appuierait sur les mêmes messages WebSocket déjà
+existants (`avatar_state`, `system`), affichés sous une nouvelle forme
+visuelle — pas un nouveau protocole serveur.
+
+## 78. Panneau des privilèges — indicateur d'état sécurité visible
+
+Ajout proposé : un élément d'interface visible en permanence (pas
+juste au moment d'une action) indiquant l'état de sécurité courant —
+coffre-fort verrouillé ou non, écoute passive active ou non. Cohérent
+avec le principe de transparence déjà acté. À concevoir une fois que
+la sécurité niveau 2 (décision en attente de Cyril) sera tranchée, pour
+avoir de vrais états à afficher plutôt qu'un indicateur vide de sens.
+
+---
+
+**Explicitement écarté pour l'instant, redondant avec des entrées déjà
+cataloguées** : le changement de stack technique complet (Svelte,
+Capacitor, Tauri Mobile) proposé dans le même document source — la PWA
+vanilla JS actuelle fonctionne et a été testée avec succès sur le S25
+Ultra le 02/08/2026 (avatar, chat, structure micro/caméra). Tauri reste
+une carte de secours déjà notée (#75), pas une décision à prendre
+maintenant — la refaire sans raison démontrée serait un vrai gaspillage
+de travail déjà validé.
