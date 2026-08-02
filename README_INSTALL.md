@@ -117,11 +117,12 @@ uvicorn api.server:app --reload --host 127.0.0.1 --port 8000
 
 L'API expose `GET /status`, `GET /system`, `POST /chat` et `WS /ws`.
 
-> ⚠️ Elle écoute sur `127.0.0.1` : joignable depuis ce PC uniquement.
-> Elle n'a aucune authentification et `GET /history` renvoie toutes les
-> conversations — l'ouvrir au réseau (`0.0.0.0`) la rendrait lisible par
-> n'importe quel appareil du WiFi. Le passage au réseau viendra en Phase 4
-> avec le mobile, et exigera un jeton partagé au préalable.
+> ⚠️ Elle écoute sur `127.0.0.1` : joignable depuis ce PC uniquement. Le
+> mécanisme de jeton existe (`API_TOKEN` dans `.env`, voir `.env.example`)
+> mais reste vide par défaut, donc sans effet — `GET /history` renvoie
+> toutes les conversations sans rien demander. Le passage au réseau
+> (`0.0.0.0`) pour le mobile exige de renseigner `API_TOKEN` **d'abord**,
+> jamais après : voir `ROADMAP.md` §2.
 
 ### Vérifier que tout fonctionne
 

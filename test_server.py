@@ -294,6 +294,88 @@ def test_websocket_silence_returns_to_idle_without_asking_lucas(client, fake_cor
     assert "asked" not in fake_core or fake_core["asked"] != ""
 
 
+# ── Jeton API (prérequis pont mobile) ──────────────────────────────────
+#
+# API_TOKEN est vide par défaut (config.py) : ces tests forcent une
+# valeur pour vérifier le mécanisme, mais le comportement PAR DÉFAUT —
+# testé partout ailleurs dans ce fichier, sans jeton — ne doit jamais
+# changer tant que Cyril n'a rien renseigné dans .env.
+
+def test_status_never_requires_a_token(client, monkeypatch) -> None:
+    """Ping de santé — rien de sensible, ouvert même quand un jeton existe."""
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    assert client.get("/status").status_code == 200
+
+
+def test_chat_without_token_is_rejected_once_one_is_set(client, fake_core, monkeypatch) -> None:
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    response = client.post("/chat", json={"message": "test"})
+    assert response.status_code == 401
+
+
+def test_chat_with_the_wrong_token_is_rejected(client, fake_core, monkeypatch) -> None:
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    response = client.post(
+        "/chat",
+        json={"message": "test"},
+        headers={"Authorization": "Bearer mauvais-jeton"},
+    )
+    assert response.status_code == 401
+
+
+def test_chat_with_the_right_token_succeeds(client, fake_core, monkeypatch) -> None:
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    response = client.post(
+        "/chat",
+        json={"message": "test"},
+        headers={"Authorization": "Bearer secret123"},
+    )
+    assert response.status_code == 200
+
+
+def test_history_and_system_also_require_the_token(client, fake_core, monkeypatch) -> None:
+    """
+    Pas seulement /chat : /history (tout l'historique) et /system (titre
+    de fenêtre active, aussi révélateur qu'un nom de fichier ouvert)
+    exposent chacun quelque chose de sensible.
+    """
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    assert client.get("/history").status_code == 401
+    assert client.get("/system").status_code == 401
+
+
+def test_no_token_configured_means_no_token_required(client, fake_core) -> None:
+    """
+    Le comportement par défaut, sans API_TOKEN dans .env : identique à
+    avant que ce mécanisme existe. Aucune régression pour Cyril tant
+    qu'il n'a rien renseigné.
+    """
+    assert client.post("/chat", json={"message": "test"}).status_code == 200
+    assert client.get("/history").status_code == 200
+    assert client.get("/system").status_code == 200
+
+
+def test_websocket_without_token_is_closed_once_one_is_set(client, monkeypatch) -> None:
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    with pytest.raises(Exception):
+        with client.websocket_connect("/ws") as ws:
+            ws.receive_json()
+
+
+def test_websocket_with_the_right_token_in_the_query_string_succeeds(client, monkeypatch) -> None:
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    with client.websocket_connect("/ws?token=secret123") as ws:
+        first = _next_of_type(ws, "avatar_state")
+    assert first["state"] == "idle"
+
+
+def test_websocket_without_token_configured_still_works(client) -> None:
+    """Comportement par défaut, jeton non configuré : inchangé."""
+    with client.websocket_connect("/ws") as ws:
+        first = _next_of_type(ws, "avatar_state")
+    assert first["state"] == "idle"
+
+
 # ── Cohérence avec le reste du projet ─────────────────────────────────
 
 def test_world_model_is_not_reimplemented() -> None:

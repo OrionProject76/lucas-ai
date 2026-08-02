@@ -7,6 +7,7 @@
 # voir VISION_LONG_TERME.md §2, Pilier 3 — le corps étendu PC + mobile).
 
 import asyncio
+import secrets
 import sys
 from pathlib import Path
 
@@ -14,11 +15,12 @@ from pathlib import Path
 # ou en important le module depuis un autre script, sans casser les imports relatifs.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from api import protocol
+from config import API_TOKEN
 from core.lucas_core import LucasCore
 from core.router import should_use_vision
 from core.world_model import get_snapshot
@@ -50,6 +52,43 @@ class ChatRequest(BaseModel):
     message: str
 
 
+# ── Jeton partagé (prérequis pour le pont mobile, ROADMAP.md §2) ───────
+#
+# Posé le 02/08/2026, SANS EFFET aujourd'hui : API_TOKEN est vide par
+# défaut (config.py), et un jeton vide désactive la vérification —
+# exactement le comportement d'avant. Il ne devient contraignant que le
+# jour où Cyril renseigne une valeur dans .env, ce qui doit précéder tout
+# passage de API_HOST à "0.0.0.0", jamais le suivre.
+
+
+def _token_is_valid(fourni: str | None) -> bool:
+    """
+    Compare en temps constant (secrets.compare_digest) : une comparaison
+    `==` classique sur une chaîne fuit sa longueur/son préfixe par le
+    temps de réponse, un détail qui compte pour un jeton, pas pour le
+    reste de cette API.
+    """
+    if not API_TOKEN:
+        return True
+    return fourni is not None and secrets.compare_digest(fourni, API_TOKEN)
+
+
+def verify_token(authorization: str | None = Header(default=None)) -> None:
+    """
+    Dépendance REST : `Authorization: Bearer <jeton>`.
+
+    Lève 401 plutôt que 403 : le client ne sait pas s'il a le droit, il
+    n'a simplement pas prouvé une identité — c'est la distinction que
+    HTTP fait entre les deux codes.
+    """
+    fourni = None
+    if authorization and authorization.startswith("Bearer "):
+        fourni = authorization.removeprefix("Bearer ").strip()
+
+    if not _token_is_valid(fourni):
+        raise HTTPException(status_code=401, detail="Jeton API manquant ou invalide")
+
+
 # ── Endpoints REST ──────────────────────────────────────────────
 
 @app.get("/status")
@@ -58,7 +97,7 @@ def status():
     return {"status": "running", "version": "0.2"}
 
 
-@app.post("/chat")
+@app.post("/chat", dependencies=[Depends(verify_token)])
 def chat(req: ChatRequest):
     """
     Envoie un message à Luca's et retourne sa réponse.
@@ -83,7 +122,7 @@ def chat(req: ChatRequest):
     return {"response": answer, "status": "ok"}
 
 
-@app.get("/history")
+@app.get("/history", dependencies=[Depends(verify_token)])
 def history():
     """Retourne l'historique complet de conversation (mémoire SQLite réelle)."""
     lucas = LucasCore()
@@ -100,7 +139,7 @@ def history():
     }
 
 
-@app.get("/system")
+@app.get("/system", dependencies=[Depends(verify_token)])
 def system_snapshot():
     """
     World Model v1 — snapshot de l'état système en RAM, pas de persistance.
@@ -157,6 +196,16 @@ async def _push_system_state(websocket: WebSocket) -> None:
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    # Vérifié AVANT accept() : un jeton absent/invalide ferme la connexion
+    # au niveau protocole (code 1008, violation de politique), sans jamais
+    # l'ouvrir. Par requête (pas par en-tête, comme le REST ci-dessus) —
+    # un websocket de navigateur ne peut pas poser d'en-tête personnalisé,
+    # alors qu'une query string reste lisible par les trois clients visés
+    # (PWA, Godot, tests).
+    if not _token_is_valid(websocket.query_params.get("token")):
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
     await websocket.send_json(protocol.avatar_state(protocol.STATE_IDLE))
 

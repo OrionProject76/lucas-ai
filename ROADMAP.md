@@ -277,11 +277,27 @@ vérifiée sans téléphone.
    engage la suite (cas 3 de l'Autonomie d'exécution), pas un détail
    d'implémentation à trancher en passant.
 
-**Proposition pour la suite, à valider avant d'être exécutée** : construire
-le jeton d'authentification (point 2) en gardant `127.0.0.1` par défaut —
-c'est un prérequis sans risque réseau tant que le bind n'a pas changé — puis
-revenir vers Cyril pour les points 1 et 3, qui engagent des choix produit
-réels.
+**Proposition pour la suite, validée par Cyril → faite dans la foulée** :
+le jeton d'authentification (point 2) est construit, `API_HOST` reste
+`127.0.0.1` par défaut — c'est un prérequis sans risque réseau tant que le
+bind n'a pas changé.
+
+**Fait** : `config.API_TOKEN` (vide par défaut, `.env` — `API_TOKEN=`).
+Un jeton vide désactive toute vérification, comportement identique à avant
+ce mécanisme — vérifié par des tests dédiés ET en conditions réelles
+(API relancée, `POST /chat` sans aucun jeton, toujours `200`). `/chat`,
+`/history`, `/system` exigent `Authorization: Bearer <jeton>` dès qu'une
+valeur est renseignée ; `/status` reste toujours ouvert (rien de sensible).
+Le WebSocket `/ws` vérifie un paramètre de requête (`?token=...`, pas un
+en-tête — un client WebSocket de navigateur ne peut pas en poser) **avant**
+`accept()`, et ferme au niveau protocole (code 1008) si absent/invalide,
+sans jamais ouvrir la connexion. Comparaison en temps constant
+(`secrets.compare_digest`) pour ne pas fuir la longueur/le préfixe du
+jeton par le temps de réponse.
+
+**Reste pour Cyril seul** : renseigner une vraie valeur dans `.env` et
+passer `API_HOST` à `0.0.0.0` — deux actions liées, jamais l'une sans
+l'autre — puis les points 1 (PWA) et 3 (tunnel) ci-dessus.
 
 ---
 

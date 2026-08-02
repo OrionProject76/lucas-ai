@@ -157,15 +157,22 @@ STT_MODEL_SIZE = "base"
 STT_CACHE_SIZE: int = 20
 
 # --- API ---
-# ⚠️ 127.0.0.1 : l'API n'est joignable que depuis ce PC. Elle n'a aucune
-# authentification, et GET /history renvoie l'intégralité des
-# conversations — l'exposer au réseau local la rendrait lisible par tout
-# appareil du WiFi.
-# À REVOIR EN PHASE 4 (mobile/PWA) : passer à 0.0.0.0 exigera d'abord un
-# jeton partagé, sinon le téléphone ouvre la porte à tout le réseau.
+# ⚠️ 127.0.0.1 : l'API n'est joignable que depuis ce PC.
+# À REVOIR EN PHASE 4 (mobile/PWA) : passer à 0.0.0.0 exigera d'avoir déjà
+# un API_TOKEN non vide, sinon le téléphone ouvre la porte à tout le réseau.
 # Décision actée le 01/08/2026, voir ROADMAP.md §5.1.
 API_HOST = "127.0.0.1"
 API_PORT = 8000
+
+# Jeton partagé pour l'API — brique posée le 02/08/2026, PAS ENCORE
+# appliquée à API_HOST (qui reste 127.0.0.1 par défaut, décision distincte
+# et non tranchée seule, voir ROADMAP.md §2 « Session du 02/08/2026 »).
+#
+# Vide par défaut : api/server.py n'exige alors AUCUN jeton, exactement le
+# comportement d'aujourd'hui — poser cette brique ne change rien tant que
+# personne ne renseigne une valeur. Le jour où API_HOST passe à 0.0.0.0,
+# renseigner une valeur ici devient un PRÉALABLE, pas une suite.
+API_TOKEN: str = os.getenv("API_TOKEN", "")
 
 # --- Sécurité : mémoire des comportements ---
 # Période d'apprentissage : les capteurs observent sans alerter pendant
