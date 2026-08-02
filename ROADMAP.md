@@ -584,6 +584,24 @@ Signalé par Cyril en usage réel : la liste des capacités venait d'être écri
 
 Constantes et tableaux de mesure complets : `config.py` (`HISTORY_BUDGET_CHARS`). Implémentation : `fit_history_to_budget()` dans `core/lucas_core.py`. Tests : `test_history_budget.py`.
 
+#### Ce que le correctif ne pouvait pas régler : la limite du modèle (tranché le 02/08/2026)
+
+Le correctif appliqué, Cyril a retesté depuis son téléphone : réponse encore générique. Le correctif n'était pas en cause — il était **nécessaire mais pas suffisant**. Sur les questions ouvertes et introspectives (« que voudrais-tu améliorer ? »), `qwen2.5:7b` produit du discours d'assistant IA quel que soit l'historique, y compris sur une conversation vierge.
+
+Mesuré sur la base réelle, question identique, critère de Cyril (réponse **ancrée dans les vraies capacités ET non générique**) :
+
+| Modèle | Taille | Réponse ancrée | Question courte |
+|---|---|---|---|
+| `qwen2.5:7b` (retenu) | 4,7 Go | 1/5 | 2,7 s |
+| `gemma4` | 9,6 Go | 4/5 | 5,3 s |
+| `qwen3.6` | 23 Go | 4/5 | 16,1 s |
+
+**Décision de Cyril : rester sur `qwen2.5:7b`.** La réactivité prime sur la qualité des réponses introspectives, qui ne sont pas le cœur de l'usage. À rouvrir si le sujet redevient gênant — les chiffres ci-dessus évitent d'avoir à re-mesurer. ⚠️ `qwen3.6` dépasse les 16 Go de VRAM de la RTX 5080 : les 16 s reflètent un débordement CPU, et il évincerait vision et embeddings de la carte.
+
+⚠️ **Leçon de méthode, à retenir plus que le résultat.** Deux exécutions d'une condition identique ont donné 4/9 puis 7/9 : à cette finesse, la variance du modèle dépasse l'effet cherché, et 9 tirages ne tranchent plus rien. Les écarts francs (9/9 contre 1/9 sur la dilution, 1/5 contre 4/5 entre modèles) restent solides. **Ne pas conclure sur un écart de 2 ou 3 points à 9 tirages** — c'est du bruit présenté comme une mesure.
+
+⚠️ **Un critère de mesure peut ne pas mesurer ce que Cyril voit.** Le premier critère comptait la *présence* d'une capacité réelle dans la réponse ; Cyril, lui, juge la *dominance* du discours. Une réponse citant « relevés bancaires » au milieu de cinq paragraphes sur l'apprentissage proactif passait le test automatique et restait générique à la lecture. Vérifier qu'un critère automatique s'aligne sur le jugement réel avant de s'appuyer dessus.
+
 ---
 
 ## 5.1 Décisions de sécurité — tranchées le 01/08/2026
