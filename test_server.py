@@ -41,6 +41,36 @@ def fake_core(monkeypatch):
     return calls
 
 
+@pytest.fixture
+def fake_stt(monkeypatch):
+    """
+    Remplace le moteur STT partagé par un double — aucun modèle Whisper
+    chargé, aucun fichier temporaire écrit.
+    """
+    from modules.stt_engine import STTUnavailable, TranscriptResult
+
+    calls: dict[str, object] = {}
+
+    class _FakeSTT:
+        def __init__(self, texte="audio transcrit", boom=None):
+            self.texte = texte
+            self.boom = boom
+
+        def transcribe_base64(self, audio_base64, suffix=".wav"):
+            calls["audio_base64"] = audio_base64
+            if self.boom:
+                raise self.boom
+            return TranscriptResult(
+                text=self.texte, language="fr", confidence=0.9, duration_seconds=1.5,
+            )
+
+    double = _FakeSTT()
+    monkeypatch.setattr("api.server._stt_engine", double)
+    calls["_double"] = double  # pour permuter texte/boom depuis un test
+    calls["_STTUnavailable"] = STTUnavailable
+    return calls
+
+
 # ── REST ──────────────────────────────────────────────────────────────
 
 def test_status_confirms_the_server_runs(client) -> None:
@@ -173,6 +203,95 @@ def test_websocket_ignores_an_empty_message(client, fake_core) -> None:
         ws.send_json({"type": "chat", "message": "  "})
         ws.send_json({"type": "chat", "message": "vrai message"})
         assert _next_of_type(ws, "avatar_state", limit=20)["state"] in {"idle", "thinking"}
+
+
+# ── WebSocket : audio (pont mobile, Phase 4) ───────────────────────────
+#
+# Premier appelant réel de modules/stt_engine.py — jusqu'ici écrit et
+# testé, mais rien ne l'alimentait (voir son en-tête). Ces tests
+# vérifient le CHEMIN serveur, pas la qualité de la transcription : le
+# moteur STT est entièrement doublé.
+
+def test_websocket_audio_is_transcribed_and_answered(client, fake_core, fake_stt) -> None:
+    """Le cycle attendu : listening → thinking → speaking → idle."""
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "audio", "audio_base64": "ZmF1eCBhdWRpbw=="})
+
+        states = []
+        answer = None
+        for _ in range(20):
+            message = ws.receive_json()
+            if message.get("type") == "avatar_state":
+                states.append(message["state"])
+                if message["state"] == "speaking":
+                    answer = message.get("text", "")
+            if states[-4:] == ["listening", "thinking", "speaking", "idle"]:
+                break
+
+    assert states[-4:] == ["listening", "thinking", "speaking", "idle"]
+    # fake_core renvoie "réponse à « <message demandé> »" — le message
+    # demandé doit être le texte transcrit, pas l'audio brut.
+    assert "audio transcrit" in answer
+
+
+def test_websocket_audio_reaches_the_stt_engine(client, fake_core, fake_stt) -> None:
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "audio", "audio_base64": "ZmF1eCBhdWRpbw=="})
+        _next_of_type(ws, "chat")
+
+    assert fake_stt["audio_base64"] == "ZmF1eCBhdWRpbw=="
+
+
+def test_websocket_audio_transcript_is_asked_to_lucas(client, fake_core, fake_stt) -> None:
+    """Le transcrit doit suivre EXACTEMENT le même chemin qu'un message tapé."""
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "audio", "audio_base64": "ZmF1eCBhdWRpbw=="})
+        _next_of_type(ws, "chat")
+
+    assert fake_core.get("asked") == "audio transcrit"
+
+
+def test_websocket_ignores_audio_without_the_field(client, fake_core, fake_stt) -> None:
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "audio"})
+        ws.send_json({"type": "chat", "message": "vrai message"})
+        message = _next_of_type(ws, "chat", limit=20)
+
+    assert "vrai message" in message["text"]
+    assert "audio_base64" not in fake_stt
+
+
+def test_websocket_stt_unavailable_reports_an_error_not_a_crash(client, fake_core, fake_stt) -> None:
+    """
+    Un doute sur l'audio ne doit jamais planter la connexion — mais
+    contrairement au chemin vision, Cyril doit savoir qu'on ne l'a pas
+    entendu : un silence serait plus trompeur qu'un message d'erreur.
+    """
+    fake_stt["_double"].boom = fake_stt["_STTUnavailable"]("aucun backend Whisper")
+
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "audio", "audio_base64": "ZmF1eCBhdWRpbw=="})
+        error = _next_of_type(ws, "error")
+        idle = _next_of_type(ws, "avatar_state")
+
+    assert "Whisper" in error["detail"]
+    assert idle["state"] == "idle"
+
+
+def test_websocket_silence_returns_to_idle_without_asking_lucas(client, fake_core, fake_stt) -> None:
+    """
+    Un extrait sans parole (texte transcrit vide) ne doit pas devenir une
+    question vide envoyée à LucasCore.ask().
+    """
+    fake_stt["_double"].texte = ""
+
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "audio", "audio_base64": "ZmF1eCBhdWRpbw=="})
+        ws.send_json({"type": "chat", "message": "toujours vivant"})
+        message = _next_of_type(ws, "chat", limit=20)
+
+    assert "toujours vivant" in message["text"]
+    assert "asked" not in fake_core or fake_core["asked"] != ""
 
 
 # ── Cohérence avec le reste du projet ─────────────────────────────────

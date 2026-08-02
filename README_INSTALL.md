@@ -120,7 +120,7 @@ L'API expose `GET /status`, `GET /system`, `POST /chat` et `WS /ws`.
 > ⚠️ Elle écoute sur `127.0.0.1` : joignable depuis ce PC uniquement.
 > Elle n'a aucune authentification et `GET /history` renvoie toutes les
 > conversations — l'ouvrir au réseau (`0.0.0.0`) la rendrait lisible par
-> n'importe quel appareil du WiFi. Le passage au réseau viendra en Phase 5
+> n'importe quel appareil du WiFi. Le passage au réseau viendra en Phase 4
 > avec le mobile, et exigera un jeton partagé au préalable.
 
 ### Vérifier que tout fonctionne

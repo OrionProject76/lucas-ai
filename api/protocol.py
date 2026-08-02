@@ -98,3 +98,17 @@ def read_user_text(data: dict) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
+
+
+def read_user_audio(data: dict) -> str:
+    """
+    Extrait l'audio base64 d'un message entrant de type « audio ».
+
+    Format attendu du S25 Ultra (pont mobile, Phase 4) : un seul champ
+    « audio_base64 ». Pas de deuxième nom accepté ici — contrairement au
+    texte, ce protocole n'a pas d'ancien client à ménager.
+    """
+    if not isinstance(data, dict):
+        return ""
+    value = data.get("audio_base64")
+    return value.strip() if isinstance(value, str) and value.strip() else ""

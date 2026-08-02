@@ -41,6 +41,14 @@ Pillow>=12.0.0           # Images pour le VLM (modules/vision_manager.py)
 # utilise le GPU — soit la contention avec Ollama qu'on cherche à éviter.
 rapidocr-onnxruntime>=1.4.0
 
+# STT pour le pont mobile (Phase 4, api/server.py — message WebSocket
+# "audio"). faster-whisper plutôt qu'openai-whisper : même qualité, ~4×
+# plus rapide, sans torch — même logique que RapidOCR plus haut.
+# ⚠️ Forcé en CPU dans modules/stt_engine.py (device="cpu", jamais "auto") :
+# "auto" tente CUDA sur cette machine et échoue (cuBLAS absent), en plus de
+# contredire l'intention documentée d'éviter la contention VRAM avec Ollama.
+faster-whisper>=1.2.0
+
 # Lecture des PDF pour le RAG (memory/index_documents.py). Les contrats
 # et relevés de Cyril sont dans ce format, ils étaient jusqu'ici
 # signalés mais pas lus.

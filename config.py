@@ -161,7 +161,7 @@ STT_CACHE_SIZE: int = 20
 # authentification, et GET /history renvoie l'intégralité des
 # conversations — l'exposer au réseau local la rendrait lisible par tout
 # appareil du WiFi.
-# À REVOIR EN PHASE 5 (mobile/PWA) : passer à 0.0.0.0 exigera d'abord un
+# À REVOIR EN PHASE 4 (mobile/PWA) : passer à 0.0.0.0 exigera d'abord un
 # jeton partagé, sinon le téléphone ouvre la porte à tout le réseau.
 # Décision actée le 01/08/2026, voir ROADMAP.md §5.1.
 API_HOST = "127.0.0.1"

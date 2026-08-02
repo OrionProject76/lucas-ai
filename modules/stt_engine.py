@@ -1,21 +1,20 @@
 # modules/stt_engine.py — transcription audio locale (Speech-to-Text)
 #
 # ══════════════════════════════════════════════════════════════════════
-# SOCLE PHASE 5 — NON ACTIVÉ. EN ATTENTE DU PONT MOBILE.
+# BRANCHÉ CÔTÉ SERVEUR le 02/08/2026 — TOUJOURS SANS CLIENT RÉEL.
 # ══════════════════════════════════════════════════════════════════════
-# Ce module fonctionne et est testé, mais rien ne l'appelle et rien ne
-# peut l'alimenter aujourd'hui : le PC de Cyril n'a pas de micro
-# (IDEAS.md #69, VISION_LONG_TERME.md §2 Pilier 3). La seule source
-# audio prévue est le S25 Ultra, qui enverra ses enregistrements via
-# l'API — ce pont arrive en Phase 5.
+# api/server.py appelle maintenant transcribe_base64() sur les messages
+# WebSocket de type « audio » (voir websocket_endpoint). Ce module reste
+# néanmoins SANS UTILISATION RÉELLE : le PC de Cyril n'a pas de micro
+# (IDEAS.md #69, VISION_LONG_TERME.md §2 Pilier 3), et aucun client mobile
+# n'existe encore pour envoyer de l'audio — seul le CÔTÉ SERVEUR du pont
+# est prêt. Ne pas le compter comme une fonctionnalité utilisable avant
+# qu'un vrai client (PWA S25 Ultra) existe et soit testé en conditions
+# réelles.
 #
-# Ce n'est donc PAS une fonctionnalité livrée. Ne pas le compter comme
-# une avancée de Phase 3. Il est commité pour ne pas être réécrit plus
-# tard, pas pour être utilisé maintenant.
-#
-# Aucun backend Whisper n'est installé sur la machine : `pip install
-# faster-whisper` (~200 Mo) ou `openai-whisper` (~2,5 Go avec torch)
-# sera nécessaire le jour où le pont existera.
+# faster-whisper installé le 02/08/2026 (~200 Mo, sans torch — voir le
+# choix de backend ci-dessous). openai-whisper reste un repli possible
+# si faster-whisper manque sur une autre machine.
 #
 # ⚠️ L'audio est la donnée la plus intrusive que Luca's puisse traiter :
 # il capte tout ce qui se dit dans la pièce, pas seulement ce qui lui est
@@ -25,7 +24,7 @@
 # ── Ce module ne capte pas le micro, et c'est volontaire ──────────────
 # Le PC de Cyril n'a pas de microphone : contrainte matérielle actée dans
 # VISION_LONG_TERME.md §2, Pilier 3. C'est le S25 Ultra qui sert de
-# capteur, et qui enverra l'audio via l'API (Phase 5). Ce moteur
+# capteur, et qui enverra l'audio via l'API (Phase 4). Ce moteur
 # transcrit donc ce qu'on lui donne — fichier, tableau numpy ou base64 —
 # et ne suppose aucun périphérique local.
 #
@@ -213,7 +212,15 @@ class STTEngine:
 
 class _FasterWhisperBackend:
     def __init__(self, model_class, model_size: str) -> None:
-        self.model = model_class(model_size, device="auto", compute_type="int8")
+        # ⚠️ CPU explicite, PAS "auto" (bug trouvé le 02/08/2026 en testant
+        # le pont mobile de bout en bout, pas seulement avec des mocks) :
+        # "auto" tente CUDA en premier sur cette machine (RTX 5080 détectée)
+        # et échoue — "Library cublas64_12.dll is not found". Le commentaire
+        # du module dit depuis le début que faster-whisper est choisi pour
+        # tourner en CPU et ne pas se disputer la VRAM avec Ollama
+        # (VISION_LONG_TERME.md §3) ; "auto" contredisait cette intention
+        # documentée, indépendamment du plantage qu'il provoquait ici.
+        self.model = model_class(model_size, device="cpu", compute_type="int8")
 
     def transcribe(self, audio) -> TranscriptResult:
         segments, info = self.model.transcribe(audio, language=None)

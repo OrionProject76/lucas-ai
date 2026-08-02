@@ -22,8 +22,16 @@ from api import protocol
 from core.lucas_core import LucasCore
 from core.router import should_use_vision
 from core.world_model import get_snapshot
+from modules.stt_engine import STTEngine, STTUnavailable
 
 app = FastAPI(title="Luca's API", version="0.2")
+
+# Instance unique, partagée entre tous les messages « audio » du WebSocket.
+# Contrairement à LucasCore (recréé par appel à cause de SQLite, voir plus
+# bas), STTEngine ne touche à aucune base — le websocket est géré dans la
+# boucle asyncio, un seul thread, donc pas de risque à la partager. La
+# recréer par message rechargerait le modèle Whisper à chaque phrase.
+_stt_engine = STTEngine()
 
 # CORS ouvert pour l'instant (dev local uniquement).
 # À restreindre à l'IP du mobile une fois le PWA en place (S5).
@@ -166,10 +174,45 @@ async def websocket_endpoint(websocket: WebSocket):
                 )
                 continue
 
-            if message_type != "chat":
+            if message_type == "chat":
+                message = protocol.read_user_text(data)
+
+            elif message_type == "audio":
+                # Pont mobile (Phase 4) : le S25 Ultra envoie l'audio, le PC
+                # n'a pas de micro (VISION_LONG_TERME.md §2, Pilier 3). Ce
+                # bloc est le premier appelant réel de modules/stt_engine.py
+                # — jusqu'ici écrit et testé, mais rien ne l'alimentait.
+                audio_base64 = protocol.read_user_audio(data)
+                if not audio_base64:
+                    continue
+
+                # LISTENING existait dans le protocole depuis les 5 modes de
+                # présence, mais restait inactif faute de micro — c'est le
+                # premier moment où il a un sens réel à émettre.
+                await websocket.send_json(
+                    protocol.avatar_state(protocol.STATE_LISTENING)
+                )
+                try:
+                    transcript = _stt_engine.transcribe_base64(audio_base64)
+                    message = transcript.text
+                except STTUnavailable as exc:
+                    # Même logique que le chemin vision plus bas : un doute
+                    # sur l'audio ne doit jamais planter la connexion, mais
+                    # ici Cyril doit savoir qu'on ne l'a pas entendu — un
+                    # silence serait plus trompeur qu'un message d'erreur.
+                    await websocket.send_json(
+                        protocol.error(f"Audio illisible : {exc}")
+                    )
+                    await websocket.send_json(protocol.avatar_state(protocol.STATE_IDLE))
+                    continue
+
+                if not message:
+                    await websocket.send_json(protocol.avatar_state(protocol.STATE_IDLE))
+                    continue
+
+            else:
                 continue
 
-            message = protocol.read_user_text(data)
             if not message:
                 continue
 

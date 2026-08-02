@@ -92,7 +92,7 @@ et `test_index_documents.py`.
 | **Phase 1 — Cerveau solide** | S1 | FastAPI unique + World Model | ✅ **Fait et validé aujourd'hui** |
 | **Phase 2 — Mémoire & Finance** | S2 | RAG, TTS, Finance CSV | ✅ Fait le 01/08 — reste la validation TTS à l'oreille dans l'UI |
 | **Phase 3 — Vision & Voix** | S3-S4 | VLM écran, Avatar QPainter V3, 5 modes de présence | 🟡 En cours — VLM écran ✅, 5 modes de présence ✅ |
-| **Phase 4 — Expansion** | S5-S6 | PWA mobile, sync, Godot 4 V1 (branche expérimentale) | À venir |
+| **Phase 4 — Expansion** | S5-S6 | PWA mobile, sync, Godot 4 V1 (branche expérimentale) | 🟡 Amorcé — côté serveur du pont audio branché (02/08), PWA/auth/tunnel restent à faire |
 | **Phase 5 — Polish** | S7-S8 | Sécurité finale, packaging, release v1.0 | À venir |
 
 ### État détaillé de la Phase 3 (au 01/08/2026)
@@ -220,9 +220,68 @@ Trois missions sont concernées, alors qu'elles sont annoncées en S1 dans la li
 
 **Ne pas rebuter dessus** : les prendre avant le pont produit du code correct que rien ne peut alimenter ni valider en usage réel.
 
-Le moteur STT (`modules/stt_engine.py`) est **déjà écrit et testé**, commité le 01/08 comme socle. Il ne capte rien : il transcrit ce qu'on lui donne, et attend que le mobile lui envoie de l'audio. **Il ne compte pas comme une avancée de Phase 3.**
+Le moteur STT (`modules/stt_engine.py`) est **déjà écrit et testé**, commité le 01/08 comme socle. **Branché côté serveur le 02/08/2026** (voir la section dédiée plus bas) — mais toujours sans client réel pour l'alimenter. **Il ne compte donc toujours pas comme une avancée de Phase 3** ni de Phase 4 pleinement livrée : seule la moitié serveur existe.
 
-> **Note de numérotation.** Ce tableau place le pont mobile en **Phase 4** (semaines S5-S6), tandis que la section « Priorités de Développement » de `CLAUDE.md` situe le « Mobile Bridge » en S7. Les commentaires de code écrits le 01/08 (`config.py`, `README_INSTALL.md`, `stt_engine.py`) parlent de « Phase 5 », en reprenant le libellé de semaine. Les trois désignent la même étape : **l'arrivée du S25 Ultra**. À harmoniser lors d'une passe dédiée sur la numérotation.
+> **Note de numérotation — partiellement harmonisée le 02/08/2026.** Ce tableau place le pont mobile en **Phase 4** (semaines S5-S6). Les mentions « Phase 5 » dans `config.py`, `README_INSTALL.md` et `stt_engine.py` (écrites le 01/08, reprenant le libellé de semaine) ont été corrigées en « Phase 4 » pour suivre ce tableau. **Reste non résolu** : la section « Priorités de Développement » de `CLAUDE.md` situe elle le « Mobile Bridge » en **S7**, pas S5-S6 — un désaccord de SÉQUENÇAGE, pas seulement de vocabulaire, qui demande une vraie décision (quand le pont mobile passe-t-il réellement, avant ou après OS Controller/Automation ?) et pas juste un remplacement de texte. Toujours à trancher lors d'une passe dédiée.
+
+### 🟢 Session du 02/08/2026 — premier appelant réel de la STT, côté serveur uniquement
+
+À la demande de Cyril de creuser la suite du pont mobile. Aucun matériel S25
+Ultra n'est disponible pour tester avec un vrai client : ce qui suit est donc
+strictement le **côté PC** du pont — la moitié qui peut être construite et
+vérifiée sans téléphone.
+
+**Fait** :
+- `api/server.py` gère maintenant un troisième type de message WebSocket,
+  `"audio"` (en plus de `"hello"` et `"chat"`) : `audio_base64` →
+  `STTEngine.transcribe_base64()` → le texte transcrit suit **exactement**
+  le même chemin qu'un message tapé (décision vision, `LucasCore.ask()`,
+  réponse). C'est le premier appelant réel de `modules/stt_engine.py`
+  depuis son écriture le 01/08.
+- `STATE_LISTENING` — un des 5 modes de présence, présent dans le
+  protocole depuis le début mais jamais émis faute de micro — s'émet
+  maintenant réellement pendant la transcription.
+- **Bug trouvé en testant de bout en bout avec un vrai fichier audio (pas
+  seulement des mocks)** : `_FasterWhisperBackend` utilisait
+  `device="auto"`, qui tente CUDA sur cette machine et échoue (« Library
+  cublas64_12.dll is not found »). Le commentaire du module dit depuis le
+  01/08 que faster-whisper est choisi pour tourner en CPU, justement pour
+  ne pas se disputer la VRAM avec Ollama (`VISION_LONG_TERME.md` §3) —
+  `"auto"` contredisait cette intention documentée, indépendamment du
+  plantage. Corrigé en `device="cpu"` explicite.
+- `faster-whisper` installé (`requirements.txt`) et vérifié réellement
+  disponible (`STTEngine().is_available()` → `True`).
+- Validé à trois niveaux : 6 tests avec un moteur STT doublé
+  (`test_server.py`), puis un vrai fichier WAV (silence quasi pur, généré
+  par script) envoyé à l'API réellement lancée — cycle
+  `listening → idle` confirmé sans erreur après la correction CPU, en
+  passant par le vrai modèle Whisper.
+
+**Pas fait, et pas décidé seul** — trois points distincts, pas un seul :
+
+1. **Aucun client mobile n'existe.** Ni PWA, ni manifest, ni service
+   worker, ni page HTML — le dossier `static/` n'existe pas. C'est un
+   chantier à part entière (choix de stack pour la PWA, design de
+   l'interface tactile), pas une extension de ce qui vient d'être fait.
+2. **L'API n'a toujours aucune authentification**, et écoute toujours sur
+   `127.0.0.1` uniquement — donc inatteignable depuis un téléphone en
+   l'état. Le jeton partagé documenté comme prérequis (§5.1, « À revoir en
+   Phase 4 ») n'est pas construit. Passer à `0.0.0.0` sans ce jeton
+   d'abord exposerait `GET /history` (tout l'historique de conversation)
+   à n'importe quel appareil du réseau — relève du cas 1 de l'Autonomie
+   d'exécution (`CLAUDE.md`) : accès réseau externe, à ne jamais faire
+   sans validation explicite.
+3. **Le protocole de tunnel (Tailscale vs WireGuard) n'est pas choisi** —
+   `VISION_LONG_TERME.md` §2 Pilier 3 le laisse explicitement ouvert
+   (« à définir en Phase Mobile »). C'est un choix d'architecture qui
+   engage la suite (cas 3 de l'Autonomie d'exécution), pas un détail
+   d'implémentation à trancher en passant.
+
+**Proposition pour la suite, à valider avant d'être exécutée** : construire
+le jeton d'authentification (point 2) en gardant `127.0.0.1` par défaut —
+c'est un prérequis sans risque réseau tant que le bind n'a pas changé — puis
+revenir vers Cyril pour les points 1 et 3, qui engagent des choix produit
+réels.
 
 ---
 
