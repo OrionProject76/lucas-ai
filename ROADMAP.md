@@ -37,9 +37,39 @@ Reclassé en Phase 6 (S5-S6), branche `experimental/godot-avatar`. Ne bloque pas
 | Tâche | Détail |
 |---|---|
 | Mémoire enrichie | Contexte conversation + events système (World Model) injectés dans le prompt |
-| RAG documents personnels | Ingestion de documents, recherche vectorielle (ChromaDB déjà présent dans `data/`) |
+| RAG documents personnels | ✅ **Fait et validé en conditions réelles (01/08/2026).** 39 documents de Cyril indexés, 229 morceaux. Point d'entrée `memory/index_documents.py` (relançable sans risque), lecture `.pdf` / `.docx` / texte, recherche hybride sémantique + date, seuil de pertinence calibré sur le corpus réel. Voir l'encadré ci-dessous. |
 | TTS intégré au chat | Bouton + lecture auto dans l'UI PySide6, brancher `modules/voice_manager.py` (à re-tester) |
 | Finance CSV | Import + catégorisation, dashboard simple (MVP, pas d'API bancaire — règle actée) |
+
+#### ✅ RAG documents personnels — terminé le 01/08/2026
+
+**Chaîne complète** : déposer → indexer → calibrer → interroger.
+
+```
+venv\Scripts\python.exe -m memory.index_documents "C:/Users/PC/Documents"
+venv\Scripts\python.exe demos\calibrate_rag.py
+```
+
+**Validé via `main.py`**, pas seulement par des tests :
+
+| Question | Résultat |
+|---|---|
+| « Résume-moi mon CV » | cite `Cv2026_DE-As`, contenu réel |
+| « Quel était mon salaire net en juillet 2025 ? » | **1647.68 €**, depuis le bon bulletin |
+| « Et en décembre 2025 ? » *(ellipse)* | rattachée au tour précédent, bon bulletin |
+| « Quel était mon salaire en juillet 2024 ? » | « aucun document correspondant » — **rien d'inventé** |
+| « Quelle est la capitale de l'Australie ? » *(témoin)* | aucun RAG déclenché |
+
+**Réglages calibrés sur le corpus réel**, pas devinés : `RAG_MAX_DISTANCE`
+(0,33), `CHUNK_SIZE`, `CHUNK_OVERLAP`, `SOURCE_HISTORY_MESSAGES`. Tout
+changement du format d'indexation incrémente `RAGManager._FORMAT_VERSION`,
+ce qui force la réindexation — sinon la base resterait silencieusement à
+l'ancien format.
+
+**Reste ouvert** : les documents scannés (cartes d'identité, certains
+contrats) n'ont aucune couche texte et sont refusés avec leur motif. Les
+passer par `modules/ocr_engine.py`, déjà présent pour l'écran, est une
+piste v1.1.
 
 **Prérequis avant de commencer S2 :** vérifier qu'Ollama tourne sans doublon de process (voir section 5 — point de vigilance infra).
 
@@ -60,7 +90,7 @@ Reclassé en Phase 6 (S5-S6), branche `experimental/godot-avatar`. Ne bloque pas
 
 | Brique | État |
 |---|---|
-| **Vision écran** | 🟡 **OCR seul en v1.0** — voir l'encadré ci-dessous. La capture est lue par RapidOCR (CPU) ; le VLM est coupé. Le déclencheur n'est plus une liste de mots-clés mais `core/intent.py`. Forcé en local : ce qui est lu à l'écran ne part jamais au cloud. |
+| **Vision écran (OCR)** | ✅ **Fait et validé en conditions réelles (01/08/2026)** — en OCR seul, voir l'encadré ci-dessous. La capture est lue par RapidOCR (CPU) ; le VLM est coupé. Le déclencheur n'est plus une liste de mots-clés mais `core/intent.py`. Vérifié via `main.py` : « c'est écrit quoi ? » et « une synthèse d'un document sur mon écran » citent le texte réellement affiché. Forcé en local : ce qui est lu à l'écran ne part jamais au cloud. |
 | **5 modes de présence** | ✅ Fait. `IDLE`, `THINKING`, `SPEAKING`, `WATCHING`, `LISTENING` dans `ui/avatar_widget.py`. `WATCHING` sert de témoin de capture, comme la LED d'une webcam. `LISTENING` reste inactif faute de micro. |
 | **Avatar QPainter V3** | 🟡 Partiel. Le rendu a été restauré et fiabilisé (voir §6), les modes sont câblés sur le comportement réel. Une refonte esthétique complète reste possible si Cyril la souhaite. |
 | **STT** | ⛔ Bloqué par le matériel — moteur écrit, voir ci-dessous. |
@@ -161,6 +191,16 @@ Tant que ces deux points ne sont pas tranchés, `security/` reste au niveau 1 �
 - **Les fixtures vides valident des comportements qui cassent sur des données réelles** (leçon du 01/08/2026, quatre correctifs successifs annoncés « fonctionnels » sur une application cassée). `_FakeMemory.load_history()` rendait `[]` en dur : tous les tests vision tournaient donc sur une conversation neuve, où le bloc d'observation se retrouvait **mécaniquement** collé à la question. En usage réel, avec 100 messages d'historique, il arrivait en 4ᵉ position sur 91 et se faisait noyer — le modèle répondait à une vieille question. Le protocole de test était faux, pas le code testé.
   **Règle** : pour toute fonction qui dépend du **volume** ou de la **position** des données, au moins un test doit tourner sur un état **chargé** — historique long, base non vide, cache peuplé. Un test sur état vide ne prouve rien sur ces deux propriétés. Et vérifier qu'un nouveau test **tombe bien sur l'ancien code** avant de le déclarer probant (ici : `assert 92 < 2`).
   Les angles morts de la même famille, à surveiller : base neuve, cache froid, liste à un seul élément, premier lancement.
+
+### Leçons du chantier RAG & Vision (01/08/2026)
+
+- **Ne jamais indexer un dossier sans regarder ce qu'il contient.** L'indexation de `C:/Users/PC/Documents` a fait entrer en base « Mots de passe Microsoft Edge.csv » et « proton-recovery-kit.pdf ». Des identifiants en clair dans une base vectorielle deviennent **récupérables par une simple question**, et le LLM les recopie dans sa réponse puisqu'on les lui fournit comme contexte. J'avais vérifié le *volume* (46 fichiers, « raisonnable »), pas la *nature*. `SECRET_PATTERNS` refuse désormais ces fichiers **sans même les ouvrir** — mais la liste a raté un cas le jour même où elle a été écrite (« Bitdefender SecurePass **Recovery Key**.pdf », alors qu'elle contenait « recovery-kit »). **C'est un filet, pas une garantie : la vraie protection est de ne pas ranger ses secrets dans un dossier indexé.**
+- **Un seul fichier peut écraser toute la base.** `log.txt` (0,7 Mo) produisait 818 morceaux sur 1083 — 76 % du total — et rendait 35 vrais documents introuvables. ⚠️ **Retirer `.log` des extensions acceptées n'aurait rien changé : le fichier s'appelait `log.txt`.** D'où deux tests, sur l'extension *et* sur le radical du nom. Un document légitimement volumineux est signalé, pas retiré d'office.
+- **La recherche vectorielle ne sait pas comparer des dates.** « salaire de juillet 2025 » remontait les bulletins de février, avril et janvier 2026 : pour un modèle d'embeddings, deux dates de bulletin de paie sont sémantiquement voisines, et le mois demandé est exactement l'information qu'il écrase. `core/dates.py` extrait les périodes des deux côtés et filtre. **Quand une période est nommée, on interroge toute la base avant de filtrer** — un élargissement ×10 ne suffisait pas.
+- **Le silence fait fabriquer le modèle.** Quand aucun document ne couvre la période, ne rien injecter a conduit Luca's à **inventer un nom de fichier et un montant**, en imitant le format des réponses correctes qui précédaient. Une réponse inventée est indiscernable d'une vraie. La recherche infructueuse est désormais annoncée, **en nommant la période manquante** — un refus générique ne suffisait pas.
+- **Une question elliptique hérite du verdict de la précédente.** « Et pour 2024 ? » n'a pas de sujet propre : reclassée dans le vide, elle donnait `AUCUN` une fois sur deux, et le verdict basculait sur un mot de la *réponse* précédente. Deux pistes fermées par la mesure, **à ne pas rouvrir** : doubler le contexte ne change rien, et retirer la réponse précédente est pire (4/7 contre 5/7).
+- **Deux mécanismes reposent sur la grammaire, pas sur du vocabulaire** — la garde déictique (`ce`, `cette`, `ces` désignent l'écran) et l'héritage elliptique. C'est ce qui les distingue d'un mot-clé de plus : ils valent pour des formulations que personne n'a besoin d'énumérer. Quand le prompt engineering est épuisé — vérifié sur trois modèles pour la déixis, et une consigne « suite de conversation » dégrade de 4/5 à 2/5 — c'est la piste à prendre.
+- **Ses propres essais polluent la mémoire, et le résultat suivant en dépend.** Plusieurs fois pendant ce chantier, j'ai cru mesurer un bug alors que je mesurais l'écho de mon essai précédent : les six derniers messages contenaient exactement le motif d'échec, réinjecté par `SOURCE_HISTORY_MESSAGES`. **Purger la base entre deux validations en conditions réelles**, sinon la mesure ne veut rien dire.
 
 ---
 
