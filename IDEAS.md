@@ -297,3 +297,75 @@ Visage low-poly stylisé, shaders néon cyan/bleu avec glow. Flottement organiqu
 - Problèmes techniques rencontrés et documentés : Aider + Ollama 8B échoue sur fichiers >200 lignes ; quota IA Cursor épuisé, d'où passage à Claude Code.
 - Documentation de référence technique existante côté utilisateur : "orion_ai_documentation.docx".
 - **Renommage acté (29-30/07/2026)** : Orion → Luca's. Partie visible faite le 01/08/2026, renommage technique du code fait le 02/08/2026 (voir `ROADMAP.md` §6).
+
+---
+
+# Addendum IDEAS.md — Session du 02/08/2026 — Ambition mobile complète
+
+À intégrer dans IDEAS.md, nouvelle sous-section du catalogue (section 5).
+
+---
+
+## 70. Centre de commande mobile S25 Ultra — vision complète
+
+Capturé le 02/08/2026, à partir d'une session de brainstorming avec Cyril.
+Catalogué dans son intégralité pour ne rien perdre — voir ROADMAP.md §2
+pour ce qui est réellement en cours d'implémentation (périmètre restreint,
+décidé le même jour).
+
+### Modèles d'inspiration identifiés
+- **Tasker + AutoVoice** — automatisation Android complète (lancer apps,
+  simuler clics, requêtes web, domotique). Candidat sérieux pour ne pas
+  reconstruire l'automatisation Android depuis zéro — dépendance tierce à
+  évaluer le moment venu, pas une brique à coder soi-même.
+- **Microsoft Copilot Voice / Google Gemini Live** — service Android en
+  premier plan (Foreground Service) avec notification persistante, pour
+  garder le micro en écoute passive du mot-clé "Luca" sans que l'OS ne
+  tue l'app pour économiser la batterie.
+- **Rabbit R1 / Humane AI Pin** — modèle "LAM" (Large Action Model) :
+  l'IA n'exécute pas que des réponses textuelles, elle déclenche des
+  scripts réels (recherche RAG vs action multimédia, décidé
+  automatiquement selon la demande).
+
+### Exemple d'orchestration cible : double action parallèle
+Ordre vocal unique → deux agents en parallèle : un agent qui consulte un
+document (RAG local sur le PC) et un agent qui déclenche une action sur
+le PC (ex. lancer une app, changer de fenêtre) → résultat fusionné en une
+seule réponse vocale + notification push. Illustre l'architecture
+multi-agents (au sens modulaire, voir CLAUDE.md règle 12) appliquée à un
+scénario mobile réel.
+
+### Interface mobile idéale (S25 Ultra)
+- Avatar 2D/3D léger (pas de scène 3D lourde — batterie), qui change de
+  couleur/rythme selon les 5 modes de présence déjà existants côté serveur
+- HUD d'action rapide : onglets directs vers Finance et Documents (RAG),
+  déjà fonctionnels côté PC
+- Mode bouton micro géant, en complément de l'écoute passive, pour les
+  environnements bruyants
+
+### Android Auto — contrainte technique majeure, à traiter à part
+**Important, découvert en discutant le 02/08/2026** : Android Auto
+n'autorise pas d'interface personnalisée libre pendant la conduite,
+imposé par Google pour la sécurité routière. Seules certaines catégories
+d'apps (musique, navigation, messagerie) ont un affichage via des
+templates imposés par Google — un avatar/HUD personnalisé n'est
+techniquement pas possible à afficher. Le reste ne peut passer que par de
+l'interaction **vocale pure**, pas visuelle.
+
+**Conséquence pour la roadmap** : Android Auto n'est pas une extension du
+pont mobile de base — c'est une initiative distincte, à traiter une fois
+la PWA de base stable, avec ses propres contraintes de plateforme à
+étudier en détail le moment venu (probablement limité au vocal).
+
+### Automatisation domotique/PC illustrative
+Exemple donné : contrôle de la TV via navigateur (selenium/pyautogui) —
+bon cas d'usage concret pour `OS Controller`/liste blanche (déjà au
+catalogue), pas urgent, juste un exemple qui illustre bien le principe.
+
+---
+
+**Statut au 02/08/2026** : catalogué dans son ensemble. Le périmètre
+réellement engagé maintenant est volontairement restreint — voir
+ROADMAP.md §2 pour la brique de base (PWA chat + micro + avatar léger),
+qui doit être stable et prouvée avant d'envisager Tasker, Android Auto,
+ou l'automatisation domotique/PC.
