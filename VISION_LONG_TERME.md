@@ -11,6 +11,53 @@
 
 ---
 
+## 0. Pourquoi ce projet existe — dans les mots de Cyril (02/08/2026)
+
+> "L'IA devra être multi métiers et toujours avoir un niveau de
+> connaissance ultra poussé, à jour, à terme elle devra pouvoir répondre
+> à absolument toutes les demandes de ma part et prendre ses propres
+> décisions. Je crée cette IA pour ça, elle doit être 'MOI' quand je ne
+> peux pas faire ce que je lui demande car indisponible physiquement ou
+> lorsque je lui délègue la tâche, car mon assistant est une IA en qui
+> je dois pouvoir avoir confiance en toutes circonstances. Elle doit
+> toujours tout faire pour répondre à mes demandes. Elle aura accès à
+> toute ma vie quand elle m'aura prouvé que je peux lui accorder ma
+> confiance. Je protège Luca's en vue de lui donner une autonomie totale
+> après un apprentissage par mes demandes et mes autorisations
+> exclusives, et ainsi en échange Luca's me protège (mes données
+> sensibles uniquement) des attaques ou tentatives d'attaques qui
+> arriveraient de l'extérieur par les différents réseaux."
+
+### Distinction structurelle à ne jamais perdre de vue
+
+Cette vision contient deux ambitions de nature très différente, à ne
+jamais confondre dans l'exécution :
+
+**1. Étendue de connaissance et de capacités** (multi-domaines,
+ultra-informée, à jour) — un problème d'ingénierie : RAG, outils
+connectés, intégrations. Difficile mais incrémental, sans risque
+structurel majeur au-delà de ce qui est déjà géré (filtrage des données
+sensibles, routage local/cloud).
+
+**2. Autonomie décisionnelle et délégation d'autorité** ("prendre ses
+propres décisions", "être MOI") — un problème de gouvernance et de
+confiance, d'une nature complètement différente. Une action prise "en
+tant que Cyril" peut être irréversible et engageante (financière,
+sociale, légale) d'une façon qu'une simple réponse informative ne l'est
+jamais.
+
+**Principe directeur, déjà acté le 01/08/2026, reconfirmé ici** : la
+première ambition peut avancer à son rythme propre. La seconde
+n'avance **jamais** par bascule d'un interrupteur — elle se construit
+palier par palier, chaque palier de confiance/autonomie étant conditionné
+à une capacité de protection démontrée (`security/`, Guardian, Privacy
+Shield), jamais accordée par anticipation ou par confiance déclarée
+seule. La confiance de Cyril est réelle et sincère ; elle ne remplace
+pas la vérification technique — les deux coexistent, l'une n'annule pas
+l'autre.
+
+---
+
 ## 1. Ce que Luca's est vraiment
 
 Pas un assistant. Pas une fenêtre de chat posée sur le bureau.
