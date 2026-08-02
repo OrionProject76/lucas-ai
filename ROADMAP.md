@@ -476,6 +476,44 @@ menés via le websocket réel ont ajouté deux échanges dans
 `memory/lucas_memory.db`, la même base que le téléphone de Cyril — sans
 donnée sensible, mais signalé pour transparence).
 
+### 🔴 Bug trouvé par Cyril, corrigé — SYSTEM_PROMPT n'ancrait à rien de réel
+
+**Deuxième retour de test mobile.** Sur des questions ouvertes du type
+« que voudrais-tu améliorer, que souhaites-tu vraiment ? », Luca's
+inventait des réponses génériques sans rapport avec le projet — accès
+Gmail/Outlook, authentification multi-facteurs — rien de tout ça
+n'existe ni n'est prévu.
+
+**Cause** : `config.SYSTEM_PROMPT` tenait en deux phrases (« Tu es
+Luca's, l'assistant personnel de Cyril... réponds en français »), sans
+une seule capacité listée. Sans rien pour l'ancrer, le modèle retombait
+sur des clichés d'« assistant IA » appris à l'entraînement dès qu'une
+question sortait du cadre habituel.
+
+**Corrigé** : `SYSTEM_PROMPT` réécrit avec une liste de capacités
+POSITIVE (finance CSV, documents/RAG, écran/OCR, voix, sécurité niveau
+1 — observation seule) ET NÉGATIVE (pas de messagerie/agenda, pas de
+MFA, pas de navigation autonome, pas de commandes arbitraires), plus la
+brique en cours (pont mobile). La liste négative cible directement le
+bug signalé : nommer explicitement ce qui n'existe PAS empêche le
+modèle de l'inventer. Dernière ligne dédiée aux questions méta
+(« qu'est-ce que tu voudrais » ) : répondre à partir de cette liste,
+jamais en inventant des capacités génériques.
+
+Contenu tiré du code livré (`modules/finance_manager.py`,
+`automation_manager.py`, l'état réel de `security/` dans ce fichier),
+pas de l'ambition long terme de `VISION_LONG_TERME.md` — le modèle n'a
+aucun moyen de distinguer « construit » de « rêvé » si le prompt ne le
+fait pas pour lui. À tenir à jour à chaque capacité livrée ou retirée,
+comme documenté dans le commentaire de `config.py`.
+
+**Validé** : 627/627 sur la suite complète (aucun test n'asserte sur le
+contenu littéral du prompt). Testé en conditions réelles sur une
+conversation isolée avec la question exacte remontée par Cyril : plus
+aucune mention de Gmail/Outlook/MFA, réponse ancrée dans les vraies
+capacités (documents, finance), toute extension proposée formulée comme
+un souhait explicite, jamais comme une capacité déjà existante.
+
 ---
 
 ## 4. Principe directeur
