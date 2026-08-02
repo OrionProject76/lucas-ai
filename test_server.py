@@ -35,6 +35,29 @@ def _no_token_by_default(monkeypatch):
     monkeypatch.setattr("api.server.API_TOKEN", "")
 
 
+@pytest.fixture(autouse=True)
+def _no_real_security_status_by_default(monkeypatch):
+    """
+    Isole la suite des vraies bases SQLite de la machine
+    (data/lucas_daemon.db, memory/lucas_memory.db).
+
+    ⚠️ Sans ceci, chaque test WebSocket ferait un vrai accès disque vers
+    ces deux fichiers dès la connexion (_push_security_status), et son
+    résultat dépendrait de si lucas_daemon.py tourne réellement sur le
+    poste qui exécute la suite — même défaut que celui corrigé pour
+    API_TOKEN ci-dessus. Un test explicite (voir fake_security_status)
+    prévaut sur ce défaut pour sa durée.
+    """
+    from security.status import SecurityStatus
+
+    monkeypatch.setattr(
+        "api.server.get_security_status",
+        lambda: SecurityStatus(
+            active=False, last_scan_at=None, findings_24h=0, latest_summary=None
+        ),
+    )
+
+
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(app)
@@ -180,6 +203,52 @@ def test_websocket_announces_idle_on_connection(client) -> None:
     with client.websocket_connect("/ws") as ws:
         first = _next_of_type(ws, "avatar_state")
         assert first["state"] == "idle"
+
+
+@pytest.fixture
+def fake_security_status(monkeypatch):
+    """
+    Remplace la lecture des deux bases SQLite (data/lucas_daemon.db,
+    memory/lucas_memory.db) par un état fixe — aucun test ne doit dépendre
+    de ce qui tourne réellement sur la machine qui l'exécute.
+    """
+    from security.status import SecurityStatus
+
+    status = SecurityStatus(
+        active=True,
+        last_scan_at="2026-08-02T21:00:00",
+        findings_24h=2,
+        latest_summary="Process svch0st.exe imite svchost.exe",
+    )
+    monkeypatch.setattr("api.server.get_security_status", lambda: status)
+    return status
+
+
+def test_websocket_pushes_security_status(client, fake_security_status) -> None:
+    """Panneau des privilèges (IDEAS.md #78) : l'état arrive sans le demander."""
+    with client.websocket_connect("/ws") as ws:
+        message = _next_of_type(ws, "security_status")
+
+    assert message["active"] is True
+    assert message["findings_24h"] == 2
+    assert message["last_scan_at"] == "2026-08-02T21:00:00"
+    assert message["latest_summary"] == "Process svch0st.exe imite svchost.exe"
+
+
+def test_websocket_reports_an_inactive_daemon_plainly(client) -> None:
+    """
+    Un daemon éteint doit se voir clairement, pas disparaître en silence
+    — même principe que le RAG sans résultat (core/lucas_core.py) : ne
+    jamais laisser deviner un état qu'on peut vérifier. C'est aussi le
+    défaut de _no_real_security_status_by_default, donc rien à patcher
+    ici : ce test documente ce que ce défaut vérifie vraiment.
+    """
+    with client.websocket_connect("/ws") as ws:
+        message = _next_of_type(ws, "security_status")
+
+    assert message["active"] is False
+    assert "last_scan_at" not in message
+    assert "latest_summary" not in message
 
 
 def test_websocket_pushes_system_load(client) -> None:

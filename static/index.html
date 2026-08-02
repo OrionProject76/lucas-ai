@@ -18,6 +18,13 @@
             📋<span id="activity-badge" class="badge"></span>
         </button>
 
+        <button type="button" id="security-badge" class="icon-btn" title="État de sécurité">
+            🛡️<span id="security-dot" class="status-dot"></span>
+        </button>
+        <div id="security-popover">
+            <div id="security-popover-text"></div>
+        </div>
+
         <div id="activity-drawer">
             <div id="activity-drawer-header">
                 <span>Journal d'activité</span>
@@ -45,6 +52,7 @@
     <script src="/app/js/websocket.js"></script>
     <script src="/app/js/chat.js"></script>
     <script src="/app/js/activity.js"></script>
+    <script src="/app/js/security.js"></script>
     <script src="/app/js/audio.js"></script>
     <script src="/app/js/camera.js"></script>
     <script src="/app/js/app.js"></script>

@@ -78,6 +78,34 @@ def system(cpu: float, ram: float, gpu: float = 0.0) -> dict:
     }
 
 
+def security_status(
+    active: bool,
+    last_scan_at: str | None,
+    findings_24h: int,
+    latest_summary: str | None,
+) -> dict:
+    """
+    État des capteurs de sécurité niveau 1 — panneau des privilèges
+    (IDEAS.md #78). Voir security/status.py pour la provenance des
+    champs et pourquoi aucune gravité n'y figure.
+
+    `active` à False doit être affiché clairement, pas masqué : un
+    daemon éteint qui laisse croire à une protection en place serait
+    pire que l'absence d'indicateur — même principe que le RAG sans
+    résultat (core/lucas_core.py).
+    """
+    message: dict = {
+        "type": "security_status",
+        "active": active,
+        "findings_24h": findings_24h,
+    }
+    if last_scan_at:
+        message["last_scan_at"] = last_scan_at
+    if latest_summary:
+        message["latest_summary"] = latest_summary
+    return message
+
+
 def error(detail: str) -> dict:
     """Panne côté serveur, à afficher plutôt qu'à laisser en silence."""
     return {"type": "error", "detail": detail}

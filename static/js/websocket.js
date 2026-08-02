@@ -10,10 +10,18 @@ window.Lucas = window.Lucas || {};
     const RECONNECT_DELAY_MS = 3000;
 
     class LucasSocket {
-        constructor({ onAvatarState, onChat, onActivity, onError, onConnectionChange }) {
+        constructor({
+            onAvatarState,
+            onChat,
+            onActivity,
+            onSecurityStatus,
+            onError,
+            onConnectionChange,
+        }) {
             this.onAvatarState = onAvatarState;
             this.onChat = onChat;
             this.onActivity = onActivity || (() => {});
+            this.onSecurityStatus = onSecurityStatus || (() => {});
             this.onError = onError;
             this.onConnectionChange = onConnectionChange || (() => {});
             this.socket = null;
@@ -71,6 +79,14 @@ window.Lucas = window.Lucas || {};
                     break;
                 case "activity":
                     this.onActivity(data.kind || "", data.text || "");
+                    break;
+                case "security_status":
+                    this.onSecurityStatus({
+                        active: !!data.active,
+                        last_scan_at: data.last_scan_at || null,
+                        findings_24h: data.findings_24h || 0,
+                        latest_summary: data.latest_summary || null,
+                    });
                     break;
                 case "error":
                     this.onError(data.detail || "erreur inconnue");

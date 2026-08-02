@@ -61,6 +61,30 @@ def test_activity_carries_kind_and_text() -> None:
     }
 
 
+def test_security_status_carries_the_core_fields() -> None:
+    message = protocol.security_status(True, "2026-08-02T21:00:00", 3, "un résumé")
+    assert message == {
+        "type": "security_status",
+        "active": True,
+        "findings_24h": 3,
+        "last_scan_at": "2026-08-02T21:00:00",
+        "latest_summary": "un résumé",
+    }
+
+
+def test_security_status_omits_absent_optional_fields() -> None:
+    """
+    Un daemon éteint (active=False) n'a ni dernier balayage ni signal
+    récent à annoncer — les omettre plutôt que d'envoyer null évite au
+    client de distinguer « absent » de « null » pour rien.
+    """
+    message = protocol.security_status(False, None, 0, None)
+    assert "last_scan_at" not in message
+    assert "latest_summary" not in message
+    assert message["active"] is False
+    assert message["findings_24h"] == 0
+
+
 def test_system_rounds_and_defaults_gpu() -> None:
     """
     Le GPU vaut 0 quand il n'est pas lisible : le HUD affiche une jauge

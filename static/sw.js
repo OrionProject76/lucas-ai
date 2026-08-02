@@ -6,11 +6,12 @@
 // apparaissent un jour — une réponse de LucasCore périmée serait pire
 // qu'une absence de réponse.
 
-// v2 (02/08/2026) : ajout de activity.js (console de flux, IDEAS.md #77).
-// Le nom change pour forcer un install() frais — sans ça, un téléphone
-// avec la PWA déjà installée garderait indéfiniment l'ancien app shell en
-// cache et ne verrait jamais le nouveau fichier.
-const CACHE_NAME = "lucas-shell-v2";
+// v3 (02/08/2026) : ajout de security.js (panneau des privilèges,
+// IDEAS.md #78). Le nom change à chaque fois pour forcer un install()
+// frais — sans ça, un téléphone avec la PWA déjà installée garderait
+// indéfiniment l'ancien app shell en cache et ne verrait jamais le
+// nouveau fichier.
+const CACHE_NAME = "lucas-shell-v3";
 const SHELL_FILES = [
     "/app/",
     "/app/index.html",
@@ -20,6 +21,7 @@ const SHELL_FILES = [
     "/app/js/websocket.js",
     "/app/js/chat.js",
     "/app/js/activity.js",
+    "/app/js/security.js",
     "/app/js/audio.js",
     "/app/js/camera.js",
     "/app/js/app.js",

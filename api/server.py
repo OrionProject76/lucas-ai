@@ -28,6 +28,7 @@ from core.lucas_core import LucasCore
 from core.router import mentions_pc_explicitly, should_use_vision
 from core.world_model import get_snapshot
 from modules.stt_engine import STTEngine, STTUnavailable
+from security.status import get_status as get_security_status
 
 app = FastAPI(title="Luca's API", version="0.2")
 
@@ -197,6 +198,38 @@ async def _push_system_state(websocket: WebSocket) -> None:
         await asyncio.sleep(SYSTEM_PUSH_INTERVAL)
 
 
+# 25 minutes (STALE_AFTER dans security/status.py), pas 1 seconde comme la
+# charge machine : l'état de sécurité ne bouge qu'au rythme des balayages
+# de lucas_daemon.py (5-15 min), lire les deux bases SQLite plus souvent
+# n'apprendrait rien de plus, juste du travail disque en pure perte.
+SECURITY_PUSH_INTERVAL = 30.0
+
+
+async def _push_security_status(websocket: WebSocket) -> None:
+    """
+    État des capteurs niveau 1, pour le panneau des privilèges (IDEAS.md
+    #78, décision Cyril du 02/08/2026). Lit ce que lucas_daemon.py a déjà
+    produit — ne déclenche jamais de balayage lui-même (voir
+    security/status.py, en-tête).
+    """
+    while True:
+        try:
+            status = get_security_status()
+            await websocket.send_json(
+                protocol.security_status(
+                    status.active,
+                    status.last_scan_at,
+                    status.findings_24h,
+                    status.latest_summary,
+                )
+            )
+        except Exception:  # noqa: BLE001 — déconnexion ou bases absentes :
+            # la boucle s'arrête, le chat continue (même garde que
+            # _push_system_state ci-dessus).
+            return
+        await asyncio.sleep(SECURITY_PUSH_INTERVAL)
+
+
 def _save_base64_image(image_base64: str) -> str:
     """
     Décode une photo base64 (message WebSocket "image", pont mobile) vers
@@ -230,6 +263,7 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.send_json(protocol.avatar_state(protocol.STATE_IDLE))
 
     pusher = asyncio.create_task(_push_system_state(websocket))
+    security_pusher = asyncio.create_task(_push_security_status(websocket))
 
     # Identifié via le "hello" — décide si la vision écran AUTOMATIQUE
     # (should_use_vision, plus bas) a un sens pour ce client. Godot tourne
@@ -409,6 +443,7 @@ async def websocket_endpoint(websocket: WebSocket):
         pass
     finally:
         pusher.cancel()
+        security_pusher.cancel()
 
 
 # ── PWA mobile (pont mobile, Phase 4) ──────────────────────────────────

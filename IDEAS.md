@@ -537,12 +537,51 @@ visuelle — pas un nouveau protocole serveur.
 
 ## 78. Panneau des privilèges — indicateur d'état sécurité visible
 
+**Construit le 02/08/2026** — pastille toujours visible (haut gauche de
+la PWA), état réel du **niveau 1** plutôt que d'attendre le tranchage
+niveau 2 : décision explicite de Cyril, qui a préféré un indicateur
+alimenté par de vraies données maintenant à une attente sans date. Le
+niveau 2 reste gelé à l'identique — rien de ce chantier n'en dépend ni
+ne l'entame.
+
+- **Nouvelle lecture, aucun nouveau capteur.** `security/status.py` lit
+  ce que `lucas_daemon.py` produit déjà (`data/lucas_daemon.db` pour la
+  fraîcheur des balayages, `memory/lucas_memory.db` pour les signaux) —
+  il n'appelle jamais Guardian/PrivacyShield lui-même. Afficher un état
+  ne doit pas provoquer une analyse.
+- **« Coffre-fort verrouillé ou non »** (l'exemple de la proposition
+  initiale) n'existe nulle part dans le code, à ce jour comme au moment
+  d'écrire la fiche — remplacé par ce qui existe réellement : surveillance
+  active ou non, dernier balayage, signaux des dernières 24h, résumé du
+  plus récent.
+- **Aucune gravité affichée.** `Finding.severity` (security/types.py) ne
+  survit pas au passage en `system_events` (voir `Finding.as_event()`) —
+  l'inventer à la relecture aurait affiché une certitude que le code
+  n'a plus. Seul le résumé texte, déjà lisible, est repris.
+- **Un daemon éteint se voit clairement** (pastille grise, « surveillance
+  inactive »), jamais masqué derrière un vert rassurant — même principe
+  que le RAG sans résultat (`core/lucas_core.py`) : ne jamais laisser
+  deviner un état vérifiable.
+
+Poussé par le serveur toutes les 30 s (`api/server.py`,
+`SECURITY_PUSH_INTERVAL`) — l'état ne bouge qu'au rythme des balayages du
+daemon (5-15 min), pas besoin de la cadence 1 s de la charge machine.
+
+Tests : `test_security_status.py` (deux vraies bases SQLite temporaires
+par test, jamais les fichiers réels du projet) ; `test_protocol.py`
+(`security_status()`) ; `test_server.py` (push et daemon éteint).
+
+<details>
+<summary>Proposition initiale (02/08/2026)</summary>
+
 Ajout proposé : un élément d'interface visible en permanence (pas
 juste au moment d'une action) indiquant l'état de sécurité courant —
 coffre-fort verrouillé ou non, écoute passive active ou non. Cohérent
 avec le principe de transparence déjà acté. À concevoir une fois que
 la sécurité niveau 2 (décision en attente de Cyril) sera tranchée, pour
 avoir de vrais états à afficher plutôt qu'un indicateur vide de sens.
+
+</details>
 
 ---
 

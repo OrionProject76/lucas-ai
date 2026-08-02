@@ -31,6 +31,12 @@
             logEl: document.getElementById("activity-log"),
             badgeEl: document.getElementById("activity-badge"),
         });
+        const security = new window.Lucas.SecurityBadge({
+            badgeEl: document.getElementById("security-badge"),
+            dotEl: document.getElementById("security-dot"),
+            popoverEl: document.getElementById("security-popover"),
+            textEl: document.getElementById("security-popover-text"),
+        });
 
         const socket = new window.Lucas.LucasSocket({
             onAvatarState: (state) => avatar.setState(state),
@@ -38,6 +44,7 @@
                 if (fromLucas) chat.addLucasMessage(text);
             },
             onActivity: (kind, text) => activity.add(kind, text),
+            onSecurityStatus: (status) => security.update(status),
             onError: (detail) => chat.addError(detail),
             onConnectionChange: (connected) => {
                 banner.classList.toggle("visible", !connected);
