@@ -27,7 +27,9 @@ from config import API_TOKEN
 from core.lucas_core import LucasCore
 from core.router import mentions_pc_explicitly, should_use_vision
 from core.world_model import get_snapshot
+from memory.memory_manager import save_event_from_any_thread
 from modules.stt_engine import STTEngine, STTUnavailable
+from modules.voice_manager import VoiceManager
 from security.status import get_status as get_security_status
 
 app = FastAPI(title="Luca's API", version="0.2")
@@ -38,6 +40,21 @@ app = FastAPI(title="Luca's API", version="0.2")
 # boucle asyncio, un seul thread, donc pas de risque à la partager. La
 # recréer par message rechargerait le modèle Whisper à chaque phrase.
 _stt_engine = STTEngine()
+
+# Même raisonnement pour la voix : PiperEngine met en cache son modèle
+# (~60-75 Mo) au premier usage — le recréer par requête le rechargerait à
+# chaque question routée en local. log_event branché sur la même table
+# que le reste (save_event_from_any_thread) : les événements
+# tts_skipped_sensitive / tts_cloud_on_sensitive doivent s'enregistrer
+# pour le pont mobile exactement comme pour l'UI PySide6 (CLAUDE.md,
+# section TTS) — pas un comportement réservé au bureau.
+_voice_manager = VoiceManager(log_event=save_event_from_any_thread)
+
+_AUDIO_MIME_TYPES = {".mp3": "audio/mpeg", ".wav": "audio/wav"}
+
+
+def _audio_mime_type(path: str) -> str:
+    return _AUDIO_MIME_TYPES.get(Path(path).suffix.lower(), "application/octet-stream")
 
 # CORS ouvert pour l'instant (dev local uniquement).
 # À restreindre à l'IP du mobile une fois le PWA en place (S5).
@@ -437,6 +454,48 @@ async def websocket_endpoint(websocket: WebSocket):
                 protocol.avatar_state(protocol.STATE_SPEAKING, answer)
             )
             await websocket.send_json(protocol.chat(answer, from_luca=True))
+
+            # Voix (pont mobile TTS) : le texte part D'ABORD, la synthèse
+            # ensuite — edge_tts prend plusieurs secondes (réseau), et
+            # Cyril ne doit pas attendre l'audio pour lire la réponse.
+            # Optionnelle, jamais déclenchée sans le demander explicitement
+            # (voir protocol.read_speak_flag) — même défaut que le toggle
+            # TTS Auto de l'UI PySide6.
+            if protocol.read_speak_flag(data):
+                try:
+                    audio_path = await asyncio.to_thread(
+                        _voice_manager.synthesize_routed, answer, message
+                    )
+                except Exception as exc:  # noqa: BLE001 — une panne TTS ne
+                    # doit jamais invalider une réponse texte déjà envoyée.
+                    await websocket.send_json(
+                        protocol.activity("voice", f"voix indisponible : {exc}"[:120])
+                    )
+                else:
+                    if audio_path:
+                        with open(audio_path, "rb") as audio_file:
+                            audio_b64 = base64.b64encode(audio_file.read()).decode("ascii")
+                        mime = _audio_mime_type(audio_path)
+                        await websocket.send_json(protocol.speech(audio_b64, mime))
+                        await websocket.send_json(
+                            protocol.activity(
+                                "voice", f"voix synthétisée ({mime.split('/')[-1]})"
+                            )
+                        )
+                    else:
+                        # synthesize_routed() rend None sur contenu sensible
+                        # + voix locale indisponible
+                        # (modules/voice_manager.py) — jamais un silence
+                        # côté PWA : Cyril doit savoir que la voix a été
+                        # sciemment coupée, pas qu'elle a échoué.
+                        await websocket.send_json(
+                            protocol.activity(
+                                "voice",
+                                "voix non prononcée — contenu sensible, "
+                                "voix locale indisponible",
+                            )
+                        )
+
             await websocket.send_json(protocol.avatar_state(protocol.STATE_IDLE))
 
     except WebSocketDisconnect:

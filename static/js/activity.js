@@ -16,6 +16,7 @@ window.Lucas = window.Lucas || {};
         screen_read: "🖥️",
         documents_searched: "📄",
         answered: "✅",
+        voice: "🔊",
     };
 
     function timestamp() {

@@ -41,7 +41,7 @@ fiabilité : le tableau §3 ne définit que les Phases 0 à 5), branche
 |---|---|
 | Mémoire enrichie | Contexte conversation + events système (World Model) injectés dans le prompt |
 | RAG documents personnels | ✅ **Fait et validé en conditions réelles (01/08/2026).** 39 documents de Cyril indexés, 229 morceaux. Point d'entrée `memory/index_documents.py` (relançable sans risque), lecture `.pdf` / `.docx` / texte, recherche hybride sémantique + date, seuil de pertinence calibré sur le corpus réel. Voir l'encadré ci-dessous. |
-| TTS intégré au chat | Bouton + lecture auto dans l'UI PySide6, brancher `modules/voice_manager.py` (à re-tester) |
+| TTS intégré au chat | ✅ UI PySide6 fait de longue date. **Pont mobile (PWA) fait et validé le 02/08/2026** — voir encadré ci-dessous. |
 | Finance CSV | Import + catégorisation, dashboard simple (MVP, pas d'API bancaire — règle actée) |
 
 #### ✅ RAG documents personnels — terminé le 01/08/2026
@@ -68,6 +68,60 @@ venv\Scripts\python.exe demos\calibrate_rag.py
 changement du format d'indexation incrémente `RAGManager._FORMAT_VERSION`,
 ce qui force la réindexation — sinon la base resterait silencieusement à
 l'ancien format.
+
+#### ✅ TTS — pont mobile (PWA) — terminé le 02/08/2026
+
+`modules/voice_manager.py` et le routage local/cloud (`core.router.route_voice()`)
+existaient déjà, mais uniquement branchés sur l'UI PySide6
+(`ui/main_window.py`, `TTSWorker`) — l'API WebSocket n'envoyait jamais
+d'audio en retour, et la PWA n'avait aucun code de lecture. Recommandé
+par Claude Code comme prochaine étape naturelle du pont mobile (le
+téléphone pouvait déjà écrire, parler et montrer une photo à Luca's,
+mais jamais l'entendre répondre), validé par Cyril.
+
+**Point d'architecture** : `VoiceManager.speak()` joue l'audio
+*localement* (`pygame.mixer`, haut-parleurs du PC) — inadapté à la PWA,
+qui doit jouer le son sur le téléphone. Nouvelle méthode publique
+`synthesize_routed()` : route et synthétise SANS jouer, `speak()` en
+devient un fin appelant (comportement bureau inchangé, tests existants
+non touchés). Le serveur lit le fichier produit, l'encode en base64, et
+le renvoie via un nouveau message `"speech"` — nommé ainsi et pas
+`"audio"` pour ne pas entrer en collision avec le type ENTRANT `"audio"`
+(micro du téléphone).
+
+**edge_tts appelle `asyncio.run()` en interne** ; l'appeler tel quel
+depuis le handler WebSocket (déjà dans une boucle asyncio active) aurait
+levé une erreur. Résolu avec `asyncio.to_thread(...)`, qui exécute la
+synthèse dans un thread séparé — même principe que `TTSWorker` (un
+`QThread`) côté bureau, qui échappe au problème pour la même raison.
+
+**Optionnel, désactivé par défaut** — bouton 🔊/🔇 dans la PWA
+(`static/js/voice_output.js`), même défaut que le toggle « TTS Auto » de
+l'UI PySide6 (`tts_auto = False`). Le texte part TOUJOURS en premier,
+la synthèse ensuite : edge_tts prend plusieurs secondes (réseau), Cyril
+ne doit pas attendre l'audio pour lire la réponse.
+
+**Transparence** : la console de flux (#77) affiche maintenant aussi la
+voix — synthétisée (et via quel moteur), non prononcée (contenu
+sensible + Piper indisponible), ou en panne. Un événement TTS jamais
+silencieux, cohérent avec le principe déjà appliqué au RAG et à l'écran.
+
+**Validé en conditions réelles**, vrai serveur, vrai edge_tts, vrai
+Piper — pas seulement en tests :
+
+| Question | Routage | Résultat |
+|---|---|---|
+| « Quelle est la capitale de l'Italie ? » | cloud (edge_tts) | `audio/mpeg`, 38 016 octets, symbole MP3 valide |
+| « Quel est mon salaire ce mois-ci ? » | local (Piper) | `audio/wav`, 752 684 octets, symbole RIFF/WAVE valide |
+
+Le routage sensible/non-sensible déjà établi pour `route_voice()`
+n'a pas été retouché — seulement branché sur un nouveau transport.
+
+Tests : `test_protocol.py` (`speech()`, `read_speak_flag()`),
+`test_server.py` (chemin heureux, refus silencieux annoncé, panne TTS
+qui n'invalide pas la réponse texte, mime mp3/wav, image et audio
+transcrit peuvent aussi être prononcés), `test_voice_router.py`
+(`synthesize_routed()` délègue correctement).
 
 **Fait le 02/08/2026** : les PDF scannés (cartes d'identité, certains
 contrats) passent maintenant par `modules/ocr_engine.py` (RapidOCR, déjà

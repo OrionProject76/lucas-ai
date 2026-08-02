@@ -85,6 +85,29 @@ def test_security_status_omits_absent_optional_fields() -> None:
     assert message["findings_24h"] == 0
 
 
+def test_speech_carries_audio_and_mime() -> None:
+    assert protocol.speech("QUJD", "audio/mpeg") == {
+        "type": "speech",
+        "audio_base64": "QUJD",
+        "mime": "audio/mpeg",
+    }
+
+
+@pytest.mark.parametrize(
+    "payload, expected",
+    [
+        ({"speak": True}, True),
+        ({"speak": False}, False),
+        ({}, False),
+        ({"speak": "oui"}, True),  # une chaîne non vide reste truthy
+        ({"speak": ""}, False),
+        ("pas un dict", False),
+    ],
+)
+def test_read_speak_flag(payload, expected: bool) -> None:
+    assert protocol.read_speak_flag(payload) is expected
+
+
 def test_system_rounds_and_defaults_gpu() -> None:
     """
     Le GPU vaut 0 quand il n'est pas lisible : le HUD affiche une jauge

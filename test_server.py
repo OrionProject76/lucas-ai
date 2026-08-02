@@ -58,6 +58,24 @@ def _no_real_security_status_by_default(monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def _no_real_tts_by_default(monkeypatch):
+    """
+    Isole la suite du vrai VoiceManager (edge_tts part sur le réseau,
+    Piper charge un modèle .onnx) — même défaut que ci-dessus pour
+    API_TOKEN et l'état de sécurité. La quasi-totalité des tests
+    n'envoient jamais "speak": true, donc ce chemin n'est même pas
+    emprunté ; ce garde-fou couvre les rares tests qui l'envoient sans
+    poser fake_voice explicitement.
+    """
+
+    class _SilentVoiceManager:
+        def synthesize_routed(self, text, question=""):
+            return None
+
+    monkeypatch.setattr("api.server._voice_manager", _SilentVoiceManager())
+
+
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(app)
@@ -134,6 +152,28 @@ def fake_stt(monkeypatch):
     monkeypatch.setattr("api.server._stt_engine", double)
     calls["_double"] = double  # pour permuter texte/boom depuis un test
     calls["_STTUnavailable"] = STTUnavailable
+    return calls
+
+
+@pytest.fixture
+def fake_voice(monkeypatch, tmp_path):
+    """
+    Remplace _voice_manager par un double qui produit un vrai petit
+    fichier (le serveur le lit et l'encode en base64) sans jamais
+    toucher edge_tts ni Piper.
+    """
+    calls: dict[str, object] = {}
+    audio_path = tmp_path / "output.mp3"
+    audio_path.write_bytes(b"FAKE-MP3-BYTES")
+
+    class _FakeVoiceManager:
+        def synthesize_routed(self, text, question=""):
+            calls["text"] = text
+            calls["question"] = question
+            return str(audio_path)
+
+    monkeypatch.setattr("api.server._voice_manager", _FakeVoiceManager())
+    calls["_audio_path"] = audio_path
     return calls
 
 
@@ -551,6 +591,167 @@ def test_websocket_silence_returns_to_idle_without_asking_lucas(client, fake_cor
 
     assert "toujours vivant" in message["text"]
     assert "asked" not in fake_core or fake_core["asked"] != ""
+
+
+# ── Voix (pont mobile TTS) ──────────────────────────────────────────────
+#
+# Optionnelle : la vaste majorité des tests ci-dessus n'envoient jamais
+# "speak", donc ce chemin n'est même pas emprunté — vérifié explicitement
+# ici (première fonction) pour que ce ne soit pas juste une supposition.
+
+def test_websocket_sends_no_speech_without_the_speak_flag(client, fake_core, fake_voice) -> None:
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "chat", "message": "bonjour"})
+
+        types_seen = []
+        for _ in range(15):
+            message = ws.receive_json()
+            types_seen.append(message.get("type"))
+            if message.get("type") == "chat":
+                break
+
+    assert "speech" not in types_seen
+    assert fake_voice.get("text") is None, "synthesize_routed() n'a pas dû être appelé"
+
+
+def test_websocket_sends_speech_when_requested(client, fake_core, fake_voice) -> None:
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "chat", "message": "bonjour", "speak": True})
+        speech = _next_of_type(ws, "speech", limit=20)
+
+    assert speech["mime"] == "audio/mpeg"  # le double rend un chemin .mp3
+    assert base64.b64decode(speech["audio_base64"]) == b"FAKE-MP3-BYTES"
+    # Le texte routé doit être la RÉPONSE (fake_core la préfixe « réponse
+    # à « ... » »), la question sert au routage — route_voice() regarde
+    # les deux (voir modules/voice_manager.py).
+    assert "bonjour" in fake_voice["text"] and fake_voice["text"] != "bonjour"
+    assert fake_voice["question"] == "bonjour"
+
+
+def test_websocket_reports_a_synthesized_voice_as_an_activity(client, fake_core, fake_voice) -> None:
+    """
+    Console de flux (IDEAS.md #77) : la voix est un fait à afficher,
+    comme le reste. ⚠️ Cet événement arrive APRÈS « chat » dans le flux
+    (le texte part d'abord, la synthèse ensuite) — attendre le idle qui
+    SUIT le chat, pas le idle initial de connexion (déjà en file
+    d'attente avant même l'envoi du message).
+    """
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "chat", "message": "bonjour", "speak": True})
+
+        types_seen, activity_texts = [], []
+        for _ in range(20):
+            message = ws.receive_json()
+            types_seen.append(message.get("type"))
+            if message.get("type") == "activity":
+                activity_texts.append(message["text"])
+            if (
+                message.get("type") == "avatar_state"
+                and message.get("state") == "idle"
+                and "chat" in types_seen
+            ):
+                break
+
+    assert any("voix synthétisée" in text and "mpeg" in text for text in activity_texts)
+
+
+def test_websocket_reports_declined_speech_plainly(client, fake_core, monkeypatch) -> None:
+    """
+    synthesize_routed() rend None sur contenu sensible + voix locale
+    indisponible (modules/voice_manager.py) — jamais un silence côté
+    PWA : Cyril doit savoir que la voix a été sciemment coupée.
+    """
+    class _DecliningVoiceManager:
+        def synthesize_routed(self, text, question=""):
+            return None
+
+    monkeypatch.setattr("api.server._voice_manager", _DecliningVoiceManager())
+
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "chat", "message": "mon salaire", "speak": True})
+
+        types_seen, activity_texts = [], []
+        for _ in range(20):
+            message = ws.receive_json()
+            types_seen.append(message.get("type"))
+            if message.get("type") == "activity":
+                activity_texts.append(message["text"])
+            if (
+                message.get("type") == "avatar_state"
+                and message.get("state") == "idle"
+                and "chat" in types_seen
+            ):
+                break
+
+    assert "speech" not in types_seen
+    assert any("non prononcée" in text for text in activity_texts)
+
+
+def test_websocket_a_tts_crash_does_not_break_the_text_answer(client, fake_core, monkeypatch) -> None:
+    """
+    Une panne de synthèse (edge_tts hors ligne, par ex.) ne doit jamais
+    invalider une réponse texte déjà prête — même garde que pour la
+    vision et l'audio ailleurs dans ce fichier.
+    """
+    class _CrashingVoiceManager:
+        def synthesize_routed(self, text, question=""):
+            raise RuntimeError("réseau indisponible")
+
+    monkeypatch.setattr("api.server._voice_manager", _CrashingVoiceManager())
+
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "chat", "message": "bonjour", "speak": True})
+
+        types_seen, activity_texts = [], []
+        for _ in range(20):
+            message = ws.receive_json()
+            types_seen.append(message.get("type"))
+            if message.get("type") == "activity":
+                activity_texts.append(message["text"])
+            if message.get("type") == "avatar_state" and message.get("state") == "idle" and "chat" in types_seen:
+                break
+
+    assert "chat" in types_seen, "la réponse texte doit partir malgré la panne TTS"
+    assert "speech" not in types_seen
+    assert any("voix indisponible" in text for text in activity_texts)
+    assert types_seen[-1] == "avatar_state", "la connexion doit terminer proprement, pas planter"
+
+
+def test_websocket_speech_mime_matches_wav_for_piper(client, fake_core, monkeypatch, tmp_path) -> None:
+    audio_path = tmp_path / "output_piper.wav"
+    audio_path.write_bytes(b"FAKE-WAV-BYTES")
+
+    class _PiperVoiceManager:
+        def synthesize_routed(self, text, question=""):
+            return str(audio_path)
+
+    monkeypatch.setattr("api.server._voice_manager", _PiperVoiceManager())
+
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "chat", "message": "bonjour", "speak": True})
+        speech = _next_of_type(ws, "speech", limit=20)
+
+    assert speech["mime"] == "audio/wav"
+
+
+def test_websocket_image_reply_can_also_be_spoken(client, fake_core, fake_voice) -> None:
+    """La voix ne doit pas être réservée au texte tapé — même mécanisme partout."""
+    image_b64 = base64.b64encode(b"donnees-image-factices").decode()
+
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "image", "image_base64": image_b64, "speak": True})
+        speech = _next_of_type(ws, "speech", limit=20)
+
+    assert base64.b64decode(speech["audio_base64"]) == b"FAKE-MP3-BYTES"
+
+
+def test_websocket_audio_transcript_reply_can_also_be_spoken(client, fake_core, fake_stt, fake_voice) -> None:
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "audio", "audio_base64": "ZmF1eCBhdWRpbw==", "speak": True})
+        speech = _next_of_type(ws, "speech", limit=20)
+
+    assert base64.b64decode(speech["audio_base64"]) == b"FAKE-MP3-BYTES"
+    assert fake_voice["question"] == "audio transcrit"
 
 
 # ── Jeton API (prérequis pont mobile) ──────────────────────────────────

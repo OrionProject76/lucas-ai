@@ -106,6 +106,37 @@ def security_status(
     return message
 
 
+def speech(audio_base64: str, mime: str) -> dict:
+    """
+    Réponse vocale synthétisée — pont mobile TTS. Le routage local/cloud
+    est déjà tranché avant l'appel (core.router.route_voice(),
+    modules/voice_manager.py) : ce message ne transporte que le
+    résultat, jamais la décision.
+
+    ⚠️ Nommé « speech », pas « audio » : le type ENTRANT « audio »
+    désigne déjà le micro du téléphone (capture, voir read_user_audio()
+    ci-dessous). Réutiliser le même mot dans l'autre sens aurait été un
+    piège pour quiconque relit le protocole plus tard — même sens que
+    ceux du client, pas le nom qu'on utilise pour en parler.
+    """
+    return {"type": "speech", "audio_base64": audio_base64, "mime": mime}
+
+
+def read_speak_flag(data: dict) -> bool:
+    """
+    Cyril veut-il une réponse vocale pour ce message ?
+
+    Optionnel, faux par défaut : la voix ne doit jamais se déclencher
+    sans que ce soit explicitement demandé — voir
+    static/js/voice_output.js, qui reflète le bouton 🔊/🔇 de la PWA,
+    lui-même désactivé par défaut (même défaut que le toggle TTS Auto de
+    l'UI PySide6, ui/main_window.py).
+    """
+    if not isinstance(data, dict):
+        return False
+    return bool(data.get("speak"))
+
+
 def error(detail: str) -> dict:
     """Panne côté serveur, à afficher plutôt qu'à laisser en silence."""
     return {"type": "error", "detail": detail}
@@ -115,7 +146,7 @@ def error(detail: str) -> dict:
 # on_activity) — pas une liste fermée à valider, juste ce que le serveur
 # émet aujourd'hui. Un « kind » inconnu ne casse rien côté client : la
 # console de flux affiche une puce générique plutôt que rien.
-ACTIVITY_KINDS = ("routed", "screen_read", "documents_searched", "answered")
+ACTIVITY_KINDS = ("routed", "screen_read", "documents_searched", "answered", "voice")
 
 
 def activity(kind: str, text: str) -> dict:

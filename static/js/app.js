@@ -37,6 +37,9 @@
             popoverEl: document.getElementById("security-popover"),
             textEl: document.getElementById("security-popover-text"),
         });
+        const voiceOutput = new window.Lucas.VoiceOutput({
+            toggleEl: document.getElementById("speak-toggle"),
+        });
 
         const socket = new window.Lucas.LucasSocket({
             onAvatarState: (state) => avatar.setState(state),
@@ -45,6 +48,7 @@
             },
             onActivity: (kind, text) => activity.add(kind, text),
             onSecurityStatus: (status) => security.update(status),
+            onSpeech: (audioBase64, mime) => voiceOutput.play(audioBase64, mime),
             onError: (detail) => chat.addError(detail),
             onConnectionChange: (connected) => {
                 banner.classList.toggle("visible", !connected);
@@ -59,17 +63,18 @@
             const text = input.value.trim();
             if (!text) return;
             chat.addUserMessage(text);
-            socket.sendChat(text);
+            socket.sendChat(text, voiceOutput.enabled);
             input.value = "";
         });
 
         new window.Lucas.MicRecorder(document.getElementById("mic-btn"), {
-            onAudioReady: (audioBase64) => socket.sendAudio(audioBase64),
+            onAudioReady: (audioBase64) => socket.sendAudio(audioBase64, voiceOutput.enabled),
             onError: (message) => chat.addError(message),
         });
 
         new window.Lucas.CameraCapture(document.getElementById("camera-btn"), {
-            onImageReady: (imageBase64) => socket.sendImage(imageBase64),
+            onImageReady: (imageBase64) =>
+                socket.sendImage(imageBase64, undefined, voiceOutput.enabled),
             onError: (message) => chat.addError(message),
         });
 

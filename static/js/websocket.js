@@ -15,6 +15,7 @@ window.Lucas = window.Lucas || {};
             onChat,
             onActivity,
             onSecurityStatus,
+            onSpeech,
             onError,
             onConnectionChange,
         }) {
@@ -22,6 +23,7 @@ window.Lucas = window.Lucas || {};
             this.onChat = onChat;
             this.onActivity = onActivity || (() => {});
             this.onSecurityStatus = onSecurityStatus || (() => {});
+            this.onSpeech = onSpeech || (() => {});
             this.onError = onError;
             this.onConnectionChange = onConnectionChange || (() => {});
             this.socket = null;
@@ -88,6 +90,12 @@ window.Lucas = window.Lucas || {};
                         latest_summary: data.latest_summary || null,
                     });
                     break;
+                case "speech":
+                    // Réponse vocale synthétisée — distinct du type ENTRANT
+                    // "audio" (micro du téléphone, sendAudio() plus bas).
+                    // Voir api/protocol.py, speech().
+                    this.onSpeech(data.audio_base64 || "", data.mime || "");
+                    break;
                 case "error":
                     this.onError(data.detail || "erreur inconnue");
                     break;
@@ -106,17 +114,22 @@ window.Lucas = window.Lucas || {};
             }
         }
 
-        sendChat(text) {
-            this._send({ type: "chat", text });
+        sendChat(text, speak) {
+            const payload = { type: "chat", text };
+            if (speak) payload.speak = true;
+            this._send(payload);
         }
 
-        sendAudio(audioBase64) {
-            this._send({ type: "audio", audio_base64: audioBase64 });
+        sendAudio(audioBase64, speak) {
+            const payload = { type: "audio", audio_base64: audioBase64 };
+            if (speak) payload.speak = true;
+            this._send(payload);
         }
 
-        sendImage(imageBase64, text) {
+        sendImage(imageBase64, text, speak) {
             const payload = { type: "image", image_base64: imageBase64 };
             if (text) payload.text = text;
+            if (speak) payload.speak = true;
             this._send(payload);
         }
     }

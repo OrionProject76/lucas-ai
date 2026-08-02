@@ -161,6 +161,19 @@ class VoiceManager:
         self.play_audio(audio_path)
         return audio_path
 
+    def synthesize_routed(self, text: str, question: str = "") -> str | None:
+        """
+        Route puis synthétise, SANS jouer le son.
+
+        Pour un appelant qui joue l'audio ailleurs que sur cette machine —
+        le pont mobile (api/server.py) renvoie le fichier au téléphone,
+        qui le joue lui-même. `speak()` reste le bon choix pour une
+        lecture locale (UI PySide6, `pygame.mixer` sur les haut-parleurs
+        du PC) : jouer ici aussi ferait entendre Luca's sur le PC à
+        chaque question posée depuis le téléphone.
+        """
+        return self._synthesize_routed(text, question)
+
     def _synthesize_routed(self, text: str, question: str = "") -> str | None:
         """Applique la règle de sensibilité et produit le fichier audio."""
         if route_voice(text, question) != "local":

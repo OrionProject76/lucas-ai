@@ -89,6 +89,19 @@ def test_sensitive_content_goes_to_piper(spy_manager) -> None:
     assert spy.edge_calls == [], "un contenu sensible ne doit jamais partir chez Microsoft"
 
 
+def test_synthesize_routed_is_the_public_route_no_play(spy_manager) -> None:
+    """
+    synthesize_routed() (méthode publique, pont mobile — api/server.py)
+    doit router exactement comme _synthesize_routed(), sans jouer le
+    son. Elle ne fait que déléguer, mais une régression sur cette
+    délégation planterait silencieusement toute réponse vocale mobile.
+    """
+    manager, spy = spy_manager
+    result = manager.synthesize_routed("Il fait beau.", "quel temps fait-il ?")
+    assert result == "data/output.mp3"
+    assert spy.edge_calls == ["Il fait beau."]
+
+
 def test_piper_unavailable_stays_silent_by_default(spy_manager, monkeypatch) -> None:
     """Défaut : pas de son plutôt qu'une fuite vers le cloud."""
     manager, spy = spy_manager
