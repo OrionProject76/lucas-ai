@@ -157,21 +157,22 @@ STT_MODEL_SIZE = "base"
 STT_CACHE_SIZE: int = 20
 
 # --- API ---
-# ⚠️ 127.0.0.1 : l'API n'est joignable que depuis ce PC.
-# À REVOIR EN PHASE 4 (mobile/PWA) : passer à 0.0.0.0 exigera d'avoir déjà
-# un API_TOKEN non vide, sinon le téléphone ouvre la porte à tout le réseau.
-# Décision actée le 01/08/2026, voir ROADMAP.md §5.1.
-API_HOST = "127.0.0.1"
+# ⚠️ Ouverte au réseau local le 02/08/2026, à la demande explicite de
+# Cyril, pour le premier test PWA depuis le S25 Ultra — voir ROADMAP.md
+# §2. PRÉALABLE posé dans le même geste : API_TOKEN (juste en dessous)
+# renseigné dans .env AVANT ce changement, jamais après — sinon
+# n'importe quel appareil du WiFi lit l'historique complet des
+# conversations sans rien prouver.
+# Décision de principe actée le 01/08/2026, voir ROADMAP.md §5.1.
+API_HOST = "0.0.0.0"
 API_PORT = 8000
 
-# Jeton partagé pour l'API — brique posée le 02/08/2026, PAS ENCORE
-# appliquée à API_HOST (qui reste 127.0.0.1 par défaut, décision distincte
-# et non tranchée seule, voir ROADMAP.md §2 « Session du 02/08/2026 »).
+# Jeton partagé pour l'API — brique posée le 02/08/2026, appliquée le
+# jour même (voir ROADMAP.md §2 « Session du 02/08/2026 »).
 #
-# Vide par défaut : api/server.py n'exige alors AUCUN jeton, exactement le
-# comportement d'aujourd'hui — poser cette brique ne change rien tant que
-# personne ne renseigne une valeur. Le jour où API_HOST passe à 0.0.0.0,
-# renseigner une valeur ici devient un PRÉALABLE, pas une suite.
+# Vide par défaut (voir .env.example) : api/server.py n'exigerait alors
+# aucun jeton. Une vraie valeur est OBLIGATOIRE dès qu'API_HOST n'est plus
+# "127.0.0.1" — c'est le cas depuis la ligne au-dessus.
 API_TOKEN: str = os.getenv("API_TOKEN", "")
 
 # --- Sécurité : mémoire des comportements ---

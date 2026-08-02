@@ -1,7 +1,23 @@
 // static/js/app.js — assemble avatar, websocket, chat, micro et caméra.
 
 (function () {
+    // Jeton passé une seule fois par lien (?token=...), pour configurer le
+    // téléphone sans écran de réglages à construire. Sauvegardé puis retiré
+    // de l'URL tout de suite : un jeton ne doit pas traîner dans l'historique
+    // ou les favoris du navigateur.
+    function _saveTokenFromUrl() {
+        const params = new URLSearchParams(location.search);
+        const token = params.get("token");
+        if (!token) return;
+        window.localStorage.setItem("lucas_api_token", token);
+        params.delete("token");
+        const clean = location.pathname + (params.toString() ? `?${params}` : "");
+        history.replaceState(null, "", clean);
+    }
+
     document.addEventListener("DOMContentLoaded", () => {
+        _saveTokenFromUrl();
+
         const avatar = new window.Lucas.Avatar(
             document.getElementById("avatar-canvas"),
             document.getElementById("avatar-label")

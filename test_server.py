@@ -19,6 +19,22 @@ from fastapi.testclient import TestClient
 from api.server import app
 
 
+@pytest.fixture(autouse=True)
+def _no_token_by_default(monkeypatch):
+    """
+    Isole la suite de la vraie valeur d'API_TOKEN dans .env de la machine.
+
+    ⚠️ Sans ceci, ces tests dépendent silencieusement du poste où ils
+    tournent : une fois un vrai jeton renseigné dans .env (pont mobile,
+    02/08/2026), tous les tests WebSocket se sont mis à échouer — la
+    connexion se refusait faute de jeton fourni. Un test ne doit jamais
+    dépendre d'un secret local ; les tests qui veulent un vrai jeton le
+    posent eux-mêmes via monkeypatch (ex. fixture ci-dessous), ce qui
+    prévaut sur ce défaut pour la durée du test grâce à monkeypatch.
+    """
+    monkeypatch.setattr("api.server.API_TOKEN", "")
+
+
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(app)

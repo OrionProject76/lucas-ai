@@ -368,6 +368,58 @@ n'est branché ; format audio du navigateur (`audio/webm;codecs=opus`) non
 vérifié contre le vrai backend Whisper — seul un WAV synthétique l'a été
 jusqu'ici (session précédente).
 
+### 🟢 Session du 02/08/2026 (suite) — API ouverte au réseau, premier test téléphone
+
+À la demande explicite de Cyril : `API_HOST` passé de `127.0.0.1` à
+`0.0.0.0` dans `config.py`, pour que le S25 Ultra puisse joindre l'API.
+
+**Fait dans le même geste, avant l'ouverture réseau, jamais après** :
+`.env` créé (n'existait pas encore) avec un `API_TOKEN` réel généré
+(`secrets.token_urlsafe`). Sans ce préalable, ouvrir `0.0.0.0` aurait
+rendu tout l'historique de conversation lisible par n'importe quel
+appareil du WiFi sans rien prouver — exactement le risque documenté
+depuis le 01/08 (§5.1) et repris lors de la construction du jeton plus
+tôt aujourd'hui (§2 ci-dessus).
+
+**Ajout côté PWA** : `static/js/app.js` lit maintenant un `?token=...`
+dans l'URL au chargement, le range dans `localStorage`, puis le retire
+de l'URL (`history.replaceState`) — pour configurer le téléphone en un
+seul lien ouvert, sans écran de réglages à construire pour l'instant.
+
+**⚠️ Bug de test trouvé et corrigé en marge de ce changement** : créer un
+vrai `.env` avec un vrai `API_TOKEN` a fait échouer 27 tests d'un coup —
+la suite supposait silencieusement `API_TOKEN` vide par défaut, ce qui
+n'était vrai que tant qu'aucun `.env` réel n'existait sur la machine. Un
+test ne doit jamais dépendre du contenu réel de `.env` du poste où il
+tourne. Corrigé par une fixture `autouse` dans `test_server.py`
+(`_no_token_by_default`) qui force `api.server.API_TOKEN` à `""` avant
+chaque test ; les tests qui veulent un vrai jeton le posent eux-mêmes
+via `monkeypatch`, qui prévaut pour la durée du test. 605/605 après
+correction.
+
+**Vérifié depuis le PC** (pas encore depuis le téléphone lui-même à
+l'écriture de cette note) : IP locale obtenue (`192.168.1.14` en WiFi,
+`192.168.1.12` en Ethernet — même sous-réseau), `GET /status` répond en
+`200` sans jeton (endpoint non protégé), `GET /system` répond `401` sans
+jeton et `200` avec, `GET /app/` sert la PWA — le tout via l'IP LAN, pas
+seulement `127.0.0.1`.
+
+**Non vérifié, hors de portée depuis cet environnement** : le test
+depuis le téléphone lui-même — nécessite que Cyril ouvre l'URL sur le
+S25 Ultra, aucun outil ici ne peut piloter son téléphone. Deux blocages
+possibles à anticiper s'il ne se connecte pas du premier coup :
+- **Pare-feu Windows** : aucune règle dédiée trouvée pour le port 8000 au
+  moment de la vérification (lecture seule — jamais modifié, une
+  modification de pare-feu est une action interdite pour Claude Code,
+  voir CLAUDE.md). Si Windows affiche une invite « autoriser python.exe
+  sur les réseaux privés », c'est à Cyril de répondre.
+- **Micro/caméra resteront inutilisables depuis le téléphone tant que
+  l'accès se fait en `http://` simple** : `getUserMedia()` exige un
+  contexte sécurisé (HTTPS, ou `localhost`) — une IP locale en clair ne
+  l'est pas. Le chat fonctionnera, pas les boutons micro/caméra. Prévu
+  et documenté dès `static/js/audio.js`, confirmé structurel ici : il
+  faudra du TLS, pas seulement le jeton, avant un vrai usage mobile complet.
+
 ---
 
 ## 4. Principe directeur
