@@ -3,20 +3,29 @@
 [ext_resource type="Script" path="res://scenes/face/face_controller.gd" id="1_ctrl"]
 [ext_resource type="Shader" path="res://shaders/hologram.gdshader" id="2_holo"]
 
+; ⚠️ PALETTE — le probleme n'etait pas la luminosite mais la SATURATION.
+; Tout etait en cyan pur (0, 1, 1) : la couleur la plus saturee possible
+; sur un ecran, agressive par construction quelle que soit sa luminosite.
+; Trois baisses de luminosite successives n'y avaient rien change.
+; Palette « bleu glacier » desaturee, et surtout une HIERARCHIE DE
+; VALEURS : la tete s'efface (0.12), les traits ressortent (0.26-0.30).
+; Avant, tout etait a 0.18, donc rien ne se detachait — c'est ce qui
+; rendait les yeux et la bouche illisibles.
+
 [sub_resource type="ShaderMaterial" id="ShaderMat_head"]
 render_priority = 0
 shader = ExtResource("2_holo")
-shader_parameter/surface_brightness = 0.18
-shader_parameter/base_color = Color(0, 0.5, 0.9, 0.05)
-shader_parameter/glow_color = Color(0, 1, 1, 1)
-shader_parameter/rim_color = Color(0.2, 0.9, 1, 1)
-shader_parameter/scanline_count = 120.0
-shader_parameter/scanline_speed = 3.0
+shader_parameter/surface_brightness = 0.12
+shader_parameter/base_color = Color(0.35, 0.62, 0.7, 0.06)
+shader_parameter/glow_color = Color(0.55, 0.85, 0.92, 1)
+shader_parameter/rim_color = Color(0.75, 0.92, 0.96, 1)
+shader_parameter/scanline_count = 90.0
+shader_parameter/scanline_speed = 2.0
 shader_parameter/fresnel_power = 2.5
-shader_parameter/glitch_intensity = 0.1
-shader_parameter/time_scale = 1.5
-shader_parameter/pulse_speed = 2.5
-shader_parameter/wireframe_intensity = 0.8
+shader_parameter/glitch_intensity = 0.05
+shader_parameter/time_scale = 1.0
+shader_parameter/pulse_speed = 1.6
+shader_parameter/wireframe_intensity = 0.5
 
 [sub_resource type="SphereMesh" id="SphereMesh_head"]
 radius = 2.5
@@ -27,16 +36,16 @@ rings = 48
 [sub_resource type="ShaderMaterial" id="ShaderMat_eye"]
 render_priority = 1
 shader = ExtResource("2_holo")
-shader_parameter/surface_brightness = 0.18
-shader_parameter/base_color = Color(0, 1, 1, 0.9)
-shader_parameter/glow_color = Color(0.8, 1, 1, 1)
+shader_parameter/surface_brightness = 0.3
+shader_parameter/base_color = Color(0.7, 0.9, 0.95, 0.95)
+shader_parameter/glow_color = Color(0.85, 0.95, 1, 1)
 shader_parameter/rim_color = Color(1, 1, 1, 1)
 shader_parameter/scanline_count = 0.0
 shader_parameter/scanline_speed = 0.0
 shader_parameter/fresnel_power = 0.8
 shader_parameter/glitch_intensity = 0.0
-shader_parameter/time_scale = 3.0
-shader_parameter/pulse_speed = 5.0
+shader_parameter/time_scale = 2.0
+shader_parameter/pulse_speed = 3.0
 shader_parameter/wireframe_intensity = 0.0
 
 [sub_resource type="SphereMesh" id="SphereMesh_eye"]
@@ -46,48 +55,57 @@ radial_segments = 32
 rings = 24
 
 [sub_resource type="BoxMesh" id="BoxMesh_mouth"]
-size = Vector3(1.2, 0.3, 0.25)
+size = Vector3(1.5, 0.16, 0.18)
 
 [sub_resource type="ShaderMaterial" id="ShaderMat_mouth"]
 render_priority = 1
 shader = ExtResource("2_holo")
-shader_parameter/surface_brightness = 0.18
-shader_parameter/base_color = Color(0, 0.9, 1, 0.7)
-shader_parameter/glow_color = Color(0.3, 1, 0.9, 1)
-shader_parameter/rim_color = Color(0, 1, 0.8, 1)
-shader_parameter/scanline_count = 30.0
-shader_parameter/scanline_speed = 6.0
+shader_parameter/surface_brightness = 0.26
+shader_parameter/base_color = Color(0.55, 0.8, 0.88, 0.8)
+shader_parameter/glow_color = Color(0.7, 0.88, 0.94, 1)
+shader_parameter/rim_color = Color(0.85, 0.95, 1, 1)
+shader_parameter/scanline_count = 0.0
+shader_parameter/scanline_speed = 0.0
 shader_parameter/fresnel_power = 1.5
 shader_parameter/glitch_intensity = 0.0
-shader_parameter/time_scale = 4.0
-shader_parameter/pulse_speed = 8.0
+shader_parameter/time_scale = 2.0
+shader_parameter/pulse_speed = 4.0
 shader_parameter/wireframe_intensity = 0.0
 
 [node name="FaceRoot" type="Node3D"]
 script = ExtResource("1_ctrl")
 
+; ⚠️ Echelle (1.0, 1.08, 0.92) : PLUS HAUTE QUE LARGE. Une sphere
+; parfaite se lit comme une balle ; un visage est plus haut que large.
+; C'est l'inverse exact du 0.85 qui l'ecrasait auparavant.
+; L'ellipsoide resultant : demi-axes 2.5 / 2.7 / 2.3.
 [node name="Head" type="MeshInstance3D" parent="."]
-; ⚠️ Échelle Y à 1.0, et PAS 0.85. Il y avait DEUX écrasements
-; cumulés : le maillage (height 4.0 au lieu de 2 x radius) et
-; cette échelle. 5.0 de large pour 4.25 de haut donnait un ratio
-; de 1.18 — la tête « en œuf » signalée par Cyril. Corriger le
-; maillage seul ne suffisait pas.
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+transform = Transform3D(1, 0, 0, 0, 1.08, 0, 0, 0, 0.92, 0, 0, 0)
 mesh = SubResource("SphereMesh_head")
 surface_material_override/0 = SubResource("ShaderMat_head")
 
+; ⚠️ LES YEUX ETAIENT A L'INTERIEUR DE LA TETE. Ils etaient a z = 2.05
+; alors que la surface, a x = 0.95, se trouve a z = 2.31 : on les voyait
+; A TRAVERS la coque translucide, d'ou leur aspect de taches floues.
+; Ce n'etait pas un manque de definition, c'etait un bug geometrique.
+; Ils sont desormais poses SUR la surface (z = 2.0 pour un point de
+; surface a 1.95), aplatis en lentilles (echelle z 0.35) pour epouser la
+; courbure, et ECARTES de 1.9 a 2.4 — ils etaient trop rapproches.
+; Ils sont freres de Head, donc l'echelle de Head ne s'applique pas a eux.
 [node name="EyeLeft" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.95, 0.55, 2.05)
+transform = Transform3D(1, 0, 0, 0, 0.85, 0, 0, 0, 0.35, -1.2, 0.6, 2)
 mesh = SubResource("SphereMesh_eye")
 surface_material_override/0 = SubResource("ShaderMat_eye")
 
 [node name="EyeRight" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.95, 0.55, 2.05)
+transform = Transform3D(1, 0, 0, 0, 0.85, 0, 0, 0, 0.35, 1.2, 0.6, 2)
 mesh = SubResource("SphereMesh_eye")
 surface_material_override/0 = SubResource("ShaderMat_eye")
 
+; Bouche descendue de -0.65 a -0.9 : sur un visage, l'ecart yeux-bouche
+; est bien plus grand que l'ecart yeux-sommet.
 [node name="Mouth" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.65, 2.2)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.9, 2.2)
 mesh = SubResource("BoxMesh_mouth")
 surface_material_override/0 = SubResource("ShaderMat_mouth")
 

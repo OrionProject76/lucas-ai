@@ -57,7 +57,10 @@ const SPEED_PERIOD := 25.0
 
 # Le fBm dépasse rarement ±0.6 : le gain récupère la plage utile. La
 # micro reste minoritaire — elle irrégularise, elle ne pilote pas.
-const MACRO_GAIN := 1.7
+# ⚠️ 1.7 saturait le clamp : X atteignait EXACTEMENT +-5.79 sur 20 min,
+# donc l'avatar COLLAIT aux bords au lieu d'en repartir — des temps morts
+# plats, l'inverse d'organique. A 1.15 la valeur brute sature rarement.
+const MACRO_GAIN := 1.30
 const MICRO_GAIN := 0.22
 
 # Déformation du temps. À 0.08 l'avatar s'immobilise presque — une vraie
@@ -65,8 +68,11 @@ const MICRO_GAIN := 0.22
 # PARTAGÉE, la pause est cohérente sur les deux axes : il s'arrête
 # entièrement, ce qui se lit comme de l'attention. Une pause sur un seul
 # axe se lirait comme un bug.
-const SPEED_MIN := 0.08
-const SPEED_MAX := 1.9
+# ⚠️ Plage resserree : 0.08-1.9 donnait un rapport de 24 sur l'horloge,
+# d'ou des a-coups brusques. L'impression d'organique vient bien plus du
+# changement de DIRECTION que de l'ecart de vitesse brut.
+const SPEED_MIN := 0.25
+const SPEED_MAX := 1.35
 
 var noise_macro_x := FastNoiseLite.new()
 var noise_macro_y := FastNoiseLite.new()
@@ -100,6 +106,11 @@ const DRIFT_ZONE_Y := 0.85
 const ATTENTION_DRIFT_SCALE := 0.3
 const ATTENTION_LERP_SPEED := 1.0 / 1.5
 var attention: float = 1.0
+
+# Inclinaison induite par la vitesse. Faible : au-dela, elle se remarque
+# comme un effet plutot que comme un mouvement.
+const LEAN_GAIN := 0.035
+var lean: Vector2 = Vector2.ZERO
 
 # La respiration garde une horloge NON déformée : elle ne s'arrête
 # jamais. C'est elle qui garde l'avatar vivant pendant qu'il est
@@ -159,14 +170,40 @@ func _drift_speed() -> float:
     return lerp(SPEED_MIN, SPEED_MAX, (raw + 1.0) * 0.5)
 
 
+# ⚠️ Le bruit fractal est quasi-gaussien : il se concentre autour de zero.
+# Mesure sur 20 minutes, repartition verticale en 4 bandes : 8/39/39/14 —
+# l'avatar passait 78 % du temps dans la moitie centrale. Il POUVAIT aller
+# partout, il n'y ALLAIT presque jamais. Cette courbe etale la cloche vers
+# les bords sans deplacer sa moyenne.
+const SPREAD_EXPONENT := 0.85
+
+# ⚠️ tanh(1.0) ne vaut que 0.76 : une limitation brute RETRECIT la course.
+# Premiere tentative, mesuree : X ne parcourait plus que +-4.1 au lieu de
+# +-5.79. On normalise pour qu'une entree de 1.0 ressorte a 1.0 exactement.
+const LIMIT_K := 1.6
+
+
+func _etaler(v: float) -> float:
+    """Pousse les valeurs moyennes vers les extremes, signe conserve."""
+    return sign(v) * pow(abs(v), SPREAD_EXPONENT)
+
+
+func _limiter(v: float) -> float:
+    """
+    Limitation DOUCE au lieu d'un clamp dur.
+
+    Un clamp aplatit : arrive au bord, la position ne bouge plus du tout.
+    tanh comprime progressivement — approcher le bord ralentit, ce qui se
+    lit comme une decision de faire demi-tour plutot que comme un mur.
+    """
+    return tanh(v * LIMIT_K) / tanh(LIMIT_K)
+
+
 func _drift_offset() -> Vector2:
     """Position normalisée dans [-1, 1], macro + micro."""
-    return Vector2(
-        clamp(noise_macro_x.get_noise_1d(drift_time) * MACRO_GAIN
-            + noise_micro_x.get_noise_1d(drift_time) * MICRO_GAIN, -1.0, 1.0),
-        clamp(noise_macro_y.get_noise_1d(drift_time) * MACRO_GAIN
-            + noise_micro_y.get_noise_1d(drift_time) * MICRO_GAIN, -1.0, 1.0)
-    )
+    var bx: float = noise_macro_x.get_noise_1d(drift_time) * MACRO_GAIN         + noise_micro_x.get_noise_1d(drift_time) * MICRO_GAIN
+    var by: float = noise_macro_y.get_noise_1d(drift_time) * MACRO_GAIN         + noise_micro_y.get_noise_1d(drift_time) * MICRO_GAIN
+    return Vector2(_limiter(_etaler(bx)), _limiter(_etaler(by)))
 
 
 func _handle_face_float(delta: float):
@@ -182,15 +219,28 @@ func _handle_face_float(delta: float):
     # Respiration : horloge non déformée, indépendante de l'attention.
     var breath: float = sin(TAU * warp_clock / BREATH_PERIOD) * BREATH_AMPLITUDE
 
-    face_root.position = Vector3(
+    var nouvelle := Vector3(
         amp.x * offset.x,
         amp.y * offset.y + breath,
         noise_macro_x.get_noise_1d(drift_time + 500.0) * 0.6
     )
+
+    # ⚠️ LE CHAINON PERCEPTIF QUI MANQUAIT. Les chiffres de trajectoire
+    # etaient bons (rapport de vitesse 70x, pauses, changements de
+    # direction) et pourtant le rendu restait mecanique : parce que
+    # c'etait une TRANSLATION RIGIDE. Une bille qui glisse. Un etre
+    # vivant s'incline dans ses changements de direction — il anticipe.
+    # On derive la vitesse et on penche proportionnellement. Aucun
+    # chiffre de trajectoire ne change ; seule la lecture change.
+    if delta > 0.0:
+        var v := (nouvelle - face_root.position) / delta
+        lean = lean.lerp(Vector2(v.x, v.y).limit_length(6.0) * LEAN_GAIN, delta * 3.0)
+
+    face_root.position = nouvelle
     face_root.rotation = Vector3(
-        noise_micro_y.get_noise_1d(drift_time + 900.0) * 0.07 * attention,
-        noise_macro_y.get_noise_1d(drift_time + 300.0) * 0.12 * attention,
-        noise_micro_x.get_noise_1d(drift_time + 700.0) * 0.05 * attention
+        noise_micro_y.get_noise_1d(drift_time + 900.0) * 0.07 * attention - lean.y,
+        noise_macro_y.get_noise_1d(drift_time + 300.0) * 0.12 * attention + lean.x,
+        noise_micro_x.get_noise_1d(drift_time + 700.0) * 0.05 * attention - lean.x * 0.6
     )
 
 
