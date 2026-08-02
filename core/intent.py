@@ -120,6 +120,58 @@ def _is_deictic(question: str) -> bool:
     return bool(DEICTIC.search(normalize(question)))
 
 
+# ── Ellipse : la question qui continue la précédente ──────────────────
+#
+# « Et pour 2024 ? » n'a pas de sujet propre. Mesuré selon l'échange qui
+# la précède : DOCUMENTS après « mon salaire de juillet 2025 », mais
+# AUCUN après « mon relevé de carrière » et après « résume-moi mon CV » —
+# ces deux-là n'ont aucune dimension temporelle explicite, et le lien ne
+# se fait pas. Pire, le verdict bascule sur un mot de la RÉPONSE
+# précédente : « trimestres cotisés » donne AUCUN, « trimestres cotisés
+# depuis 1995 » donne ECRAN.
+#
+# Le prompt engineering est épuisé sur ce cas : une consigne « suite de
+# conversation » dégrade de 4/5 à 2/5 en poussant tout vers ECRAN, et
+# doubler le contexte ne change rien (vérifié à 2 et 4 tours).
+#
+# D'où une règle de GRAMMAIRE, comme la garde déictique. Une ellipse ne
+# change pas de sujet — c'est ce qui la définit. Elle hérite donc du
+# verdict de la question précédente au lieu d'être reclassée dans le
+# vide.
+ELLIPSIS_START = re.compile(r"^et\b")
+
+# Borne de longueur : au-delà, la phrase a un sujet propre et n'est plus
+# une ellipse. « Et si on parlait d'autre chose ? » ne doit pas hériter.
+ELLIPSIS_MAX_WORDS = 6
+
+
+def is_elliptical(question: str) -> bool:
+    """La question continue-t-elle la précédente sans sujet propre ?"""
+    from core.text_utils import normalize
+
+    plain = normalize(question).strip().strip("?!.… ")
+    if not ELLIPSIS_START.match(plain):
+        return False
+    return 0 < len(plain.split()) <= ELLIPSIS_MAX_WORDS
+
+
+def previous_question(context: str) -> str:
+    """
+    Dernière question de Cyril dans le contexte, ou chaîne vide.
+
+    Analyse le format produit par format_context() — seul producteur de
+    ces chaînes, juste au-dessus dans ce fichier. Passer la question par
+    un paramètre séparé aurait exigé de la faire traverser route(),
+    should_use_rag(), should_use_vision() et l'UI pour un seul usage.
+    """
+    lignes = [
+        ligne[len("Cyril :"):].strip()
+        for ligne in context.splitlines()
+        if ligne.startswith("Cyril :")
+    ]
+    return lignes[-1] if lignes else ""
+
+
 @dataclass(frozen=True)
 class Intent:
     """
@@ -235,13 +287,18 @@ _CACHE: dict[tuple[str, str], Intent] = {}
 _CACHE_MAX = 64
 
 
-def classify(question: str, context: str = "") -> Intent:
+def classify(question: str, context: str = "", _inherit: bool = True) -> Intent:
     """
     Décide quelle source consulter pour cette question.
 
     `context` est le dernier échange, mis en forme par format_context().
     Il sert aux questions elliptiques — « Et en décembre 2025 ? » n'a de
     sens que par rapport à ce qui précède, et était classée AUCUN.
+
+    Une ellipse HÉRITE du verdict de la question précédente plutôt que
+    d'être reclassée : elle n'a pas de sujet propre, et la reclasser
+    donnait AUCUN une fois sur deux. `_inherit` est un garde-fou interne
+    contre la récursion, à ne pas passer depuis l'extérieur.
 
     Bascule sur les mots-clés si le classifieur est désactivé ou
     indisponible. Le repli est volontairement l'ancien comportement à
@@ -251,6 +308,27 @@ def classify(question: str, context: str = "") -> Intent:
     cached = _CACHE.get(cle)
     if cached is not None:
         return cached
+
+    # ⚠️ HÉRITAGE — une ellipse ne change pas de sujet, c'est ce qui la
+    # définit. La reclasser dans le vide donnait AUCUN une fois sur deux.
+    # `_inherit=False` sur l'appel récursif : si la question précédente
+    # est elle-même une ellipse, on ne remonte pas la chaîne à l'infini.
+    if _inherit and context and is_elliptical(question):
+        precedente = previous_question(context)
+        if precedente and precedente != question:
+            herite = classify(precedente, "", _inherit=False)
+            # Un repli mots-clés ne s'hérite pas : il vaut 50 % de
+            # couverture, et le propager doublerait ses erreurs.
+            if not herite.is_fallback:
+                intent = Intent(
+                    needs_screen=herite.needs_screen,
+                    needs_documents=herite.needs_documents,
+                    source="inherited",
+                )
+                if len(_CACHE) >= _CACHE_MAX:
+                    _CACHE.clear()
+                _CACHE[cle] = intent
+                return intent
 
     if INTENT_CLASSIFIER_ENABLED and question.strip():
         label = _ask_classifier(question, context)

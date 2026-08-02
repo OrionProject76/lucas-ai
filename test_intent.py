@@ -236,10 +236,12 @@ def test_le_contexte_est_transmis_au_classifieur(monkeypatch):
         return DOCUMENTS
 
     monkeypatch.setattr(intent, "_ask_classifier", fake)
-    classify("Et en décembre 2025 ?", "Cyril : mon salaire de juillet 2025 ?")
+    # ⚠️ Question NON elliptique : une ellipse passe par l'héritage et
+    # n'atteint jamais le classifieur avec ce contexte.
+    classify("mes trimestres de 2024 ?", "Cyril : mon salaire de juillet 2025 ?")
 
     assert "juillet 2025" in recu["context"]
-    assert recu["question"] == "Et en décembre 2025 ?"
+    assert recu["question"] == "mes trimestres de 2024 ?"
 
 
 def test_le_cache_distingue_les_contextes(monkeypatch):
@@ -397,3 +399,117 @@ def test_corpus_coverage():
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v", "-s", "-m", "integration"]))
+
+
+# ── Héritage sur les questions elliptiques ────────────────────────────
+#
+# « Et pour 2024 ? » n'a pas de sujet propre. Reclassée dans le vide,
+# elle donnait DOCUMENTS après « mon salaire de juillet 2025 » mais AUCUN
+# après « mon relevé de carrière » et après « résume-moi mon CV ». Pire,
+# le verdict basculait sur un mot de la RÉPONSE précédente.
+
+@pytest.mark.parametrize(
+    "question, elliptique",
+    [
+        ("Et pour 2024 ?", True),
+        ("Et en décembre 2025 ?", True),
+        ("Et mes expériences ?", True),
+        ("Et en dessous ?", True),
+        ("Et 2024 ?", True),
+        # Une phrase avec un sujet propre n'est pas une ellipse.
+        ("Et si on parlait d'autre chose maintenant ?", False),
+        ("Résume-moi mon CV", False),
+        ("Quel était mon salaire net en juillet 2025 ?", False),
+    ],
+)
+def test_detection_des_ellipses(question: str, elliptique: bool):
+    from core.intent import is_elliptical
+
+    assert is_elliptical(question) is elliptique
+
+
+def test_une_ellipse_herite_du_verdict_precedent(monkeypatch):
+    """
+    LE cas. Sans héritage, « Et pour 2024 ? » après le relevé de carrière
+    donnait AUCUN — aucune source consultée sur une question légitime.
+    """
+    monkeypatch.setattr(
+        intent, "_ask_classifier",
+        lambda q, c="": DOCUMENTS if "relevé" in q else NEITHER,
+    )
+    resultat = classify(
+        "Et pour 2024 ?", "Cyril : Que dit mon relevé de carrière ?\nToi : Vos trimestres."
+    )
+
+    assert resultat.needs_documents
+    assert resultat.source == "inherited"
+
+
+def test_l_heritage_transmet_aussi_l_ecran(monkeypatch):
+    monkeypatch.setattr(
+        intent, "_ask_classifier",
+        lambda q, c="": SCREEN if "écran" in q else NEITHER,
+    )
+    resultat = classify(
+        "Et en dessous ?", "Cyril : C'est écrit quoi à l'écran ?\nToi : Une erreur."
+    )
+
+    assert resultat.needs_screen
+
+
+def test_l_heritage_transmet_aussi_l_absence_de_source(monkeypatch):
+    """
+    « Et pour les algues ? » après la photosynthèse ne doit RIEN
+    déclencher : hériter d'AUCUN est un résultat, pas un échec.
+    """
+    monkeypatch.setattr(intent, "_ask_classifier", lambda q, c="": NEITHER)
+    resultat = classify(
+        "Et pour les algues ?", "Cyril : Explique-moi la photosynthèse\nToi : Les plantes."
+    )
+
+    assert not resultat.needs_screen
+    assert not resultat.needs_documents
+
+
+def test_une_question_avec_un_sujet_propre_n_herite_pas(monkeypatch):
+    appels = []
+
+    def fake(question, context=""):
+        appels.append(question)
+        return NEITHER
+
+    monkeypatch.setattr(intent, "_ask_classifier", fake)
+    classify("Résume-moi mon CV", "Cyril : C'est écrit quoi à l'écran ?\nToi : Une erreur.")
+
+    assert "Résume-moi mon CV" in appels
+
+
+def test_un_repli_mots_cles_ne_s_herite_pas(monkeypatch):
+    """
+    Le repli vaut 50 % de couverture. Le propager doublerait ses erreurs
+    au lieu de les contenir.
+    """
+    monkeypatch.setattr(intent, "_ask_classifier", lambda q, c="": None)
+    resultat = classify(
+        "Et pour 2024 ?", "Cyril : Que dit mon relevé de carrière ?\nToi : Vos trimestres."
+    )
+
+    assert resultat.is_fallback
+
+
+def test_l_heritage_ne_boucle_pas_sur_lui_meme(monkeypatch):
+    """
+    Si la question précédente est elle-même une ellipse, on ne remonte
+    pas la chaîne à l'infini.
+    """
+    monkeypatch.setattr(intent, "_ask_classifier", lambda q, c="": NEITHER)
+    resultat = classify("Et après ?", "Cyril : Et pour 2024 ?\nToi : Rien trouvé.")
+
+    assert resultat is not None
+
+
+def test_sans_contexte_une_ellipse_est_classee_normalement(fake_classifier):
+    fake_classifier({"Et pour 2024 ?": NEITHER})
+    resultat = classify("Et pour 2024 ?")
+
+    assert resultat.source == "llm"
