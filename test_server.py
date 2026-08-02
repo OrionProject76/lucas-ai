@@ -46,9 +46,15 @@ def fake_core(monkeypatch):
     calls: dict[str, object] = {}
 
     class _FakeCore:
-        def ask(self, message: str, image_path: str | None = None) -> str:
+        def ask(
+            self,
+            message: str,
+            image_path: str | None = None,
+            allow_screen_capture: bool = True,
+        ) -> str:
             calls["asked"] = message
             calls["asked_image_path"] = image_path
+            calls["asked_allow_screen_capture"] = allow_screen_capture
             # Capturé PENDANT l'appel : le fichier temporaire est supprimé
             # juste après, dans le finally de websocket_endpoint.
             calls["image_existed_during_call"] = (
@@ -58,6 +64,14 @@ def fake_core(monkeypatch):
 
         def history(self):
             return [("user", "bonjour"), ("assistant", "salut")]
+
+        def recent_context(self):
+            # ⚠️ Manquait jusqu'au 02/08/2026 : should_use_vision(message,
+            # lucas.recent_context()) levait AttributeError sur ce double,
+            # rattrapée par le except large d'api/server.py qui retombe
+            # sur regarde=False. Aucun test n'a jamais pu vérifier l'état
+            # WATCHING via ce fixture avant que ça se voie enfin.
+            return ""
 
         def close(self):
             calls["closed"] = True
@@ -190,6 +204,79 @@ def test_websocket_chat_cycle(client, fake_core) -> None:
 
     assert states[-3:] == ["thinking", "speaking", "idle"]
     assert "bonjour" in answer
+
+
+def test_websocket_pc_client_screen_question_still_captures(client, fake_core) -> None:
+    """
+    Comportement historique, inchangé : sans "hello" (ou avec un client
+    autre que la PWA), une question écran reste autorisée — c'est le cas
+    de Godot, toujours sur ce PC.
+    """
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "chat", "message": "regarde mon écran"})
+
+        states = []
+        for _ in range(15):
+            message = ws.receive_json()
+            if message.get("type") == "avatar_state":
+                states.append(message["state"])
+            if states[-3:] == ["watching", "speaking", "idle"]:
+                break
+
+    assert states[-3:] == ["watching", "speaking", "idle"]
+    assert fake_core["asked_allow_screen_capture"] is True
+
+
+def test_websocket_mobile_ambiguous_screen_question_does_not_watch(client, fake_core) -> None:
+    """
+    Bug trouvé par Cyril en test réel (02/08/2026) : la PWA envoyait la
+    même question qu'un client PC et déclenchait la même capture. Le
+    client s'annonce d'abord via "hello" — comme le fait réellement
+    static/js/websocket.js.
+    """
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "hello", "client": "lucas_pwa", "version": "1.0"})
+        _next_of_type(ws, "chat")  # accusé de réception du hello
+
+        ws.send_json({"type": "chat", "message": "que peux-tu voir sur mes écrans ?"})
+
+        states = []
+        for _ in range(15):
+            message = ws.receive_json()
+            if message.get("type") == "avatar_state":
+                states.append(message["state"])
+            if states[-3:] == ["thinking", "speaking", "idle"]:
+                break
+
+    assert states[-3:] == ["thinking", "speaking", "idle"]
+    assert fake_core["asked_allow_screen_capture"] is False
+
+
+def test_websocket_mobile_explicit_pc_mention_still_watches(client, fake_core) -> None:
+    """
+    Demande de Cyril (02/08/2026) : nommer le PC sans ambiguïté doit
+    lever la restriction, même depuis la PWA — WATCHING doit refléter la
+    VRAIE capture (décidée dans LucasCore), pas seulement le client.
+    """
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "hello", "client": "lucas_pwa", "version": "1.0"})
+        _next_of_type(ws, "chat")
+
+        ws.send_json({"type": "chat", "message": "regarde l'écran de mon PC"})
+
+        states = []
+        for _ in range(15):
+            message = ws.receive_json()
+            if message.get("type") == "avatar_state":
+                states.append(message["state"])
+            if states[-3:] == ["watching", "speaking", "idle"]:
+                break
+
+    assert states[-3:] == ["watching", "speaking", "idle"]
+    # allow_screen_capture reste False (client mobile) : c'est
+    # mentions_pc_explicitly(), à l'intérieur de LucasCore, qui lève la
+    # restriction — pas ce indicateur-ci.
+    assert fake_core["asked_allow_screen_capture"] is False
 
 
 def test_websocket_also_emits_a_chat_message(client, fake_core) -> None:

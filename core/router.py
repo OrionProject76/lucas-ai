@@ -103,6 +103,36 @@ KEYWORDS_VISION = [
 ]
 
 
+# Mots-clés qui nomment explicitement le PC — condition pour autoriser la
+# capture d'écran PC même depuis un client mobile (voir
+# core/lucas_core.py, allow_screen_capture, et api/server.py qui décide
+# du client). Volontairement étroit : « mes écrans », « qu'est-ce que tu
+# vois » ne nomment aucun appareil précis et ne doivent PAS suffire.
+KEYWORDS_EXPLICIT_PC = [
+    "mon pc", "sur pc", "mon ordinateur", "mon ordi",
+    "l'écran de mon pc", "l'écran de mon ordinateur",
+    "l'ecran de mon pc", "l'ecran de mon ordinateur",
+    "sur l'ordi", "sur l'ordinateur",
+]
+
+
+def mentions_pc_explicitly(text: str) -> bool:
+    """
+    Décide si Cyril a nommé le PC sans ambiguïté — condition pour
+    autoriser la capture d'écran PC même depuis un client où elle est
+    normalement bloquée (PWA mobile, voir core/lucas_core.py).
+
+    ⚠️ Mots-clés déterministes, jamais de classification LLM — même
+    raisonnement que is_sensitive() : se tromper ici capturerait l'écran
+    du PC sans que Cyril l'ait clairement demandé depuis son téléphone,
+    peut-être loin de chez lui. La question « faut-il regarder un écran »
+    tolère un classifieur ; « depuis quel appareil Cyril a-t-il vraiment
+    demandé à en voir un » est une décision de confidentialité, elle
+    reste déterministe.
+    """
+    return contains_any(text, KEYWORDS_EXPLICIT_PC)
+
+
 def should_use_vision(text: str, context: str = "") -> bool:
     """
     Décide si Luca's doit regarder l'écran avant de répondre.

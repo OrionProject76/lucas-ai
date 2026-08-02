@@ -8,7 +8,13 @@ from __future__ import annotations
 import pytest
 
 from config import CLOUD_HISTORY_MESSAGES
-from core.router import is_sensitive, route, should_use_rag, should_use_vision
+from core.router import (
+    is_sensitive,
+    mentions_pc_explicitly,
+    route,
+    should_use_rag,
+    should_use_vision,
+)
 
 # core.lucas_core tire chromadb (via modules/rag_manager). Les tests de routage
 # n'en ont pas besoin : on les garde exécutables même sur un environnement
@@ -201,6 +207,50 @@ def test_default_destination_is_local(core_with_history: LucasCore) -> None:
     default = core_with_history._build_messages("résume le document")
     explicit = core_with_history._build_messages("résume le document", "local")
     assert default == explicit
+
+
+# ── mentions_pc_explicitly() — condition de l'override mobile ─────────
+#
+# Ajouté le 02/08/2026 : autorise la capture d'écran PC depuis un client
+# mobile SEULEMENT quand Cyril nomme le PC sans ambiguïté (voir
+# core/lucas_core.py, allow_screen_capture). Mots-clés déterministes,
+# même raisonnement que is_sensitive() — se tromper capturerait l'écran
+# sans demande claire.
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "montre-moi mon PC",
+        "qu'est-ce qu'il y a sur mon ordinateur",
+        "regarde l'écran de mon PC",
+        "regarde l'ecran de mon ordinateur",
+        "c'est quoi cette erreur sur mon ordi",
+        "MON PC affiche quoi",
+        "sur l'ordinateur, il y a quoi",
+    ],
+)
+def test_mentions_pc_explicitly_recognizes_the_pc(question: str) -> None:
+    assert mentions_pc_explicitly(question)
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "que peux-tu voir sur mes écrans",
+        "c'est quoi cette erreur",
+        "regarde ça",
+        "quelle heure il est",
+        "sur mon téléphone il y a quoi",
+    ],
+)
+def test_mentions_pc_explicitly_stays_narrow(question: str) -> None:
+    """
+    Volontairement étroit : "mes écrans" (pluriel, aucun appareil nommé)
+    et "mon téléphone" ne doivent PAS suffire à lever la restriction —
+    sinon la protection contre le déclenchement accidentel ne protège
+    plus rien.
+    """
+    assert not mentions_pc_explicitly(question)
 
 
 if __name__ == "__main__":

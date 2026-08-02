@@ -742,5 +742,94 @@ def test_camera_image_without_ocr_or_vlm_result_produces_no_block(core, monkeypa
     assert "vision_failed" in [t for t, _ in core.memory.events]
 
 
+# ── Capture PC bloquée pour un client ambigu (allow_screen_capture) ────
+#
+# Bug trouvé par Cyril en test réel (02/08/2026, premier essai mobile) :
+# "que peux-tu voir sur mes écrans ?" envoyé en texte depuis la PWA a
+# capturé l'écran du PC — should_use_vision() ne sait pas QUI pose la
+# question, seulement CE QU'elle dit.
+
+def test_ambiguous_screen_question_is_blocked_when_capture_is_disallowed(
+    core, monkeypatch
+) -> None:
+    """
+    La question elle-même déclenche normalement la vision (voir la
+    paramétrisation de test_explicit_requests_trigger_vision) — mais
+    aucun appareil n'est nommé, donc rien ne prouve que Cyril est devant
+    ce PC. Doit être expliqué, pas capturé en silence.
+    """
+    _fake_vision(monkeypatch, "peu importe")
+
+    def must_not_be_called(*args, **kwargs):
+        raise AssertionError("VisionManager instancié alors que la capture était bloquée")
+
+    monkeypatch.setattr("modules.vision_manager.VisionManager", must_not_be_called)
+
+    messages = core._build_messages(
+        "que peux-tu voir sur mes écrans ?", "local", allow_screen_capture=False
+    )
+    block = next(m["content"] for m in messages if "application mobile" in m["content"])
+
+    assert "N'AS PAS regardé" in block
+    assert "bouton caméra" in block
+    assert VISION_MARKER not in block
+
+
+def test_ordinary_question_is_unaffected_by_the_capture_restriction(core, monkeypatch) -> None:
+    """
+    allow_screen_capture=False ne doit rien changer aux questions qui ne
+    concernent pas l'écran — pas de bloc vision, pas d'explication non
+    plus : le blocage n'a de sens QUE si l'intention écran a été détectée.
+    """
+    messages = core._build_messages(
+        "quelle heure est-il ?", "local", allow_screen_capture=False
+    )
+
+    assert not any("application mobile" in m["content"] for m in messages)
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "montre-moi ce qui est affiché sur mon PC",
+        "qu'est-ce qui est affiché sur mon ordinateur ?",
+        "regarde l'écran de mon PC",
+        "c'est quoi cette erreur sur mon ordi ?",
+    ],
+)
+def test_explicit_pc_mention_overrides_the_restriction(core, monkeypatch, question) -> None:
+    """
+    Demande de Cyril (02/08/2026) : la protection contre le déclenchement
+    ACCIDENTEL ne doit pas empêcher une demande EXPLICITE — nommer le PC
+    sans ambiguïté doit capturer l'écran même depuis un client mobile.
+    """
+    _fake_vision(monkeypatch, "un terminal")
+    _fake_ocr(monkeypatch, "texte du terminal")
+
+    messages = core._build_messages(question, "local", allow_screen_capture=False)
+    block = next(m["content"] for m in messages if VISION_MARKER in m["content"])
+
+    assert "texte du terminal" in block
+
+
+def test_generic_screen_wording_does_not_get_the_pc_override(core, monkeypatch) -> None:
+    """
+    Contre-test : sans nommer le PC, "mes écrans"/"cette erreur" restent
+    ambigus et doivent rester bloqués — l'override est étroit exprès.
+    """
+    _fake_vision(monkeypatch, "peu importe")
+
+    def must_not_be_called(*args, **kwargs):
+        raise AssertionError("VisionManager instancié alors que rien ne nommait le PC")
+
+    monkeypatch.setattr("modules.vision_manager.VisionManager", must_not_be_called)
+
+    messages = core._build_messages(
+        "c'est quoi cette erreur ?", "local", allow_screen_capture=False
+    )
+
+    assert not any(VISION_MARKER in m["content"] for m in messages)
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

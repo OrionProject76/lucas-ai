@@ -25,7 +25,7 @@ from pydantic import BaseModel
 from api import protocol
 from config import API_TOKEN
 from core.lucas_core import LucasCore
-from core.router import should_use_vision
+from core.router import mentions_pc_explicitly, should_use_vision
 from core.world_model import get_snapshot
 from modules.stt_engine import STTEngine, STTUnavailable
 
@@ -231,6 +231,17 @@ async def websocket_endpoint(websocket: WebSocket):
 
     pusher = asyncio.create_task(_push_system_state(websocket))
 
+    # Identifié via le "hello" — décide si la vision écran AUTOMATIQUE
+    # (should_use_vision, plus bas) a un sens pour ce client. Godot tourne
+    # toujours sur ce PC, donc "mon écran" y désigne sans ambiguïté ce que
+    # Cyril a sous les yeux. La PWA peut tourner n'importe où (le
+    # téléphone, ailleurs que devant ce PC) — capturer l'écran du PC en
+    # silence pendant que Cyril n'est peut-être pas devant serait une vraie
+    # faute de confidentialité, pas un détail technique. Défaut sûr :
+    # "pc" tant qu'aucun "hello" n'a rien dit (préserve le comportement
+    # historique, et celui des tests qui n'envoient jamais de "hello").
+    client_type = "pc"
+
     try:
         while True:
             data = await websocket.receive_json()
@@ -239,8 +250,11 @@ async def websocket_endpoint(websocket: WebSocket):
             # pour "chat"/"audio", qui n'en fournissent pas.
             image_path = None
 
-            # Poignée de main du client Godot (scripts/websocket_client.gd).
+            # Poignée de main du client Godot (scripts/websocket_client.gd)
+            # ou de la PWA (static/js/websocket.js).
             if message_type == "hello":
+                if data.get("client") == "lucas_pwa":
+                    client_type = "mobile"
                 await websocket.send_json(
                     protocol.chat("Luca's est connectée.", from_luca=True)
                 )
@@ -321,6 +335,16 @@ async def websocket_endpoint(websocket: WebSocket):
             # La décision est prise AVANT l'appel : lucas.ask() capture
             # l'écran à l'intérieur, et prévenir après coup n'aurait aucun
             # intérêt — c'est pendant la capture que le témoin compte.
+            # ⚠️ Bug trouvé par Cyril en test réel (02/08/2026, premier essai
+            # mobile) : "que peux-tu voir sur mes écrans ?" envoyé en texte
+            # depuis la PWA a capturé l'écran du PC — should_use_vision() ne
+            # sait pas QUI a posé la question, seulement CE QU'elle dit. Le
+            # même texte, tapé sur la PWA (peut-être loin du PC) ou dans
+            # Godot (toujours devant le PC), ne doit pas produire la même
+            # action. allow_screen_capture porte cette distinction : jamais
+            # de capture PC silencieuse pour un client mobile.
+            allow_screen_capture = client_type != "mobile"
+
             lucas = LucasCore()
             if image_path is not None:
                 # Photo du téléphone : le bouton caméra EST le signal, pas
@@ -330,7 +354,13 @@ async def websocket_endpoint(websocket: WebSocket):
                 regarde = True
             else:
                 try:
-                    regarde = should_use_vision(message, lucas.recent_context())
+                    # mentions_pc_explicitly() lève la restriction mobile
+                    # quand Cyril nomme le PC sans ambiguïté (voir
+                    # core/lucas_core.py) — WATCHING doit rester le témoin
+                    # fidèle de la VRAIE capture, pas seulement du client.
+                    regarde = should_use_vision(message, lucas.recent_context()) and (
+                        allow_screen_capture or mentions_pc_explicitly(message)
+                    )
                 except Exception:  # noqa: BLE001 — un doute sur l'état ne doit
                     # jamais empêcher de répondre.
                     regarde = False
@@ -342,7 +372,9 @@ async def websocket_endpoint(websocket: WebSocket):
             )
 
             try:
-                answer = lucas.ask(message, image_path=image_path)
+                answer = lucas.ask(
+                    message, image_path=image_path, allow_screen_capture=allow_screen_capture
+                )
             finally:
                 lucas.close()
                 if image_path is not None:

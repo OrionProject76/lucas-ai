@@ -14,7 +14,7 @@ from config import (
 )
 from core.cloud_llm import ask_cloud
 from core.local_llm import ask_local
-from core.router import route, should_use_rag, should_use_vision
+from core.router import mentions_pc_explicitly, route, should_use_rag, should_use_vision
 from core.world_model import (
     format_events_for_prompt,
     format_for_prompt,
@@ -33,6 +33,7 @@ class LucasCore:
         user_message: str,
         destination: str = "local",
         image_path: str | None = None,
+        allow_screen_capture: bool = True,
     ) -> list[dict]:
         """
         Construit la liste de messages envoyée au LLM.
@@ -48,6 +49,14 @@ class LucasCore:
         elle est fournie, la vision est FORCÉE — pas besoin du classifieur
         should_use_vision(), l'appui sur le bouton caméra est déjà un signal
         sans ambiguïté. Voir _describe_camera_image().
+
+        `allow_screen_capture` : à False pour un client où "l'écran" est
+        ambigu (PWA mobile — voir api/server.py) ou carrément absent
+        (Cyril peut être loin du PC). Le classifieur should_use_vision()
+        continue de tourner (pour savoir SI l'intention était l'écran),
+        mais la capture elle-même est refusée, et Luca's l'explique au lieu
+        de se taire — jamais une capture PC silencieuse déclenchée par un
+        texte dont on ne sait pas d'où il vient vraiment.
         """
         is_cloud = destination == "cloud"
 
@@ -86,7 +95,34 @@ class LucasCore:
             if image_path is not None:
                 vision_context = self._describe_camera_image(image_path, user_message)
             elif should_use_vision(user_message, context):
-                vision_context = self._describe_screen(user_message)
+                # allow_screen_capture protège contre le déclenchement
+                # ACCIDENTEL (« que peux-tu voir sur mes écrans ? » depuis
+                # le téléphone, sans intention claire). Nommer le PC sans
+                # ambiguïté (mentions_pc_explicitly) reste toujours
+                # autorisé, quel que soit le client : la protection porte
+                # sur l'ambiguïté, pas sur l'origine du message.
+                if allow_screen_capture or mentions_pc_explicitly(user_message):
+                    vision_context = self._describe_screen(user_message)
+                else:
+                    # ⚠️ Le classifieur dit "intention écran", mais ce
+                    # client ne peut pas prouver que Cyril est devant ce
+                    # PC. Le dire explicitement plutôt que capturer en
+                    # silence — même principe que le RAG sans résultat
+                    # plus bas : un silence laisse le modèle deviner, et
+                    # deviner ici serait décrire un écran que personne n'a
+                    # demandé à montrer à cet instant précis.
+                    vision_context = (
+                        "Cyril te parle depuis l'application mobile, pas "
+                        "depuis son PC : tu N'AS PAS regardé l'écran du PC "
+                        "pour cette demande, volontairement. Lire son écran "
+                        "sans savoir s'il est devant serait une faute de "
+                        "confidentialité, pas un détail technique.\n"
+                        "Dis-le à Cyril simplement, et propose : s'il veut "
+                        "que tu regardes quelque chose depuis son "
+                        "téléphone, il peut utiliser le bouton caméra. "
+                        "S'il parlait d'autre chose que de l'écran du PC, "
+                        "réponds à ça à la place."
+                    )
 
         history = self.memory.load_history()
         if is_cloud:
@@ -379,10 +415,20 @@ class LucasCore:
         )
         return "\n".join(parts)
 
-    def ask(self, user_message: str, image_path: str | None = None) -> str:
+    def ask(
+        self,
+        user_message: str,
+        image_path: str | None = None,
+        allow_screen_capture: bool = True,
+    ) -> str:
         self.memory.save_message("user", user_message)
         destination = route(user_message, self.recent_context())
-        messages = self._build_messages(user_message, destination, image_path=image_path)
+        messages = self._build_messages(
+            user_message,
+            destination,
+            image_path=image_path,
+            allow_screen_capture=allow_screen_capture,
+        )
 
         if destination == "cloud":
             answer = ask_cloud(messages)

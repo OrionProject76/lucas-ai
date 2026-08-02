@@ -420,6 +420,62 @@ possibles à anticiper s'il ne se connecte pas du premier coup :
   et documenté dès `static/js/audio.js`, confirmé structurel ici : il
   faudra du TLS, pas seulement le jeton, avant un vrai usage mobile complet.
 
+### 🔴 Bug trouvé par Cyril, corrigé — vision écran PC déclenchée par erreur depuis le téléphone
+
+**Premier vrai test mobile : succès partiel.** Le chat texte a fonctionné
+de bout en bout (réponse cohérente reçue sur le téléphone), mais "que
+peux-tu voir sur mes écrans ?" envoyé en texte depuis la PWA a capturé
+et décrit l'écran du PC — alors que la question venait du téléphone,
+sans bouton caméra.
+
+**Cause** : `should_use_vision()` classe l'INTENTION du texte (« ça parle
+d'écran »), pas la provenance. Le même texte, tapé dans Godot (toujours
+sur ce PC) ou envoyé depuis la PWA (peut-être loin de ce PC), déclenchait
+la même capture silencieuse — une vraie faute de confidentialité, pas un
+détail technique : la protection WATCHING existe précisément pour que
+personne ne regarde l'écran de Cyril sans qu'il le sache.
+
+**Corrigé en deux temps, à la demande de Cyril** :
+
+1. **Protection contre le déclenchement accidentel.** `api/server.py`
+   retient maintenant le client annoncé par le "hello" (`lucas_pwa` ou
+   non). `core/lucas_core.py` : `ask()`/`_build_messages()` acceptent
+   `allow_screen_capture` — à `False` pour la PWA, le classifieur tourne
+   toujours (pour savoir si l'intention était l'écran) mais la capture
+   est refusée, et Luca's l'explique au lieu de se taire (même principe
+   que le RAG sans résultat) : *"tu N'AS PAS regardé l'écran du PC pour
+   cette demande, volontairement... propose le bouton caméra"*.
+2. **Override explicite, pour ne pas sur-corriger.** Nommer le PC sans
+   ambiguïté (« mon PC », « mon ordinateur », « sur l'ordi »…) lève la
+   restriction même depuis la PWA — `mentions_pc_explicitly()`
+   (`core/router.py`), mots-clés déterministes, **jamais de
+   classification LLM** : même raisonnement que `is_sensitive()`, se
+   tromper ici capturerait l'écran sans demande claire. WATCHING reste
+   le témoin FIDÈLE de la vraie capture (`api/server.py` vérifie aussi
+   `mentions_pc_explicitly()` pour l'état de l'avatar, pas seulement le
+   type de client).
+
+**Bug de test trouvé EN CONSTRUISANT le correctif** : `_FakeCore` dans
+`test_server.py` n'avait jamais défini `recent_context()` — chaque test
+qui passait par ce double et appelait `should_use_vision(message,
+lucas.recent_context())` levait silencieusement une `AttributeError`,
+rattrapée par le `except` large d'`api/server.py`, qui retombait toujours
+sur `regarde=False`. Aucun test n'avait donc jamais pu vérifier l'état
+`WATCHING` via ce fixture — le trou s'est révélé au premier test qui
+l'exigeait vraiment. Corrigé.
+
+**Validé** : 15 nouveaux tests (`test_router.py` pour
+`mentions_pc_explicitly()` seule, `test_vision_routing.py` pour le
+comportement `_build_messages`, `test_server.py` pour le cycle complet
+avatar). 627/627 sur la suite complète. Confirmé en conditions réelles,
+API relancée : le même texte ambigu redonne bien `thinking` (Luca's
+explique qu'elle n'a pas regardé), et « montre-moi ce qui est affiché
+sur mon PC » redonne bien `watching` avec une description exacte de
+l'écran réel, vérifié sur une conversation isolée (les deux essais
+menés via le websocket réel ont ajouté deux échanges dans
+`memory/lucas_memory.db`, la même base que le téléphone de Cyril — sans
+donnée sensible, mais signalé pour transparence).
+
 ---
 
 ## 4. Principe directeur
