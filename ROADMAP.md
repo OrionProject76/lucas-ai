@@ -10,6 +10,14 @@ Référence croisée : voir `IDEAS.md` pour le détail complet de chaque fonctio
 
 ## 1. État actuel (au 30/07/2026)
 
+⚠️ **Section figée à sa date, non mise à jour depuis** — corrigé lors de
+l'audit de cohérence documentaire du 02-03/08/2026 : plusieurs lignes
+ci-dessous ont été rendues obsolètes par des chantiers documentés plus
+loin dans ce même fichier, sans que cette section d'ouverture n'ait
+jamais été mise à jour en retour. Gardée telle quelle comme repère
+historique (« où on en était le 30/07 »), mais ne pas la lire comme
+l'état courant — voir §2 à §6 pour ça.
+
 ### ✅ Modules validés et testés en conditions réelles
 1. Chat avec streaming QThread (UI PySide6)
 2. Mémoire persistante SQLite (`memory/orion_memory.db`) — confirmée comme seule source de vérité
@@ -18,12 +26,26 @@ Référence croisée : voir `IDEAS.md` pour le détail complet de chaque fonctio
    - `GET /system` ✅ (World Model v1 : CPU, RAM, fenêtre active via psutil + pywin32)
    - `POST /chat` ✅ (connecté à `OrionCore.ask()` → Ollama → réponse réelle, plus de stub)
    - `WS /ws` — endpoint créé, protocole minimal état/parole, **pas encore testé avec un vrai client** (Godot/mobile viendront en S6/S5)
+     ⚠️ **Périmé** : `/ws` est depuis testé de bout en bout avec de vrais
+     clients réels — PWA mobile (chat, micro, caméra, HTTPS), Godot. Voir
+     §2 et §3 pour le détail complet, daté, de chaque chantier.
 4. Modèle LLM confirmé en usage réel : `qwen2.5:7b` (via Ollama)
 5. Avatar 2D QPainter (v2)
 
 ### ⚠️ Statut réel à clarifier (non re-testés depuis l'audit initial)
+⚠️ **Résolu depuis, voir §5.2** : cette liste datait d'avant l'écriture
+des tests de `rag_manager.py`, `vision_manager.py`, `automation_manager.py`
+et `web_search.py`, qui en ont désormais — l'audit de fiabilité du
+02/08/2026 l'a confirmé et republié la note à jour (§5.2, dernier
+paragraphe) sans jamais revenir corriger CETTE section d'origine.
+`weather_manager.py` était le seul réellement orphelin de test, corrigé
+le même jour (voir §5.2, point 1). `finance_manager.py` n'a jamais fait
+partie de la liste des orphelins réels d'après ce même audit.
 - `modules/finance_manager.py`, `rag_manager.py`, `vision_manager.py`, `weather_manager.py`, `automation_manager.py`, `web_search.py` — à tester lors de S2/S3
 - `Orion3D.exe` (Godot) — visage/fenêtre transparente fonctionne visuellement, mais `orion3d_bridge.py` fait uniquement écho, pas connecté à Ollama/OrionCore
+  ⚠️ **Contexte historique uniquement** : `orion3d_bridge.py` a depuis été
+  supprimé (voir `test_protocol.py`, « le pont mort est parti ») — Godot
+  parle maintenant au même `/ws` que tout le reste, plus à un service à part.
 
 ### 🟡 Godot 4 — toujours en branche expérimentale (non bloquant)
 Reclassé en Phase 4 (S5-S6, voir tableau §3 — « Phase 6 » utilisé ici avant
@@ -329,7 +351,9 @@ Trois missions sont concernées, alors qu'elles sont annoncées en S1 dans la li
 
 Le moteur STT (`modules/stt_engine.py`) est **déjà écrit et testé**, commité le 01/08 comme socle. **Branché côté serveur le 02/08/2026** (voir la section dédiée plus bas) — mais toujours sans client réel pour l'alimenter. **Il ne compte donc toujours pas comme une avancée de Phase 3** ni de Phase 4 pleinement livrée : seule la moitié serveur existe.
 
-> **Note de numérotation — partiellement harmonisée le 02/08/2026.** Ce tableau place le pont mobile en **Phase 4** (semaines S5-S6). Les mentions « Phase 5 » dans `config.py`, `README_INSTALL.md` et `stt_engine.py` (écrites le 01/08, reprenant le libellé de semaine) ont été corrigées en « Phase 4 » pour suivre ce tableau. **Reste non résolu** : la section « Priorités de Développement » de `CLAUDE.md` situe elle le « Mobile Bridge » en **S7**, pas S5-S6 — un désaccord de SÉQUENÇAGE, pas seulement de vocabulaire, qui demande une vraie décision (quand le pont mobile passe-t-il réellement, avant ou après OS Controller/Automation ?) et pas juste un remplacement de texte. Toujours à trancher lors d'une passe dédiée.
+> **Note de numérotation — harmonisée le 02-03/08/2026.** Ce tableau place le pont mobile en **Phase 4** (semaines S5-S6). Les mentions « Phase 5 » dans `config.py`, `README_INSTALL.md` et `stt_engine.py` (écrites le 01/08, reprenant le libellé de semaine) ont été corrigées en « Phase 4 » pour suivre ce tableau.
+>
+> **Désaccord de séquençage résolu par les faits, pas par un simple remplacement de texte** : la section « Priorités de Développement » de `CLAUDE.md` situait le « Mobile Bridge » en **S7**, après OS Controller/Automation — en contradiction avec ce tableau (Phase 4 = S5-S6, avant). La question posée ici (« quand le pont mobile passe-t-il réellement ? ») a une réponse maintenant : il a été construit et livré en entier (chat, micro, caméra, TTS, HTTPS) le 02/08/2026, immédiatement après S2 (Mémoire & Finance) et en parallèle de la Phase 3 (Vision), **avant** tout travail sur OS Controller/Automation — jamais commencé. `CLAUDE.md` corrigé en conséquence pour refléter ce qui s'est réellement passé, pas une préférence de planning a priori.
 
 ### 🟢 Session du 02/08/2026 — premier appelant réel de la STT, côté serveur uniquement
 

@@ -404,10 +404,16 @@ C:/OrionAI/
    si tous relevaient de S1)
 2. **S2** : Mémoire + World Model + RAG
 3. **S3** : Interface Godot (avatar 3D)
-4. **S4** : Voix (TTS continu + STT)
+4. **S4** : Voix (TTS continu + STT) + **Mobile Bridge** (déplacé de S7 le
+   02-03/08/2026, audit de cohérence documentaire — `ROADMAP.md` §2
+   plaçait déjà ce chantier en Phase 4/S5-S6, en désaccord non résolu avec
+   cette liste ; construit et livré en entier le 02/08/2026 — chat, micro,
+   caméra, TTS, HTTPS — immédiatement après S2, avant tout travail sur
+   OS Controller/Automation. La position ici suit ce qui s'est réellement
+   passé, pas l'inverse)
 5. **S5** : Modes AURA + Barre Luca's
 6. **S6** : OS Controller + Automation
-7. **S7** : Polish + Mobile Bridge
+7. **S7** : Polish
 8. **S8** : Package + Release v1.0
 
 ## 💡 Notes pour Claude

@@ -153,7 +153,11 @@ Visage low-poly stylisé, shaders néon cyan/bleu avec glow. Flottement organiqu
 
 ---
 
-## 5. Catalogue exhaustif des idées (66 idées d'origine + ajouts)
+## 5. Catalogue exhaustif des idées (61 idées d'origine + ajouts, #62 et suivants)
+
+<!-- Décompte corrigé le 02-03/08/2026 (audit de cohérence documentaire) :
+     61 entrées comptées avant la marque "Ajouts session 28-31/07/2026",
+     pas 66 — écart de saisie, sans conséquence sur le contenu lui-même. -->
 
 ### 🎮 Modules fun & wow
 1. Jarvis Total — OCR+VLM+TTS continu, assistant omniprésent
@@ -485,12 +489,15 @@ viser une fois ces briques stables.
 
 ---
 
-**Point de vigilance déjà signalé, reconfirmé ici** : l'écoute des
-notifications Android via l'API d'accessibilité (mentionnée dans le
-document source) est une permission très puissante et très surveillée
-par Google — mal utilisée, elle peut faire bannir une application du
-Play Store. À traiter comme un vrai sujet à part entière avec ses
-propres contraintes de plateforme, pas un détail d'implémentation.
+**Point de vigilance signalé dans le document source de cet addendum**
+(pas ailleurs dans ce fichier — clarifié le 02-03/08/2026, la formule
+« reconfirmé ici » prêtait à confusion en donnant l'impression d'une
+entrée antérieure dans `IDEAS.md` lui-même, qui n'existe pas) : l'écoute
+des notifications Android via l'API d'accessibilité est une permission
+très puissante et très surveillée par Google — mal utilisée, elle peut
+faire bannir une application du Play Store. À traiter comme un vrai
+sujet à part entière avec ses propres contraintes de plateforme, pas un
+détail d'implémentation.
 
 ## 77. Console de flux — journal d'activité en direct
 
@@ -601,6 +608,12 @@ pouvoir parler dans le micro du téléphone et que l'avatar du PC (UI
 PySide6 ou Godot) réponde AUSSI, pas seulement le téléphone qui a posé
 la question. Explicitement noté comme une idée future, pas une action
 immédiate.
+
+⚠️ Même limitation déjà documentée le même jour, indépendamment, dans
+`VISION_LONG_TERME.md` §2 Pilier 3 (précision du pont audio unique) —
+consolidé lors de l'audit de cohérence documentaire du 02-03/08/2026,
+les deux entrées se renvoient désormais l'une à l'autre plutôt que de
+diverger silencieusement.
 
 **Pourquoi ça ne marche pas aujourd'hui** : `api/server.py` traite
 chaque connexion WebSocket indépendamment — la réponse (texte, audio,

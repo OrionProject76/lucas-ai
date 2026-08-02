@@ -171,6 +171,10 @@ construis exactement ça, mais en vrai."*
 > les messages de sortie à toutes les connexions actives, pas seulement
 > de renvoyer à l'expéditeur — pas encore construit, à traiter quand ce
 > scénario devient réel plutôt que par anticipation.
+>
+> Reformulé comme idée catalogué le 02/08/2026, remonté indépendamment
+> par Cyril en testant le pont TTS : `IDEAS.md` #79 — même limitation,
+> détail du mécanisme de diffusion envisagé.
 
 ---
 
@@ -277,6 +281,33 @@ l'intérêt de X.
 À rapprocher du second filtre de sécurité déjà catalogué (ShieldGemma en
 pré-validation automatisée avant confirmation humaine, `IDEAS.md`) : même
 logique, la garantie technique précède l'élargissement du pouvoir d'agir.
+
+### 4.2 Écoute/vision ambiante contextuelle — « chez moi » vs « dehors » (précisé le 02/08/2026)
+
+⚠️ Cette précision devait être ajoutée ici en même temps que l'entrée
+`IDEAS.md` #71 correspondante — elle manquait, corrigée lors de l'audit
+de cohérence documentaire du 02-03/08/2026.
+
+En réponse à une proposition d'écoute ambiante permanente généralisée
+(rejetée telle quelle), Cyril a posé une distinction plus fine que
+« toujours écouter partout » : micro du téléphone ouvert en continu et
+analyse sémantique ambiante active **seulement quand le contexte est
+« à la maison »** (PC/avatar actif, Cyril chez lui — *« à la maison je
+n'ai rien à cacher »*) ; activation strictement sur demande explicite
+**dès que le contexte est « dehors »** (téléphone seul, hors de la
+maison), jamais d'écoute ambiante en arrière-plan. Même logique pour
+la lecture d'écran/caméra.
+
+**Ceci n'est PAS la perception continue Astra** évoquée au §3 et
+explicitement refusée pour l'instant, conditionnée à un `security/`
+plus mature (§4.1). C'est une distinction contextuelle plus fine, pas
+un retour sur cette décision — mais reste un vrai changement de portée
+par rapport à l'activation actuelle (bouton/mot précis uniquement), à
+ne pas implémenter sans nouvelle validation explicite le moment venu.
+
+Détail complet, problème de détection du contexte non résolu, et
+contrainte de performance (Whisper permanent trop coûteux) : voir
+`IDEAS.md` #71.
 
 ---
 
