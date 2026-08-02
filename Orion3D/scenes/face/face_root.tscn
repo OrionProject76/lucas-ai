@@ -67,7 +67,12 @@ shader_parameter/wireframe_intensity = 0.0
 script = ExtResource("1_ctrl")
 
 [node name="Head" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0.85, 0, 0, 0, 1, 0, 0, 0)
+; ⚠️ Échelle Y à 1.0, et PAS 0.85. Il y avait DEUX écrasements
+; cumulés : le maillage (height 4.0 au lieu de 2 x radius) et
+; cette échelle. 5.0 de large pour 4.25 de haut donnait un ratio
+; de 1.18 — la tête « en œuf » signalée par Cyril. Corriger le
+; maillage seul ne suffisait pas.
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
 mesh = SubResource("SphereMesh_head")
 surface_material_override/0 = SubResource("ShaderMat_head")
 
