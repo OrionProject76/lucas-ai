@@ -39,6 +39,7 @@
         });
         const voiceOutput = new window.Lucas.VoiceOutput({
             toggleEl: document.getElementById("speak-toggle"),
+            onBargeIn: () => activity.add("voice", "Interruption détectée — coupée immédiatement."),
         });
 
         const socket = new window.Lucas.LucasSocket({

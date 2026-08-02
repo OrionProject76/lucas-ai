@@ -939,11 +939,40 @@ tous deux corrigés le 02/08/2026, voir §2).
    permet pas de couper un son déjà en cours de lecture.
 4. **Dialogue perçu comme « compliqué »** — retour UX général de Cyril,
    pas encore de cause précise identifiée.
-5. **Pas d'interruption immédiate (« barge-in »)** — quand Cyril parle
-   pendant que Luca's répond à voix haute, elle ne s'arrête pas
-   immédiatement. Nécessiterait de détecter la parole entrante pendant
-   la lecture TTS et de couper le son en cours — une vraie fonctionnalité
-   à concevoir, pas un correctif ponctuel.
+5. **Pas d'interruption immédiate (« barge-in »)** — ⚠️ **Conçu et
+   implémenté le 03/08/2026** (en autonomie), **mais pas testé en
+   conditions réelles** — cette machine n'a pas de micro (même contrainte
+   que pour le STT, point 1 ci-dessus), donc rien de sonore n'a pu être
+   validé de bout en bout ici. À vérifier par Cyril sur le S25 Ultra avant
+   de considérer ce point clos.
+
+   Mécanisme (`static/js/voice_output.js`) : pendant la lecture d'une
+   réponse vocale (`VoiceOutput.play()`), un flux micro dédié s'ouvre via
+   `getUserMedia` (`echoCancellation: true`, `noiseSuppression: true`,
+   `autoGainControl: false` — l'AGC aurait faussé le seuil fixe en
+   amplifiant le bruit de fond) et une `AnalyserNode` (Web Audio API)
+   calcule un volume RMS à chaque frame. Au-delà d'un seuil
+   (`BARGE_IN_RMS_THRESHOLD = 0.09`) pendant plusieurs frames consécutives
+   (anti faux-positif sur un bruit bref), la lecture s'arrête
+   immédiatement (`VoiceOutput.stop()`) et une ligne apparaît dans la
+   console d'activité. Le flux micro est fermé dès la fin de la lecture
+   (naturelle ou interrompue) — jamais ouvert en dehors des instants où
+   Luca's parle, même principe de sobriété d'écoute que CLAUDE.md règle 3
+   appliqué côté client.
+
+   **Risque connu, non vérifiable ici** : sans annulation d'écho fiable,
+   le micro pourrait capter la propre voix de Luca's sortant du
+   haut-parleur du téléphone et se couper elle-même en boucle.
+   `echoCancellation: true` est censé y répondre, mais son efficacité pour
+   un `<audio>` lu hors WebRTC (pas un `RTCPeerConnection`) dépend du
+   navigateur/device — c'est le point le plus susceptible d'exiger un
+   réglage du seuil ou une autre approche après un vrai test.
+
+   Volontairement laissé hors de ce chantier : un vrai bouton mute pour
+   couper un son déjà en cours à la demande (point 3 ci-dessus, backlog
+   distinct) — `VoiceOutput.stop()` existe maintenant et pourrait le
+   servir directement, mais le brancher sur le bouton 🔊/🔇 n'a pas été
+   demandé ici.
 
 Voir aussi `IDEAS.md` pour l'idée distincte du double destinataire
 WebSocket (parler au micro du téléphone et faire répondre l'avatar PC

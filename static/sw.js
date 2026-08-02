@@ -12,7 +12,7 @@
 // nom change à chaque fois pour forcer un install() frais — sans ça, un
 // téléphone avec la PWA déjà installée garderait indéfiniment l'ancien
 // fichier buggé en cache.
-const CACHE_NAME = "lucas-shell-v6";
+const CACHE_NAME = "lucas-shell-v7";
 const SHELL_FILES = [
     "/app/",
     "/app/index.html",
