@@ -35,6 +35,18 @@ ollama:
 # réseau du PC. Si l'IP change (redémarrage, reconnexion Wi-Fi) et que le
 # téléphone n'y accède plus, régénérer avec les nouvelles IP :
 #   tools\mkcert.exe -cert-file data\cert.pem -key-file data\key.pem <IP...> localhost 127.0.0.1
+#
+# Tunnel Tailscale (Phase 4, tranché le 03/08/2026 — voir ROADMAP.md §2) :
+# même commande `serve` ci-dessous une fois le certificat régénéré avec
+# l'IP Tailscale (100.x.y.z) ou le nom MagicDNS en plus des IP existantes —
+# `serve` écoute déjà sur 0.0.0.0, joignable via l'interface Tailscale sans
+# changement de code. Deux étapes restent hors de portée d'un agent
+# autonome (installation logicielle + connexion de compte) : installer le
+# client Tailscale et exécuter `tailscale up` (authentification SSO) sur le
+# PC ET le S25 Ultra. Une fois l'IP/nom obtenu après cette étape :
+#   tools\mkcert.exe -cert-file data\cert.pem -key-file data\key.pem <IP Tailscale> <IP existantes...> localhost 127.0.0.1
+# Et resserrer allow_origins dans api/server.py (actuellement "*", annoté
+# dans le code comme provisoire) une fois cette origine connue.
 
 # Lancer FastAPI (HTTPS, joignable depuis le téléphone)
 serve:

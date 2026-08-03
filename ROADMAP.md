@@ -429,6 +429,17 @@ vérifiée sans téléphone.
    de la resynchronisation du 03/08/2026), cette décision attend juste que
    Phase 4 redevienne prioritaire pour être exécutée.
 
+   **Préparé le 03/08/2026, audité avant d'agir** : `config.py`/`api/server.py`
+   ne dépendent d'aucune IP en dur (`API_HOST="0.0.0.0"`, CORS déjà
+   `allow_origins=["*"]`, la PWA construit son URL depuis
+   `location.host`) — rien à recoder pour accueillir une IP Tailscale.
+   Seul le certificat HTTPS (`data/cert.pem`, SAN limités aux IP LAN
+   actuelles) devra être régénéré avec l'IP/nom Tailscale une fois connu
+   — procédure documentée dans `justfile`. **Bloqué sur deux actions que
+   seul Cyril peut faire** : installer le client Tailscale et
+   s'authentifier (`tailscale up`, connexion de compte) sur le PC et le
+   S25 Ultra — hors de portée d'un agent autonome (comptes/identifiants).
+
 **Proposition pour la suite, validée par Cyril → faite dans la foulée** :
 le jeton d'authentification (point 2) est construit, `API_HOST` reste
 `127.0.0.1` par défaut — c'est un prérequis sans risque réseau tant que le
