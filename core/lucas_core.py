@@ -25,7 +25,13 @@ from config import (
 from core.cloud_llm import ask_cloud
 from core.local_llm import ask_local
 from core.reasoning_engine import ReasoningEngine
-from core.router import mentions_pc_explicitly, route, should_use_rag, should_use_vision
+from core.router import (
+    mentions_pc_explicitly,
+    route,
+    should_use_finance,
+    should_use_rag,
+    should_use_vision,
+)
 from core.world_model import (
     format_events_for_prompt,
     format_for_prompt,
@@ -33,6 +39,12 @@ from core.world_model import (
 )
 from memory.memory_manager import MemoryManager
 from modules.rag_manager import RAGManager
+
+# ⚠️ modules.finance_manager est importé PARESSEUSEMENT dans
+# _build_messages(), pas ici : il importe modules.finance_categorizer,
+# qui importe core.text_utils — un import en tête fermerait la boucle,
+# core/__init__ chargeant LucasCore avant que ce module ait fini de se
+# charger. Même motif que core.dates dans modules/rag_manager.py.
 
 # Signature du callback de la console de flux (IDEAS.md #77) : (kind, texte).
 ActivityCallback = Callable[[str, str], None]
@@ -323,6 +335,52 @@ class LucasCore:
                     "inventé serait indiscernable d'un vrai."
                 )
 
+        # Finance : relevés bancaires importés en CSV (modules/finance_manager.py).
+        # Jamais vers le cloud (CLAUDE.md règle 3) : un solde ou une dépense
+        # nommée est une donnée ultra-sensible. is_sensitive() force déjà le
+        # local sur ces mots-clés — garde redondante assumée, même
+        # raisonnement que pour le RAG.
+        # ⚠️ Même bug que le RAG sans résultat, même correctif : NE PAS SE
+        # TAIRE. Un dossier data/finance/ vide laisserait le modèle deviner
+        # un solde, indiscernable d'un vrai. Voir load_directory() pour
+        # pourquoi use_llm=False ici (latence par tour de conversation).
+        finance_context = ""
+        if not is_cloud and should_use_finance(user_message):
+            from modules.finance_manager import load_directory
+
+            finance_manager, skipped_files = load_directory()
+            if finance_manager.transactions:
+                finance_context = (
+                    "RELEVÉS BANCAIRES RÉELS DE CYRIL (import CSV local, jamais "
+                    "envoyé au cloud) :\n\n" + finance_manager.get_summary() + "\n\n"
+                    "Appuie-toi UNIQUEMENT sur ces chiffres. INTERDIT : inventer "
+                    "un montant, une catégorie ou une transaction absente de ce "
+                    "résumé."
+                )
+                if skipped_files:
+                    finance_context += (
+                        "\n\n⚠️ Fichier(s) ignoré(s), format illisible : "
+                        + ", ".join(skipped_files)
+                    )
+                _emit(
+                    on_activity, "finance_checked",
+                    f"relevés bancaires — {len(finance_manager.transactions)} "
+                    "transaction(s)",
+                )
+            else:
+                _emit(on_activity, "finance_checked", "relevés bancaires — aucune donnée importée")
+                finance_context = (
+                    "RECHERCHE EFFECTUÉE DANS LES RELEVÉS BANCAIRES DE CYRIL : "
+                    "AUCUNE TRANSACTION IMPORTÉE (dossier data/finance/ vide ou "
+                    "absent).\n\n"
+                    "Ta réponse doit dire clairement qu'aucun relevé n'a été "
+                    "importé, et proposer de déposer un export CSV dans "
+                    "data/finance/ pour que tu puisses l'analyser.\n"
+                    "INTERDIT : citer un solde, un montant ou une catégorie de "
+                    "dépense — tu n'as accès à aucune donnée financière réelle "
+                    "en ce moment."
+                )
+
         # ⚠️ SECONDE MOITIÉ DU MÊME BUG, et elle vaut pour LES DEUX SOURCES.
         #
         # Remettre le bloc au bon endroit ne suffisait pas : avec 100
@@ -341,8 +399,9 @@ class LucasCore:
         # est resté cassé pour exactement la même raison — « Résume-moi
         # mon CV » recevait ses extraits sous 70 messages, et Luca's
         # demandait à Cyril de lui dicter son CV. Toute source externe
-        # ajoutée ici devra passer par ce même plafond.
-        if not is_cloud and (vision_context or rag_context):
+        # ajoutée ici devra passer par ce même plafond — la finance y
+        # compris (03/08/2026) : même bloc, même risque de noyade.
+        if not is_cloud and (vision_context or rag_context or finance_context):
             history = history[-SOURCE_HISTORY_MESSAGES:]
 
         # ⚠️ TROISIÈME VISAGE DU MÊME BUG, et le plus large.
@@ -386,6 +445,9 @@ class LucasCore:
 
         if rag_context:
             messages.append({"role": "system", "content": rag_context})
+
+        if finance_context:
+            messages.append({"role": "system", "content": finance_context})
 
         if current_question is not None:
             messages.append(

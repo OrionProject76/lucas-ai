@@ -35,6 +35,12 @@ class CSVFormatError(Exception):
     """Le fichier ne ressemble pas à un relevé exploitable."""
 
 
+# Dossier des VRAIS relevés de Cyril — ignoré par git (voir .gitignore),
+# jamais celui du dépôt (data/sample_transactions.csv, données fictives,
+# suivi par git pour les tests).
+DEFAULT_FINANCE_DIR = Path("data/finance")
+
+
 def _normalize_header(name: str) -> str:
     import unicodedata
 
@@ -234,6 +240,56 @@ class FinanceManager:
             lines.append("")
             lines.append(f"⚠️ {len(uncategorized)} transaction(s) non catégorisée(s) :")
             for t in uncategorized[:5]:
-                lines.append(f"  - {t['date'].strftime('%d/%m/%Y')} {t['libelle']}")
+                # ⚠️ Le montant doit être ici, pas seulement date+libellé.
+                # Trouvé en validation réelle (03/08/2026, vrai Ollama) : sans
+                # lui, qwen2.5:7b invente un chiffre plausible pour la seule
+                # information manquante du résumé — malgré une consigne
+                # explicite « n'invente jamais un montant » dans le bloc
+                # injecté par core/lucas_core.py. Un trou dans les données
+                # fournies au modèle reste un trou à deviner, quelle que
+                # soit la consigne ; la seule protection fiable est de ne
+                # rien laisser à deviner.
+                lines.append(
+                    f"  - {t['date'].strftime('%d/%m/%Y')} {t['libelle']} : "
+                    f"{t['montant']:.2f} EUR"
+                )
 
         return "\n".join(lines)
+
+
+def load_directory(
+    directory: str | Path = DEFAULT_FINANCE_DIR,
+    use_llm: bool = False,
+) -> tuple[FinanceManager, list[str]]:
+    """
+    Importe tous les relevés CSV d'un dossier dans un seul FinanceManager.
+
+    ⚠️ `use_llm=False` par défaut, à l'inverse de `import_csv()` : ce
+    chemin est appelé à CHAQUE question financière du chat (voir
+    core/lucas_core.py), pas une fois pour toutes comme l'indexation RAG.
+    Appeler le LLM local pour chaque libellé non reconnu à chaque tour de
+    conversation ajouterait une latence imprévisible. Les règles
+    déterministes (finance_categorizer.KEYWORD_RULES) suffisent pour
+    l'essentiel ; ce qui reste « Non catégorisé » reste visible dans le
+    résumé plutôt que d'être deviné ou de ralentir la réponse.
+
+    Retourne un FinanceManager VIDE (pas une erreur) si le dossier
+    n'existe pas ou ne contient aucun CSV — get_summary() dit alors
+    explicitement qu'aucune transaction n'est importée. Un relevé mal
+    formé est écarté SANS faire échouer les autres, mais signalé dans la
+    liste retournée — un trou silencieux serait aussi trompeur qu'une
+    catégorie inventée (même principe que get_uncategorized()).
+    """
+    manager = FinanceManager()
+    path = Path(directory)
+    skipped: list[str] = []
+    if not path.is_dir():
+        return manager, skipped
+
+    for csv_path in sorted(path.glob("*.csv")):
+        try:
+            manager.import_csv(csv_path, use_llm=use_llm)
+        except CSVFormatError as exc:
+            skipped.append(f"{csv_path.name} ({exc})")
+
+    return manager, skipped

@@ -23,6 +23,7 @@ from modules.finance_manager import (
     FinanceManager,
     _parse_amount,
     _parse_date,
+    load_directory,
 )
 
 # ── Catégorisation par règles ─────────────────────────────────────────
@@ -252,6 +253,21 @@ def test_summary_reports_uncategorized_transactions(tmp_path) -> None:
     assert "VIR SEPA GHRTX" in summary
 
 
+def test_summary_gives_the_amount_of_uncategorized_transactions(tmp_path) -> None:
+    """
+    Régression du 03/08/2026 : sans le montant ici, qwen2.5:7b invente un
+    chiffre plausible (447.10 EUR) pour la seule donnée manquante du
+    résumé — vérifié en conditions réelles, vrai Ollama — malgré la
+    consigne « n'invente jamais un montant » côté core/lucas_core.py. Le
+    montant réel doit être présent, pas seulement date+libellé.
+    """
+    path = _write_csv(tmp_path, "date,libelle,montant\n2026-01-28,VIR SEPA GHRTX,-150.00\n")
+    manager = FinanceManager()
+    manager.import_csv(path, use_llm=False)
+
+    assert "150.00 EUR" in manager.get_summary()
+
+
 def test_summary_without_transactions_does_not_crash() -> None:
     assert "Aucune transaction" in FinanceManager().get_summary()
 
@@ -261,6 +277,76 @@ def test_expenses_are_sorted_by_amount() -> None:
     manager.import_csv("data/sample_transactions.csv", use_llm=False)
     amounts = list(manager.get_expenses_by_category().values())
     assert amounts == sorted(amounts, reverse=True)
+
+
+# ── load_directory() — contrepartie chat/API, 03/08/2026 ─────────────
+
+def test_load_directory_returns_empty_manager_when_missing(tmp_path) -> None:
+    """Un dossier absent ne doit jamais lever — get_summary() dira « aucune »."""
+    manager, skipped = load_directory(tmp_path / "n_existe_pas")
+    assert manager.transactions == []
+    assert skipped == []
+
+
+def test_load_directory_empty_folder(tmp_path) -> None:
+    manager, skipped = load_directory(tmp_path)
+    assert manager.transactions == []
+    assert skipped == []
+
+
+def test_load_directory_imports_every_csv(tmp_path) -> None:
+    _write_csv(tmp_path, "date,libelle,montant\n2026-01-05,CARREFOUR,-10\n", "a.csv")
+    _write_csv(tmp_path, "date,libelle,montant\n2026-01-06,EDF,-20\n", "b.csv")
+    manager, skipped = load_directory(tmp_path)
+    assert len(manager.transactions) == 2
+    assert skipped == []
+
+
+def test_load_directory_ignores_non_csv_files(tmp_path) -> None:
+    _write_csv(tmp_path, "date,libelle,montant\n2026-01-05,CARREFOUR,-10\n", "a.csv")
+    (tmp_path / "notes.txt").write_text("pas un relevé", encoding="utf-8")
+    manager, skipped = load_directory(tmp_path)
+    assert len(manager.transactions) == 1
+
+
+def test_load_directory_reports_malformed_file_without_failing_the_others(tmp_path) -> None:
+    """Un relevé mal formé n'empêche pas d'importer les autres — mais reste signalé."""
+    _write_csv(tmp_path, "date,libelle,montant\n2026-01-05,CARREFOUR,-10\n", "bon.csv")
+    _write_csv(tmp_path, "libelle,montant\nCARREFOUR,-10\n", "casse.csv")  # colonne date absente
+    manager, skipped = load_directory(tmp_path)
+    assert len(manager.transactions) == 1
+    assert len(skipped) == 1
+    assert "casse.csv" in skipped[0]
+
+
+def test_load_directory_never_calls_the_llm_by_default(tmp_path) -> None:
+    """
+    use_llm=False par défaut : appelé à chaque tour de conversation
+    (core/lucas_core.py), pas une fois à l'indexation comme le RAG.
+    """
+    _write_csv(
+        tmp_path,
+        "date,libelle,montant\n2026-01-28,VIR SEPA GHRTX,-150.00\n",
+        "releve.csv",
+    )
+    manager, _ = load_directory(tmp_path)
+    assert manager.transactions[0]["categorie"] == UNCATEGORIZED, (
+        "sans mot-clé reconnu par les règles et sans LLM, la transaction "
+        "doit rester visiblement non catégorisée"
+    )
+
+
+def test_load_directory_real_sample_file() -> None:
+    """La contrepartie chat doit fonctionner sur le fichier d'exemple versionné."""
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmp:
+        shutil.copy("data/sample_transactions.csv", Path(tmp) / "sample.csv")
+        manager, skipped = load_directory(tmp)
+        assert len(manager.transactions) == 15
+        assert skipped == []
 
 
 if __name__ == "__main__":

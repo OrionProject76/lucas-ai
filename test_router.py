@@ -12,6 +12,7 @@ from core.router import (
     is_sensitive,
     mentions_pc_explicitly,
     route,
+    should_use_finance,
     should_use_rag,
     should_use_vision,
 )
@@ -65,6 +66,31 @@ def test_rag_beats_cloud_keyword() -> None:
     question = "résume le document et analyse-le"
     assert should_use_rag(question)
     assert route(question) == "local"
+
+
+# ── should_use_finance() ────────────────────────────────────────────────
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "quel est mon solde ?",
+        "résume mes finances",
+        "combien j'ai dépensé ce mois-ci",
+        "MES DÉPENSES du mois",
+        "quel est mon solde",  # sans accent ni apostrophe typographique
+        "mon budget est de combien",
+    ],
+)
+def test_should_use_finance_detects_finance_questions(question: str) -> None:
+    assert should_use_finance(question)
+
+
+@pytest.mark.parametrize(
+    "question",
+    ["quelle heure est-il ?", "résume le document", "explique-moi la photosynthèse"],
+)
+def test_should_use_finance_ignores_unrelated_questions(question: str) -> None:
+    assert not should_use_finance(question)
 
 
 # ── Robustesse de la saisie réelle ────────────────────────────────────
@@ -184,6 +210,70 @@ def test_local_receives_rag_context(core_with_history: LucasCore) -> None:
     """En local, le RAG fonctionne toujours normalement."""
     messages = core_with_history._build_messages("résume le document", "local")
     assert any("[RAG]" in m["content"] for m in messages)
+
+
+# ── Finance CSV (03/08/2026) ─────────────────────────────────────────────
+
+class _FakeFinanceManager:
+    def __init__(self, transactions: list, summary: str) -> None:
+        self.transactions = transactions
+        self._summary = summary
+
+    def get_summary(self) -> str:
+        return self._summary
+
+
+@requires_core
+def test_cloud_never_receives_finance_context(core_with_history: LucasCore, monkeypatch) -> None:
+    """
+    Un solde ou une dépense réelle ne doit jamais atteindre le cloud.
+
+    Monkeypatché sur "modules.finance_manager.load_directory", pas
+    "lucas_core.load_directory" : l'import est PARESSEUX (voir en-tête de
+    core/lucas_core.py, même motif que core.dates) — il n'existe donc pas
+    en tant qu'attribut du module lucas_core.
+    """
+    monkeypatch.setattr(
+        "modules.finance_manager.load_directory",
+        lambda: (_FakeFinanceManager([{"montant": -10.0}], "[FINANCE] solde réel"), []),
+    )
+    messages = core_with_history._build_messages("quel est mon solde ?", "cloud")
+    assert not any("[FINANCE]" in m["content"] for m in messages)
+
+
+@requires_core
+def test_local_receives_finance_context_when_data_exists(core_with_history: LucasCore, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "modules.finance_manager.load_directory",
+        lambda: (_FakeFinanceManager([{"montant": -10.0}], "[FINANCE] solde réel"), []),
+    )
+    messages = core_with_history._build_messages("quel est mon solde ?", "local")
+    assert any("[FINANCE]" in m["content"] for m in messages)
+
+
+@requires_core
+def test_finance_context_says_no_data_explicitly_when_empty(core_with_history: LucasCore, monkeypatch) -> None:
+    """Même bug que le RAG sans résultat : ne jamais laisser le modèle deviner un solde."""
+    monkeypatch.setattr(
+        "modules.finance_manager.load_directory",
+        lambda: (_FakeFinanceManager([], "vide"), []),
+    )
+    messages = core_with_history._build_messages("quel est mon solde ?", "local")
+    joined = " ".join(m["content"] for m in messages)
+    assert "AUCUNE TRANSACTION IMPORTÉE" in joined
+    assert "INTERDIT" in joined
+
+
+@requires_core
+def test_finance_context_absent_when_question_unrelated(core_with_history: LucasCore, monkeypatch) -> None:
+    """Pas de bruit de dossier vide sur une question qui n'a rien à voir."""
+    monkeypatch.setattr(
+        "modules.finance_manager.load_directory",
+        lambda: (_FakeFinanceManager([], "vide"), []),
+    )
+    messages = core_with_history._build_messages("bonjour", "local")
+    assert not any("RELEVÉS BANCAIRES" in m["content"] for m in messages)
+    assert not any("AUCUNE TRANSACTION" in m["content"] for m in messages)
 
 
 @requires_core

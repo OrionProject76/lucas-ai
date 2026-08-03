@@ -61,10 +61,10 @@ fiabilité : le tableau §3 ne définit que les Phases 0 à 5), branche
 
 | Tâche | Détail |
 |---|---|
-| Mémoire enrichie | Contexte conversation + events système (World Model) injectés dans le prompt |
+| Mémoire enrichie | ✅ **Fait — coche manquante corrigée le 03/08/2026 (audit de cohérence documentaire), déjà construit et éprouvé bien avant cette date.** Historique de conversation (`fit_history_to_budget()`), contexte système (`world_model.format_for_prompt()` — CPU/RAM/heure/fenêtre active) et événements récents (`format_events_for_prompt()`) injectés dans `core/lucas_core.py::_build_messages()`. Testé (`test_memory_context.py`, `test_world_model.py`, `test_history_budget.py`) ET stress-testé en conditions réelles à plusieurs reprises depuis (c'est ce même mécanisme qui a révélé et fait corriger la dilution du prompt système sous historique chargé, §5.4, et le bug de décrochage OrangeTV plus haut dans ce document). |
 | RAG documents personnels | ✅ **Fait et validé en conditions réelles (01/08/2026).** 39 documents de Cyril indexés, 229 morceaux. Point d'entrée `memory/index_documents.py` (relançable sans risque), lecture `.pdf` / `.docx` / texte, recherche hybride sémantique + date, seuil de pertinence calibré sur le corpus réel. Voir l'encadré ci-dessous. |
 | TTS intégré au chat | ✅ UI PySide6 fait de longue date. **Pont mobile (PWA) fait et validé le 02/08/2026** — voir encadré ci-dessous. |
-| Finance CSV | Import + catégorisation, dashboard simple (MVP, pas d'API bancaire — règle actée) |
+| Finance CSV | ✅ **Fermé le 03/08/2026.** Import + catégorisation existaient depuis longtemps (`modules/finance_manager.py`, `finance_categorizer.py`, 23 tests) mais n'étaient reliés à RIEN — aucune commande chat, aucune route API, aucune UI, alors que `SYSTEM_PROMPT` affirmait déjà cette capacité à Cyril. Voir l'encadré ci-dessous pour ce qui a été branché. |
 
 #### ✅ RAG documents personnels — terminé le 01/08/2026
 
@@ -211,6 +211,79 @@ et `test_index_documents.py`.
 
 **Prérequis avant de commencer S2 :** vérifier qu'Ollama tourne sans doublon de process (voir section 5 — point de vigilance infra).
 
+#### ✅ Finance CSV — fermé le 03/08/2026
+
+**Trouvé en resynchronisant l'état réel du projet** (session autonome,
+Cyril absent 7h30) : la ligne « Finance CSV » de Phase 2 n'avait jamais
+de coche, et pour cause — `modules/finance_manager.py` (import CSV,
+23 tests) et `modules/finance_categorizer.py` (catégorisation
+règles+LLM local) étaient construits et testés depuis longtemps, mais
+**reliés à rien**. Aucune commande chat ne les appelait, aucune route
+API, aucune UI — alors que `SYSTEM_PROMPT` (`config.py`) affirmait déjà
+à Cyril que Luca's « lit et catégorise des relevés bancaires importés en
+CSV ». Une capacité annoncée mais qui n'existait pas dans les faits :
+demander « importe mon relevé » n'aurait rien fait de réel.
+
+**Câblé, pas réécrit** :
+
+- `core/router.should_use_finance()` — déclencheur DÉTERMINISTE (liste
+  `KEYWORDS_FINANCE`), pas un classifieur LLM comme `core/intent.py` : le
+  domaine est plus étroit et moins ambigu que écran/documents, et rester
+  déterministe évite de toucher un classifieur déjà calibré et fragile.
+- `modules/finance_manager.load_directory()` — nouvelle fonction,
+  importe tous les CSV de `data/finance/` (dossier réel de Cyril, déjà
+  dans `.gitignore`, jamais créé sur le disque avant aujourd'hui).
+  `use_llm=False` par défaut, à l'inverse d'un import manuel : ce chemin
+  tourne à CHAQUE question financière du chat, pas une fois pour toutes.
+- `core/lucas_core.py::_build_messages()` — bloc de contexte finance,
+  jamais vers le cloud (même garde redondante que RAG/vision), même
+  principe « ne jamais se taire » : dossier vide → message explicite
+  interdisant d'inventer un solde, plutôt qu'un silence que le modèle
+  comblerait.
+- `GET /finance/summary` (api/server.py, même garde de jeton que
+  `/history`/`/documents`) + panneau PWA « Mes finances »
+  (`static/js/finance.js`, icône 💰) — lecture seule, même famille que
+  le panneau Semantic Desktop du 03/08.
+
+**Bug trouvé EN VALIDANT, pas en écrivant le code** : question réelle
+posée à un vrai Ollama (qwen2.5:7b) sur des données réelles — « Résume
+mes finances » a produit un résumé exact sur tout, SAUF la transaction
+non catégorisée : le modèle a inventé « 447,10 € » là où le vrai montant
+est -150,00 €. Cause : `get_summary()` listait cette transaction par
+date + libellé, jamais son montant — un trou que le modèle a comblé
+malgré la consigne explicite « n'invente jamais un montant » dans le
+bloc injecté. Corrigé en ajoutant le montant réel à cette ligne
+(`modules/finance_manager.py`) : plus rien à deviner, plus rien
+d'inventé, revérifié sur le même vrai Ollama. Même famille de bug que la
+« Non-Response » RAG déjà documentée ailleurs dans ce fichier — une
+instruction ne protège pas contre un trou de données, seule l'absence du
+trou le fait. 1 test de régression explicite.
+
+**Validé en conditions réelles, pas seulement en tests** : le fixture
+versionné `data/sample_transactions.csv` copié TEMPORAIREMENT dans
+`data/finance/` (jamais les vraies données de Cyril, qu'il n'a pas
+encore fournies) — instance uvicorn jetable, vrai Ollama, PWA ouverte
+dans un vrai Chrome. Résultats identiques et exacts sur les trois
+surfaces (chat, `/finance/summary`, panneau PWA) : solde 2198,87 €,
+revenus 4800,00 €, dépenses 2601,13 €, répartition par catégorie, la
+transaction non catégorisée avec son vrai montant. Question témoin
+(« Quelle heure est-il ? ») confirmée SANS déclenchement du bloc
+finance. Fichier de test retiré de `data/finance/` après validation —
+le dossier reste vide jusqu'à ce que Cyril y dépose un vrai export.
+
+**Ce qui reste ouvert, explicitement** : tout ceci n'a été validé que
+sur des données FICTIVES (le fixture de test). La vraie validation —
+est-ce que le format réel des relevés de Cyril s'importe sans erreur, la
+catégorisation couvre-t-elle ses vraies dépenses — attend qu'il dépose
+un export CSV réel dans `data/finance/`. Pas un « dashboard » séparé au
+sens d'une page dédiée : le panneau PWA sert cet usage, cohérent avec le
+patron déjà établi pour Semantic Desktop.
+
+24 tests ajoutés au total (`test_router.py` : 13 dont `should_use_finance()`
+et l'injection de contexte ; `test_finance.py` : 8 pour `load_directory()`
++ 1 régression montant ; `test_server.py` : 3 pour `/finance/summary`).
+Suite complète rejouée sans régression.
+
 ---
 
 ## 3. Jalons futurs
@@ -219,7 +292,7 @@ et `test_index_documents.py`.
 |---|---|---|---|
 | **Phase 0 — Audit** | S0 | Nettoyage, inventaire | ✅ Fait (avec incident de suppression accidentelle résolu — voir CLAUDE.md) |
 | **Phase 1 — Cerveau solide** | S1 | FastAPI unique + World Model | ✅ **Fait et validé aujourd'hui** |
-| **Phase 2 — Mémoire & Finance** | S2 | RAG, TTS, Finance CSV | ✅ Fait le 01/08 — reste la validation TTS à l'oreille dans l'UI |
+| **Phase 2 — Mémoire & Finance** | S2 | RAG, TTS, Finance CSV | ✅ Fait — RAG et TTS le 01-02/08, Finance CSV câblé et validé le 03/08 (données fictives ; vraie validation attend un export réel de Cyril) |
 | **Phase 3 — Vision & Voix** | S3-S4 | VLM écran, Avatar QPainter V3, 5 modes de présence, barge-in (voir IDEAS.md #83) | 🟡 En cours — VLM écran ✅, 5 modes de présence ✅, barge-in implémenté le 03/08/2026 (§5.4 point 5), pas encore validé en conditions réelles |
 | **Phase 4 — Expansion** | S5-S6 | PWA mobile, sync, Godot 4 V1 (branche expérimentale) | 🟡 Amorcé — côté serveur du pont audio branché (02/08), PWA/auth/tunnel restent à faire |
 | **Phase 5 — Polish** | S7-S8 | Sécurité finale, packaging, release v1.0 | À venir |

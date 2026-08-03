@@ -38,6 +38,22 @@ KEYWORDS_RAG = [
     "rappelle-moi ce que",
 ]
 
+# Mots-clés qui signalent une question sur les relevés bancaires importés
+# (modules/finance_manager.py) — voir should_use_finance() plus bas.
+#
+# ⚠️ Déterministe par choix, pas un classifieur LLM comme
+# should_use_rag()/should_use_vision(). La question « faut-il consulter
+# mes relevés » n'a pas la même ambiguïté que « écran ou documents » —
+# domaine plus étroit, formulations plus prévisibles ("mon solde", "mes
+# dépenses"...) — et rester déterministe évite de toucher au classifieur
+# core/intent.py, déjà calibré et fragile à reformuler (voir son en-tête).
+KEYWORDS_FINANCE = [
+    "mes finances", "ma situation financière", "mon solde",
+    "mes dépenses", "mon budget", "mes revenus",
+    "relevé bancaire", "mes transactions", "résume mes finances",
+    "combien j'ai dépensé", "combien je dépense",
+]
+
 
 def is_sensitive(text: str) -> bool:
     """
@@ -194,6 +210,21 @@ def should_use_rag(text: str, context: str = "") -> bool:
     from core.intent import classify
 
     return classify(text, context).needs_documents
+
+
+def should_use_finance(text: str) -> bool:
+    """
+    Décide si la question porte sur les relevés bancaires importés de
+    Cyril (voir modules/finance_manager.py) — donc s'il faut consulter
+    data/finance/ avant de répondre.
+
+    Déterministe (voir KEYWORDS_FINANCE) : ne délègue jamais à
+    core/intent.py. Indépendant de route() et de should_use_rag() — une
+    question peut être locale ET consulter les finances, jamais vers le
+    cloud (is_sensitive() force déjà le local sur ces mots-clés, qui
+    recoupent largement KEYWORDS_SENSITIVE).
+    """
+    return contains_any(text, KEYWORDS_FINANCE)
 
 
 def matches_rag_keywords(text: str) -> bool:

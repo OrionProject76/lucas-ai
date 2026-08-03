@@ -43,6 +43,12 @@
             closeEl: document.getElementById("documents-close"),
             logEl: document.getElementById("documents-log"),
         });
+        new window.Lucas.FinancePanel({
+            toggleEl: document.getElementById("finance-toggle"),
+            drawerEl: document.getElementById("finance-drawer"),
+            closeEl: document.getElementById("finance-close"),
+            logEl: document.getElementById("finance-log"),
+        });
         const voiceOutput = new window.Lucas.VoiceOutput({
             toggleEl: document.getElementById("speak-toggle"),
             onBargeIn: () => activity.add("voice", "Interruption détectée — coupée immédiatement."),

@@ -213,6 +213,56 @@ def related_documents(source_id: str, top_k: int = 3):
     return {"related": SemanticDesktop().related_documents(source_id, top_k=top_k)}
 
 
+# ── Finance CSV (Phase 2, fermé le 03/08/2026) — lecture seule ─────────
+#
+# Même situation que Semantic Desktop avant sa route REST : le module
+# (modules/finance_manager.py) était construit et testé depuis longtemps,
+# mais jamais consultable — ni par le chat (voir should_use_finance()
+# dans core/router.py, câblé le même jour), ni par une route REST.
+#
+# Même garde de jeton que /history et /documents — un solde ou une
+# dépense nommée est une donnée ultra-sensible (CLAUDE.md règle 3).
+# load_directory() relit data/finance/ à chaque appel plutôt que de
+# garder un état en mémoire, même raisonnement que RAGManager()/
+# SemanticDesktop() ailleurs dans ce fichier.
+
+
+@app.get("/finance/summary", dependencies=[Depends(verify_token)])
+def finance_summary():
+    """
+    Résumé des relevés bancaires importés (data/finance/, ignoré par
+    git). `has_data=False` si le dossier est vide ou absent — jamais un
+    résumé silencieusement vide sans le dire explicitement.
+    """
+    from modules.finance_manager import load_directory
+
+    manager, skipped_files = load_directory()
+    if not manager.transactions:
+        return {"has_data": False, "skipped_files": skipped_files}
+
+    dates = [t["date"] for t in manager.transactions]
+    return {
+        "has_data": True,
+        "transaction_count": len(manager.transactions),
+        "period": {
+            "start": min(dates).strftime("%Y-%m-%d"),
+            "end": max(dates).strftime("%Y-%m-%d"),
+        },
+        "balance": round(manager.get_balance(), 2),
+        "income": round(manager.get_income_total(), 2),
+        "expenses": round(manager.get_expense_total(), 2),
+        "expenses_by_category": {
+            category: round(amount, 2)
+            for category, amount in manager.get_expenses_by_category().items()
+        },
+        "uncategorized": [
+            {"date": t["date"].strftime("%Y-%m-%d"), "libelle": t["libelle"]}
+            for t in manager.get_uncategorized()
+        ],
+        "skipped_files": skipped_files,
+    }
+
+
 # ── WebSocket : canal unique Luca's ↔ Godot ─────────────────────
 #
 # Le vocabulaire est défini dans api/protocol.py. Il remplace celui

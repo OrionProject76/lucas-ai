@@ -274,6 +274,79 @@ def test_documents_endpoints_require_the_token(client, fake_semantic_desktop, mo
     assert client.get("/documents/cv.pdf/related").status_code == 401
 
 
+# ── Finance CSV (contrepartie mobile, 03/08/2026) ──────────────────────
+
+
+class _FakeFinanceManagerForAPI:
+    """
+    Double minimal — même interface que modules.finance_manager.FinanceManager,
+    sans toucher au disque. `load_directory` est importé PARESSEUSEMENT
+    dans l'endpoint (voir api/server.py, même motif que core/lucas_core.py) :
+    monkeypatché sur "modules.finance_manager.load_directory", pas sur
+    "api.server.load_directory", qui n'existe pas en tant qu'attribut.
+    """
+
+    def __init__(self, transactions: list) -> None:
+        self.transactions = transactions
+
+    def get_balance(self) -> float:
+        return sum(t["montant"] for t in self.transactions)
+
+    def get_income_total(self) -> float:
+        return sum(t["montant"] for t in self.transactions if t["montant"] > 0)
+
+    def get_expense_total(self) -> float:
+        return abs(sum(t["montant"] for t in self.transactions if t["montant"] < 0))
+
+    def get_expenses_by_category(self) -> dict:
+        return {"Alimentation": 84.3}
+
+    def get_uncategorized(self) -> list:
+        return []
+
+
+@pytest.fixture
+def fake_finance_with_data(monkeypatch):
+    from datetime import datetime
+
+    transactions = [
+        {"date": datetime(2026, 1, 2), "libelle": "Virement salaire", "montant": 2400.0, "categorie": "Revenus"},
+        {"date": datetime(2026, 1, 5), "libelle": "CARREFOUR", "montant": -84.3, "categorie": "Alimentation"},
+    ]
+    manager = _FakeFinanceManagerForAPI(transactions)
+    monkeypatch.setattr("modules.finance_manager.load_directory", lambda: (manager, []))
+    return manager
+
+
+@pytest.fixture
+def fake_finance_empty(monkeypatch):
+    manager = _FakeFinanceManagerForAPI([])
+    monkeypatch.setattr("modules.finance_manager.load_directory", lambda: (manager, []))
+    return manager
+
+
+def test_finance_summary_reports_real_numbers(client, fake_finance_with_data) -> None:
+    payload = client.get("/finance/summary").json()
+    assert payload["has_data"] is True
+    assert payload["transaction_count"] == 2
+    assert payload["balance"] == pytest.approx(2315.7)
+    assert payload["income"] == pytest.approx(2400.0)
+    assert payload["expenses"] == pytest.approx(84.3)
+    assert payload["period"] == {"start": "2026-01-02", "end": "2026-01-05"}
+
+
+def test_finance_summary_says_no_data_explicitly_when_empty(client, fake_finance_empty) -> None:
+    """Jamais un résumé vide en silence — has_data=False, sans inventer de chiffres."""
+    payload = client.get("/finance/summary").json()
+    assert payload == {"has_data": False, "skipped_files": []}
+
+
+def test_finance_summary_requires_the_token(client, fake_finance_with_data, monkeypatch) -> None:
+    """Un solde ou une dépense nommée est une donnée ultra-sensible (CLAUDE.md règle 3)."""
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    assert client.get("/finance/summary").status_code == 401
+
+
 # ── WebSocket ─────────────────────────────────────────────────────────
 
 def _next_of_type(ws, message_type: str, limit: int = 12) -> dict:
