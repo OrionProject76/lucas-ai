@@ -268,6 +268,25 @@ def test_summary_gives_the_amount_of_uncategorized_transactions(tmp_path) -> Non
     assert "150.00 EUR" in manager.get_summary()
 
 
+def test_summary_signals_truncation_beyond_five_uncategorized(tmp_path) -> None:
+    """
+    Même famille de bug que le test ci-dessus : l'en-tête annonce le
+    NOMBRE total de transactions non catégorisées, mais seules 5 sont
+    listées en détail. Sans marqueur explicite, ce serait un second trou
+    silencieux — le modèle pourrait inventer les transactions restantes.
+    """
+    rows = "\n".join(
+        f"2026-01-{i:02d},VIR SEPA {i},-{i}.00" for i in range(1, 8)
+    )
+    path = _write_csv(tmp_path, f"date,libelle,montant\n{rows}\n")
+    manager = FinanceManager()
+    manager.import_csv(path, use_llm=False)
+
+    summary = manager.get_summary()
+    assert "7 transaction(s) non catégorisée(s)" in summary
+    assert "... et 2 autre(s), non détaillée(s) ici" in summary
+
+
 def test_summary_without_transactions_does_not_crash() -> None:
     assert "Aucune transaction" in FinanceManager().get_summary()
 

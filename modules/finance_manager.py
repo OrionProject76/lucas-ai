@@ -253,6 +253,14 @@ class FinanceManager:
                     f"  - {t['date'].strftime('%d/%m/%Y')} {t['libelle']} : "
                     f"{t['montant']:.2f} EUR"
                 )
+            reste = len(uncategorized) - 5
+            if reste > 0:
+                # ⚠️ Même famille de bug que le montant manquant ci-dessus :
+                # sans ce marqueur, l'en-tête annonce N transactions mais
+                # seules 5 sont listées — un trou silencieux que le modèle
+                # pourrait combler en inventant les suivantes. Le marqueur
+                # dit explicitement que la liste est coupée, pas complète.
+                lines.append(f"  - ... et {reste} autre(s), non détaillée(s) ici")
 
         return "\n".join(lines)
 
