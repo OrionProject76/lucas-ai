@@ -73,6 +73,25 @@ reporté v1.1+).
    | Émotionnelle | États émotionnels passés | "Tu étais stressé avant la réunion de 10h" |
    | Prospective | Ce que tu dois faire | "Rappel : envoyer le mail à Marc avant 18h" |
 
+### 2bis. Memory Palace 2.0 — enrichissement "confiance & provenance" (ajout 03/08/2026)
+
+Chaque souvenir stocké (peu importe le type : épisodique, sémantique, etc.)
+doit porter ces métadonnées, pas juste le contenu brut :
+
+| Champ | Rôle |
+|---|---|
+| source | D'où vient l'info (conversation, capture système, injection manuelle) |
+| date | Quand l'événement/fait a été observé |
+| confidence | Score 0-1 : à quel point on est sûr que c'est encore vrai |
+| last_validated | Dernière fois que le fait a été recoupé/confirmé |
+| importance | Poids dans les décisions futures |
+| expiration (optionnel) | Date au-delà de laquelle le souvenir doit être revalidé avant réemploi |
+
+Pourquoi : évite qu'une info fausse ou périmée devienne une vérité figée dans
+la mémoire de Luca's juste parce qu'elle a été écrite une fois. Ajoute ces
+colonnes à la table memories/events SQLite existante plutôt que créer un
+nouveau système.
+
 3. **Emotional Resonance** — 5 capteurs fusionnés en un score émotionnel temps réel : voix (pitch, vitesse, pauses), visage (webcam), texte (sentiment analysis), clavier (rythme de frappe), physiologie (wearables Bluetooth, optionnel).
 
 4. **Proactivité HER** — Observe ("tu travailles depuis 3h sans pause"), Prédit ("dans 10 min tu as un meeting"), Suggère ("je vois que tu cherches 'regex Python' pour la 5e fois"), Agit ("j'ai fermé les 12 onglets inutiles et organisé tes téléchargements").

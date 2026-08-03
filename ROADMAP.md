@@ -65,6 +65,7 @@ fiabilité : le tableau §3 ne définit que les Phases 0 à 5), branche
 | RAG documents personnels | ✅ **Fait et validé en conditions réelles (01/08/2026).** 39 documents de Cyril indexés, 229 morceaux. Point d'entrée `memory/index_documents.py` (relançable sans risque), lecture `.pdf` / `.docx` / texte, recherche hybride sémantique + date, seuil de pertinence calibré sur le corpus réel. Voir l'encadré ci-dessous. |
 | TTS intégré au chat | ✅ UI PySide6 fait de longue date. **Pont mobile (PWA) fait et validé le 02/08/2026** — voir encadré ci-dessous. |
 | Finance CSV | ✅ **Fermé le 03/08/2026.** Import + catégorisation existaient depuis longtemps (`modules/finance_manager.py`, `finance_categorizer.py`, 23 tests) mais n'étaient reliés à RIEN — aucune commande chat, aucune route API, aucune UI, alors que `SYSTEM_PROMPT` affirmait déjà cette capacité à Cyril. Voir l'encadré ci-dessous pour ce qui a été branché. |
+| Mémoire — confiance & provenance | ⏳ **Pas commencé (ajouté 03/08/2026, voir `IDEAS.md` §2bis).** Enrichir le schéma SQLite mémoire avec confiance/provenance/date/expiration avant d'attaquer le Reasoning Engine — évite de bâtir un raisonnement sur des souvenirs non fiables. |
 
 #### ✅ RAG documents personnels — terminé le 01/08/2026
 
