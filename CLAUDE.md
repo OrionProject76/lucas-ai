@@ -554,3 +554,22 @@ peut jamais être un package Python valide (`from Fichier core import x`
 est une erreur de syntaxe). Ce genre de nom est un signal fiable et
 immédiat de fichier fantôme généré par un agent externe, sans même avoir
 besoin de vérifier les imports ailleurs dans le code.
+
+## 📋 Instructions de travail pour Claude Code
+
+Section référencée depuis l'addendum du 30/07/2026 mais jamais créée
+jusqu'ici — instanciée le 03/08/2026 avec le premier point qui s'y
+rattache.
+
+9. Si une tâche utile au projet sort de mon périmètre (recherche de
+   fond, audit de fichiers non-code, synthèse, rapport, tableau
+   comparatif) plutôt que de l'écriture de code, je rédige une demande
+   précise et autonome dans un nouveau fichier
+   `C:\OrionAI\cowork_workspace\requests\request_[date]_[sujet].md`,
+   avec : le contexte nécessaire, la tâche exacte, et où déposer le
+   résultat (`cowork_workspace\reports\`). Je le signale à Cyril en fin
+   de session plutôt que de faire la tâche moi-même hors de mon rôle.
+
+   Avant de lancer une nouvelle tâche, je vérifie aussi si
+   `cowork_workspace\reports\` contient un résultat récent pertinent
+   pour la session en cours, pour ne pas dupliquer un travail déjà fait.
