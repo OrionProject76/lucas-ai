@@ -209,6 +209,39 @@ def test_default_destination_is_local(core_with_history: LucasCore) -> None:
     assert default == explicit
 
 
+# ── Reasoning Engine — désactivé par défaut (config.REASONING_ENGINE_ENABLED) ──
+
+class _FakeReasoning:
+    def plan(self, question: str, context: str = ""):
+        from core.reasoning_engine import ReasoningResult
+
+        return ReasoningResult(plan="- Un point à couvrir", used_reasoning=True)
+
+
+@requires_core
+def test_reasoning_disabled_by_default_adds_no_block(core_with_history: LucasCore, monkeypatch) -> None:
+    monkeypatch.setattr(lucas_core, "ReasoningEngine", lambda: _FakeReasoning())
+    messages = core_with_history._build_messages("compare ces stratégies", "local")
+    assert not any("Points à couvrir" in m["content"] for m in messages)
+
+
+@requires_core
+def test_reasoning_enabled_adds_a_plan_block(core_with_history: LucasCore, monkeypatch) -> None:
+    monkeypatch.setattr(lucas_core, "REASONING_ENGINE_ENABLED", True)
+    monkeypatch.setattr(lucas_core, "ReasoningEngine", lambda: _FakeReasoning())
+    messages = core_with_history._build_messages("compare ces stratégies", "local")
+    assert any("Points à couvrir" in m["content"] for m in messages)
+
+
+@requires_core
+def test_reasoning_never_reaches_the_cloud(core_with_history: LucasCore, monkeypatch) -> None:
+    """Même garde que le RAG et les événements : rien de plus vers le cloud."""
+    monkeypatch.setattr(lucas_core, "REASONING_ENGINE_ENABLED", True)
+    monkeypatch.setattr(lucas_core, "ReasoningEngine", lambda: _FakeReasoning())
+    messages = core_with_history._build_messages("compare ces stratégies", "cloud")
+    assert not any("Points à couvrir" in m["content"] for m in messages)
+
+
 # ── mentions_pc_explicitly() — condition de l'override mobile ─────────
 #
 # Ajouté le 02/08/2026 : autorise la capture d'écran PC depuis un client

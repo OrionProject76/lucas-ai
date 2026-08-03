@@ -238,7 +238,7 @@ Visage low-poly stylisé, shaders néon cyan/bleu avec glow. Flottement organiqu
 58. Offline First — Cartes OpenStreetMap, Wikipedia Kiwix, traduction Opus-MT, indexation pages favorites, 100% local
 
 ### 🧠 Cognition avancée
-59. Reasoning Engine — Chain-of-thought visible, débat interne 3 personas, analyse multi-critères, preuves et sources, logique floue, arbre décision 3D
+59. Reasoning Engine — Chain-of-thought visible, débat interne 3 personas, analyse multi-critères, preuves et sources, logique floue, arbre décision 3D. **v1 minimal construit le 03/08/2026** (`core/reasoning_engine.py`, une seule étape de décomposition, désactivée par défaut) — voir `ROADMAP.md` §5.7 pour le détail ; tout le reste de cette entrée (personas, arbre 3D...) reste à faire, hors périmètre v1.
 60. Knowledge Builder — Auto-summarization, concept extraction, gap detection, synthesis, learning path, flashcards auto
 61. Creative Engine — Brainstorming 20 idées, mashup generator, constraint solver, inspiration feed daily, collaborative writing, world building, music collaboration
 

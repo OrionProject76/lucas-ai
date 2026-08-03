@@ -13,6 +13,7 @@ from config import (
     OCR_ENABLED,
     OCR_MAX_CHARS,
     REANCHOR_SYSTEM_PROMPT,
+    REASONING_ENGINE_ENABLED,
     RECENT_EVENTS_IN_PROMPT,
     SYSTEM_PROMPT,
     VISION_ENABLED,
@@ -23,6 +24,7 @@ from config import (
 )
 from core.cloud_llm import ask_cloud
 from core.local_llm import ask_local
+from core.reasoning_engine import ReasoningEngine
 from core.router import mentions_pc_explicitly, route, should_use_rag, should_use_vision
 from core.world_model import (
     format_events_for_prompt,
@@ -171,6 +173,23 @@ class LucasCore:
             events_context = format_events_for_prompt(events)
             if events_context:
                 messages.append({"role": "system", "content": events_context})
+
+        # Reasoning Engine (IDEAS.md #59) — désactivé par défaut, voir
+        # REASONING_ENGINE_ENABLED (config.py) pour pourquoi. Même garde
+        # `not is_cloud` que le RAG et les événements juste au-dessus :
+        # le plan reflète la question, pas de raison de l'exclure du
+        # cloud en soi, mais rester sur le même principe de contexte
+        # réduit tant que ce n'est pas validé en usage réel. N'ajoute
+        # jamais de réponse, seulement un bloc de contexte de plus —
+        # core/reasoning_engine.py ne répond jamais à la place de
+        # LucasCore.
+        if not is_cloud and REASONING_ENGINE_ENABLED:
+            reasoning = ReasoningEngine().plan(user_message, context)
+            if reasoning.used_reasoning:
+                messages.append({
+                    "role": "system",
+                    "content": f"Points à couvrir pour bien répondre :\n{reasoning.plan}",
+                })
 
         # La vision est décidée AVANT de charger l'historique : quand elle
         # se déclenche, l'historique doit être raccourci (voir plus bas).

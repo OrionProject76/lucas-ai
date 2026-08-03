@@ -1101,6 +1101,37 @@ capturer un vrai `logs/intent_debug.log` avant toute hypothèse de cause.
 Distinct du point OCR/classifieur (§3, tableau Phase 3, « Vision écran »)
 qui reste, lui, clos et sans lien avec ce signalement.
 
+## 5.7 Reasoning Engine v1 — construit et testé le 03/08/2026, désactivé par défaut
+
+Session autonome (5h, Cyril absent) — chantier explicitement autorisé
+(hooks multi-agents déjà posés le même jour, IDEAS.md #59 catalogué comme
+prêt). `core/reasoning_engine.py` : une seule étape déterministe, pas les
+« débat interne 3 personas / arbre de décision 3D » du catalogue complet
+— volontairement hors périmètre v1. `ReasoningEngine.plan(question,
+context)` demande au modèle local de décomposer une question complexe en
+2-4 points à couvrir, **sans jamais répondre à sa place** ; le plan est
+injecté comme bloc de contexte supplémentaire dans
+`LucasCore._build_messages()`, avant l'appel qui produit la vraie
+réponse (celui qui a accès à la vision, au RAG, à l'historique). Pattern
+explicitement pré-autorisé par CLAUDE.md règle 12 : code Python
+déterministe qui enchaîne des appels LLM séquentiels, pas un agent
+autonome.
+
+**Validé en conditions réelles**, vrai Ollama (`qwen2.5:7b`) : questions
+simples (« quelle heure est-il ? », « bonjour ») → aucun plan (le modèle
+répond `AUCUN`, comme demandé) ; questions complexes (calcul de budget
+avec plusieurs contraintes, comparaison assurance-vie/PEL) → plan court
+et pertinent (2 points, jamais de réponse anticipée). 8 tests unitaires
+(`test_reasoning_engine.py`, LLM mocké) + 3 tests d'intégration
+(`test_router.py` : le bloc n'apparaît que si activé, jamais vers le
+cloud, même garde que RAG/événements).
+
+**`REASONING_ENGINE_ENABLED = False` (config.py), volontairement.** Un
+changement de qualité de réponse sur TOUTES les questions complexes ne
+se décide pas seul, sans que Cyril l'ait entendu sur de vraies
+questions — même logique que `VLM_ENABLED`. Rien à activer sans son
+retour ; le module existe, testé, prêt.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

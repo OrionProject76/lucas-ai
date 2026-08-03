@@ -351,6 +351,19 @@ INTENT_TIMEOUT_SECONDS: float = 5.0
 CONTEXT_TURNS: int = 2
 CONTEXT_MAX_CHARS: int = 200
 
+# --- Reasoning Engine (IDEAS.md #59, v1 minimal) ---
+# core/reasoning_engine.py décompose une question complexe en points à
+# couvrir AVANT que LucasCore ne construise sa réponse finale — il ne
+# répond jamais lui-même, il n'ajoute qu'un bloc de contexte de plus.
+#
+# ⚠️ Désactivé par défaut, même logique que VLM_ENABLED juste au-dessus :
+# construit et testé le 03/08/2026 (session autonome, voir ROADMAP.md),
+# mais change la réponse sur TOUTES les questions complexes — un
+# changement de qualité de réponse ne se décide pas sans que Cyril l'ait
+# entendu sur de vraies questions. Rien n'a été supprimé si ça reste à
+# False : le module existe, testé, prêt à activer.
+REASONING_ENGINE_ENABLED: bool = False
+
 # --- Mémoire ---
 DB_PATH = "memory/lucas_memory.db"
 MAX_HISTORY_MESSAGES = 100      # garde les 100 derniers messages max
