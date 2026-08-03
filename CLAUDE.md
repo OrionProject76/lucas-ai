@@ -166,6 +166,33 @@ Le mot "agent" employé dans `VISION_LONG_TERME.md` (§2, Pilier 2 : « agent pe
 « agent exécuteur ») désigne des **modules** au sens ci-dessus, pas des LLM autonomes —
 la vision et la règle 12 ne se contredisent donc pas.
 
+### ⚠️ Direction future actée mais NON appliquée — HERMES multi-agents (03/08/2026 nuit)
+
+**L'interdiction technique ci-dessus reste entière — rien ne change dans
+ce qui est autorisé aujourd'hui.** Ce paragraphe documente une direction
+future, pas une levée de règle.
+
+Cyril a acté, le 03/08/2026, vouloir orienter Luca's vers une inspiration
+HERMES Agent (Nous Research) pour le moteur invisible — dont la
+dimension multi-agents (plusieurs « profils » IA collaborant), pas
+seulement un orchestrateur à mémoire persistante seul. Voir
+`VISION_LONG_TERME.md`, addendum « HERMES + JARVIS » du 03/08/2026, pour
+le détail complet.
+
+Cette décision est actée **sur le principe uniquement**. La conception
+détaillée — quels profils, quelles garanties contre les boucles ou
+contradictions entre agents, quel mécanisme de validation humaine avant
+action — **attend une session où Cyril supervise les choix en direct**,
+prise tard dans une session de nuit longue, juste avant une session
+autonome non supervisée de 5h : même traitement que l'avatar Godot et la
+sécurité niveau 2, jamais construit sans supervision directe.
+
+**Tant que cette conception détaillée n'a pas eu lieu : aucune
+implémentation liée à HERMES ou au multi-agents, quelle que soit
+l'occasion.** Le test rapide de la règle 12 ci-dessus reste la référence
+opposable jusqu'à ce que cette session dédiée ait eu lieu et ait
+explicitement révisé la règle elle-même.
+
 ### ⚠️ Précision sur la règle 11 — "Piper/Kokoro seuls" (clarifié le 02/08/2026, audit de fiabilité)
 
 Trouvé en auditant la cohérence de la documentation avant le chantier de

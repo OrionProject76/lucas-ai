@@ -445,3 +445,48 @@ de construire la couche de décision comportementale par-dessus. Ordre
 naturel : mouvements crédibles d'abord, états de présence ensuite,
 personnalité adaptative en dernier — chaque couche a besoin de la
 précédente pour avoir un sens.
+
+# Addendum VISION_LONG_TERME.md — Session du 03/08/2026 (nuit) — HERMES + JARVIS, direction actée
+
+## Nouvelle direction architecturale : HERMES (moteur) + JARVIS (interface)
+
+Acté par Cyril le 03/08/2026 : Luca's doit combiner deux inspirations
+distinctes et complémentaires :
+
+- **HERMES Agent** (Nous Research, open source, 2026) pour le **moteur
+  invisible** — orchestrateur de tâches autonomes, mémoire persistante
+  entre sessions, exécution en tâche de fond, validation humaine par
+  point de passage avant action. Référence : hermes-agent.org,
+  hermesagent.agency.
+- **JARVIS** (déjà documenté depuis le début du projet) pour la **couche
+  visuelle et interactive** — avatar, vision d'écran, centralisation de
+  l'écosystème PC/mobile.
+
+### ⚠️ Décision explicite de réouverture de la règle 12 (multi-agents)
+
+**CLAUDE.md règle 12 interdisait le multi-agents (Swarm Intelligence) en
+v1, reportée en v1.1+** — décision actée et clarifiée le 01/08/2026
+("architecture modulaire Python déterministe autorisée ; si un LLM
+décide de faire agir un autre LLM → v1.1+").
+
+Cyril a choisi explicitement, le 03/08/2026, de vouloir aussi la
+dimension multi-agents de HERMES (plusieurs "profils" IA collaborant),
+pas seulement l'orchestrateur à mémoire persistante seul. Cette
+décision est actée sur le principe.
+
+**Statut : direction actée, construction volontairement différée.**
+Raison : c'est un changement de nature du risque du projet (plusieurs
+LLM qui décident entre eux, pas du code déterministe qui décide), pris
+tard dans une session de nuit très longue, au moment même où Claude
+Code partait pour 5h de travail sans supervision. Même traitement que
+l'avatar Godot et la sécurité niveau 2 : **direction documentée
+maintenant, mais la conception détaillée (quels profils, quelles
+garanties contre les boucles/contradictions entre agents, quel
+mécanisme de validation humaine avant action) attend une session où
+Cyril peut superviser les choix en direct, pas être exécutée en
+autonomie non supervisée.**
+
+À rouvrir en discussion dédiée : comment le principe "confiance méritée
+par la protection démontrée" (déjà acté) s'applique à un système
+multi-agents — la barre de sécurité devrait probablement être PLUS
+haute, pas identique, vu le risque accru.
