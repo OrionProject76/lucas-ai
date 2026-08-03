@@ -38,7 +38,6 @@
 
 from __future__ import annotations
 
-import logging
 import re
 from dataclasses import dataclass
 
@@ -50,9 +49,6 @@ from config import (
     INTENT_TIMEOUT_SECONDS,
     OLLAMA_URL,
 )
-
-# Instrumentation temporaire (03/08/2026, voir main.py) — diagnostic vision.
-logger = logging.getLogger(__name__)
 
 # Les trois seules réponses acceptées. Toute autre sortie du modèle est
 # traitée comme un échec et bascule sur les mots-clés — on ne devine pas
@@ -311,9 +307,6 @@ def classify(question: str, context: str = "", _inherit: bool = True) -> Intent:
     cle = (context, question)
     cached = _CACHE.get(cle)
     if cached is not None:
-        logger.debug(
-            "classify(%r, context=%r) -> cache hit : %r", question, context, cached
-        )
         return cached
 
     # ⚠️ HÉRITAGE — une ellipse ne change pas de sujet, c'est ce qui la
@@ -322,10 +315,6 @@ def classify(question: str, context: str = "", _inherit: bool = True) -> Intent:
     # est elle-même une ellipse, on ne remonte pas la chaîne à l'infini.
     if _inherit and context and is_elliptical(question):
         precedente = previous_question(context)
-        logger.debug(
-            "classify(%r) : question elliptique détectée, précédente=%r",
-            question, precedente,
-        )
         if precedente and precedente != question:
             herite = classify(precedente, "", _inherit=False)
             # Un repli mots-clés ne s'hérite pas : il vaut 50 % de
@@ -336,9 +325,6 @@ def classify(question: str, context: str = "", _inherit: bool = True) -> Intent:
                     needs_documents=herite.needs_documents,
                     source="inherited",
                 )
-                logger.debug(
-                    "classify(%r) -> hérité de %r : %r", question, precedente, intent
-                )
                 if len(_CACHE) >= _CACHE_MAX:
                     _CACHE.clear()
                 _CACHE[cle] = intent
@@ -346,9 +332,6 @@ def classify(question: str, context: str = "", _inherit: bool = True) -> Intent:
 
     if INTENT_CLASSIFIER_ENABLED and question.strip():
         label = _ask_classifier(question, context)
-        logger.debug(
-            "classify(%r, context=%r) : classifieur LLM -> %r", question, context, label
-        )
         if label is not None:
             # La garde déictique ne corrige QUE le sens DOCUMENTS → ECRAN.
             # Elle ne peut jamais faire naître une consultation de
@@ -356,9 +339,6 @@ def classify(question: str, context: str = "", _inherit: bool = True) -> Intent:
             # pire elle fait regarder l'écran, ce qui reste local et
             # visible dans la réponse.
             if label == DOCUMENTS and _is_deictic(question):
-                logger.debug(
-                    "classify(%r) : garde déictique, DOCUMENTS -> ECRAN", question
-                )
                 label = SCREEN
 
             intent = Intent(
@@ -366,7 +346,6 @@ def classify(question: str, context: str = "", _inherit: bool = True) -> Intent:
                 needs_documents=label == DOCUMENTS,
                 source="llm",
             )
-            logger.debug("classify(%r) -> %r", question, intent)
             # Seuls les verdicts du classifieur sont mémorisés. Mettre un
             # repli en cache figerait une panne passagère d'Ollama sur
             # cette question pour toute la session.
@@ -375,12 +354,7 @@ def classify(question: str, context: str = "", _inherit: bool = True) -> Intent:
             _CACHE[cle] = intent
             return intent
 
-    fallback = _classify_by_keywords(question)
-    logger.debug(
-        "classify(%r) : repli mots-clés (classifieur désactivé ou en échec) -> %r",
-        question, fallback,
-    )
-    return fallback
+    return _classify_by_keywords(question)
 
 
 def _classify_by_keywords(question: str) -> Intent:

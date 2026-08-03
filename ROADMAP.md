@@ -1035,6 +1035,29 @@ sujet complet ? À reprendre avec le même protocole de mesure que les
 bugs précédents (reconstruction sur copie de base réelle, tirages
 multiples, isolation par historique vierge) avant tout correctif.
 
+## 5.6 ⏸️ Diagnostic en pause (03/08/2026) — comportement KO signalé sur vision/intent
+
+Cyril a signalé un « comportement KO » en déclenchant la vision (cliquer
+pour la reproduire), sans jamais pouvoir transmettre la description
+complète du symptôme ni le contenu réel d'un log — ses messages de suivi
+se sont coupés à chaque tentative. Une instrumentation de debug a été
+posée le jour même (`logging.basicConfig` dans `main.py`, `logger.debug()`
+dans `ui/main_window.py`, `core/router.py`, `core/intent.py`,
+`core/lucas_core.py`) pour tracer la décision vision/intent de bout en
+bout, avec instruction explicite de s'arrêter une fois posée et d'attendre
+une vraie reproduction — jamais reçue.
+
+**Mis en pause volontairement par Cyril, pas abandonné.** L'instrumentation
+a été retirée le 03/08/2026 (le code est revenu à son état d'avant
+diagnostic, 686/686 tests toujours verts) plutôt que laissée à traîner
+sans échéance. **À rouvrir si le symptôme se reproduit** — dans ce cas,
+reprendre avec la description complète du comportement observé (pas
+seulement « ça ne va pas ») et, si possible, la remettre en place pour
+capturer un vrai `logs/intent_debug.log` avant toute hypothèse de cause.
+
+Distinct du point OCR/classifieur (§3, tableau Phase 3, « Vision écran »)
+qui reste, lui, clos et sans lien avec ce signalement.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

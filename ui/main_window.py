@@ -1,8 +1,6 @@
 # ui/main_window.py — interface Luca's
 # Avatar animé + TTS auto + Streaming fluide + HUD dark
 
-import logging
-
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -19,9 +17,6 @@ from core.llm_worker import LLMWorker
 from core.lucas_core import LucasCore
 from core.router import should_use_vision
 from memory.memory_manager import save_event_from_any_thread
-
-# Instrumentation temporaire (03/08/2026, voir main.py) — diagnostic vision.
-logger = logging.getLogger(__name__)
 
 # ── Imports optionnels — fallback gracieux ──
 try:
@@ -439,12 +434,7 @@ class MainWindow(QWidget):
         # cache de core/intent est indexé sur (contexte, question), donc
         # deux contextes différents pour un seul message donneraient deux
         # appels au classifieur au lieu d'un.
-        context = self.lucas.recent_context()
-        vision = should_use_vision(text, context)
-        logger.debug(
-            "send_message(%r) : contexte=%r, should_use_vision=%s", text, context, vision
-        )
-        if vision:
+        if should_use_vision(text, self.lucas.recent_context()):
             self._set_status("👁️ Luca's regarde ton écran...", "watching")
             self._set_avatar_state("WATCHING")
         else:

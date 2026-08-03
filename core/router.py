@@ -3,12 +3,7 @@
 # Architecture hybride : local par défaut, cloud pour les questions complexes,
 # jamais de donnée sensible vers le cloud (CLAUDE.md règle 3).
 
-import logging
-
 from core.text_utils import contains_any
-
-# Instrumentation temporaire (03/08/2026, voir main.py) — diagnostic vision.
-logger = logging.getLogger(__name__)
 
 KEYWORDS_CLOUD = [
     "analyse", "compare", "projection",
@@ -152,12 +147,7 @@ def should_use_vision(text: str, context: str = "") -> bool:
     """
     from core.intent import classify
 
-    intent = classify(text, context)
-    logger.debug(
-        "should_use_vision(%r, context=%r) -> %s (intent=%r)",
-        text, context, intent.needs_screen, intent,
-    )
-    return intent.needs_screen
+    return classify(text, context).needs_screen
 
 
 def route_voice(answer: str, question: str = "") -> str:
