@@ -418,11 +418,16 @@ vérifiée sans téléphone.
    à n'importe quel appareil du réseau — relève du cas 1 de l'Autonomie
    d'exécution (`CLAUDE.md`) : accès réseau externe, à ne jamais faire
    sans validation explicite.
-3. **Le protocole de tunnel (Tailscale vs WireGuard) n'est pas choisi** —
-   `VISION_LONG_TERME.md` §2 Pilier 3 le laisse explicitement ouvert
-   (« à définir en Phase Mobile »). C'est un choix d'architecture qui
-   engage la suite (cas 3 de l'Autonomie d'exécution), pas un détail
-   d'implémentation à trancher en passant.
+3. **Le protocole de tunnel — ✅ tranché par Cyril le 03/08/2026 : Tailscale**,
+   plutôt que WireGuard brut. Raisons données : simplicité pour un
+   débutant, gestion automatique de l'IP dynamique, chiffrement de bout en
+   bout conservé (seules les métadonnées de coordination transitent par le
+   serveur Tailscale, jamais le contenu). `VISION_LONG_TERME.md` §2
+   Pilier 3 laissait la question explicitement ouverte (« à définir en
+   Phase Mobile ») — c'est fait, mais **pas implémenté** : Phase 4 n'est
+   pas le chantier actif aujourd'hui (voir §5.4/§5.6 et la liste priorisée
+   de la resynchronisation du 03/08/2026), cette décision attend juste que
+   Phase 4 redevienne prioritaire pour être exécutée.
 
 **Proposition pour la suite, validée par Cyril → faite dans la foulée** :
 le jeton d'authentification (point 2) est construit, `API_HOST` reste
@@ -673,7 +678,7 @@ Sécurité validée : **liste blanche et confirmation pour toute action système
 
 **État de `security/` au 01/08/2026 — niveau 0, observation seule.** Guardian, Privacy Shield et Ransomware Watch existent en ébauche testée (62 tests) : ils détectent et rapportent, ils n'agissent jamais. Aucun process tué, aucune connexion coupée, aucun fichier restauré, aucun appel à un service externe. Leur donner un pouvoir d'action défensif est une décision distincte, à valider par Cyril.
 
-La détection de rançongiciel repose sur les **métadonnées seules** (extensions connues, notes de rançon, rafale de modifications) et sur des **fichiers-appâts** déployés explicitement. Elle ne lit jamais le contenu des documents : l'analyse d'entropie serait plus fiable mais obligerait le capteur à ouvrir les fichiers personnels — décision qui revient à Cyril.
+La détection de rançongiciel repose sur les **métadonnées seules** (extensions connues, notes de rançon, rafale de modifications) et sur des **fichiers-appâts** déployés explicitement. Elle ne lit jamais le contenu des documents aujourd'hui : l'analyse d'entropie, plus fiable mais qui obligerait le capteur à ouvrir les fichiers personnels, a été **acceptée par Cyril le 03/08/2026** — scopée à un déclenchement événementiel, jamais un balayage permanent (voir plus bas, « Niveau 1 » et `security/ransomware_watch.py`) — mais pas encore construite.
 
 **Surveillance continue branchée sur le daemon** (01/08/2026) : `SecurityMonitor` orchestre les trois capteurs depuis `orion_daemon.py` — process et réseau toutes les 5 minutes, fichiers toutes les 15. Les signaux ne sont rapportés qu'une fois : un état persistant (`data/security_state.json`) déduplique d'un balayage à l'autre et d'un redémarrage à l'autre, et oublie un signal après 3 jours d'absence pour que son retour soit de nouveau une information. Les alertes atterrissent dans `system_events`, donc dans le contexte que Luca's injecte au LLM.
 
@@ -688,11 +693,34 @@ La détection de rançongiciel repose sur les **métadonnées seules** (extensio
 
 **Niveau 1 clos le 01/08/2026.** Cinq capteurs (`guardian`, `privacy_shield`, `ransomware_watch`, `persistence_watch`, `monitor`), une mémoire partagée (`history`), 94 tests. Les chemins d'état sont ancrés sur la racine du projet — le daemon étant prévu en service Windows via NSSM, un chemin relatif faisait repartir l'apprentissage de zéro à chaque lancement.
 
-**Les deux paliers suivants demandent une décision de Cyril, pas du code :**
-- **Analyse d'entropie** des fichiers pour la détection de chiffrement : plus fiable que les métadonnées, mais le capteur ouvrirait les documents personnels.
-- **Détection native des hooks clavier** : impose une dépendance Win32, `psutil` ne les expose pas.
+**Les deux paliers ci-dessous ne partagent plus le même statut depuis le
+03/08/2026 — décisions tranchées par Cyril :**
 
-Tant que ces deux points ne sont pas tranchés, `security/` reste au niveau 1 — ce qui suffit au principe §4.1 pour les extensions d'autonomie envisagées à court terme, mais pas pour un pouvoir d'action défensif.
+- **Analyse d'entropie des fichiers — ✅ ACCEPTÉE, mais scopée.** Pas un
+  balayage permanent du disque (ça reviendrait à ouvrir tous les documents
+  personnels en continu) : un **watcher événementiel**, qui ne mesure
+  l'entropie que sur une rafale d'écritures/renommages massifs en peu de
+  temps — le signal que `ransomware_watch.py` détecte déjà par métadonnées
+  sert de déclencheur, l'entropie vient confirmer plutôt que surveiller
+  seule. Décision actée, **prête à être développée quand ce chantier sera
+  priorisé** — pas une action immédiate (voir `security/ransomware_watch.py`
+  et `IDEAS.md` #84 pour le détail).
+- **Détection native des hooks clavier (keylogger) — ❌ reste GELÉE
+  indéfiniment**, pas juste en attente. Deux raisons cumulatives : la
+  limite technique déjà documentée ci-dessus (`SetWindowsHookEx` hors de
+  portée de `psutil`, donc hors de portée d'un mécanisme portable) ET,
+  précisé par Cyril le 03/08/2026, un risque de **faux positifs
+  antivirus** — le mécanisme bas niveau qu'exigerait une vraie détection
+  ressemble structurellement à ce que Windows Defender surveille chez un
+  vrai keylogger, avec un rapport effort/protection défavorable face au
+  risque ransomware pour un usage personnel. Contrairement à l'analyse
+  d'entropie, ce palier ne redeviendra pas un chantier à programmer un
+  jour : c'est une exclusion, pas une pause.
+
+`security/` reste donc au **niveau 1** tant que l'entropie n'est pas
+construite — ce qui suffit au principe §4.1 pour les extensions
+d'autonomie envisagées à court terme, mais pas pour un pouvoir d'action
+défensif.
 
 **Nouveau principe acté le 01/08/2026 — la liberté est conditionnée à la protection.** Guardian et Privacy Shield (`security/`) deviennent une dépendance directe de toute extension future des libertés d'action de Luca's : plus ils sont matures et testés, plus le périmètre d'autonomie peut s'élargir. Concrètement pour le séquencement de ce fichier, aucune phase n'ouvre de nouveaux droits d'action (OS Controller, automation, exécution autonome) tant que ces deux modules ne sont pas au moins ébauchés et testés. Ils n'appartiennent donc plus au « polish » de la Phase 5 — ce sont des prérequis. Doctrine : `VISION_LONG_TERME.md` §4.1, résumé opposable : `CLAUDE.md`.
 
@@ -945,8 +973,12 @@ tous deux corrigés le 02/08/2026, voir §2).
    « Lucas »), et que `initial_prompt` ne corrige pas (voir ci-dessus).
    Une correction textuelle post-transcription serait possible (renommer
    « Lucas » en « Luca's » en début de phrase) mais risquerait des faux
-   positifs (Cyril parlant d'un vrai Lucas) — décision produit, pas
-   tranchée ici, laissée à Cyril si le confort d'usage le justifie.
+   positifs (Cyril parlant d'un vrai Lucas). **Décision explicitement
+   reportée par Cyril le 03/08/2026, pas abandonnée** : à trancher
+   seulement après un vrai test du pipeline STT avec le speakerphone
+   (matériel en commande à cette date) — c'est le seul moyen de savoir
+   si l'ambiguïté gêne réellement à l'usage, plutôt que de deviner sur
+   des mesures synthétiques (Piper).
 2. **Lecture d'écran smartphone à affiner** — retour vague de Cyril
    (« il y a encore matière à travailler dessus »), à préciser avec lui
    avant d'agir.

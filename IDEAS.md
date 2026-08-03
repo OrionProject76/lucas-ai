@@ -686,3 +686,25 @@ le détail technique complet (seuil RMS, `echoCancellation`, fermeture du
 micro dès la fin de la lecture) et sa limite connue : **pas testé en
 conditions réelles**, cette machine n'a pas de micro physique. À valider
 par Cyril sur le S25 Ultra.
+
+## 84. Analyse d'entropie — détection de chiffrement, en complément des métadonnées
+
+**Décision de Cyril le 03/08/2026 : ACCEPTÉE, scopée, pas construite.**
+`security/ransomware_watch.py` détecte aujourd'hui un chiffrement massif
+par métadonnées seules (extensions connues, notes de rançon, rafale de
+modifications) sans jamais ouvrir le contenu des fichiers de Cyril —
+choix de conception documenté dans ce module. L'analyse d'entropie du
+contenu serait plus fiable pour confirmer un vrai chiffrement, mais
+impliquait jusqu'ici d'ouvrir les documents personnels en continu, une
+décision qui revenait à Cyril (CLAUDE.md, cas 1 de l'autonomie).
+
+**Ce qui a été tranché** : oui à l'entropie, mais jamais en balayage
+permanent du disque. Le capteur reste événementiel — l'entropie ne se
+calcule qu'en réaction à un signal déjà détecté par les métadonnées
+(rafale d'écritures/renommages), pour le confirmer, jamais pour
+surveiller seule en continu. Ce scope évite l'ouverture systématique des
+documents que l'idée initiale impliquait.
+
+**Statut** : prête à être développée quand ce chantier sera priorisé
+(voir `ROADMAP.md` §4) — aucun code écrit à ce jour, `security/` reste
+au niveau 1 (métadonnées seules) tant que ce n'est pas construit.

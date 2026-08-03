@@ -1,13 +1,21 @@
 # security/ransomware_watch.py — détection de chiffrement massif (observation seule)
 #
-# ⚠️ CHOIX DE CONCEPTION : ce capteur ne lit JAMAIS le contenu des fichiers
-# de Cyril. Tout repose sur des métadonnées — noms, extensions, dates de
-# modification — et sur des fichiers-appâts que Luca's a elle-même créés.
+# ⚠️ CHOIX DE CONCEPTION ACTUEL : ce capteur ne lit JAMAIS le contenu des
+# fichiers de Cyril. Tout repose sur des métadonnées — noms, extensions,
+# dates de modification — et sur des fichiers-appâts que Luca's a
+# elle-même créés.
 #
 # L'approche habituelle serait de mesurer l'entropie du contenu pour
-# repérer ce qui vient d'être chiffré. Elle est plus fiable, mais oblige
-# le capteur à ouvrir les documents personnels. Ça relève d'une décision
-# de Cyril, pas d'un choix d'implémentation (CLAUDE.md, cas 1).
+# repérer ce qui vient d'être chiffré — plus fiable, mais oblige le
+# capteur à ouvrir les documents personnels. **Décision de Cyril,
+# 03/08/2026 : ACCEPTÉE, mais scopée.** Pas un balayage permanent du
+# disque (reviendrait à ouvrir tous les documents en continu) : un
+# watcher événementiel, qui ne mesure l'entropie qu'en réaction à une
+# rafale d'écritures/renommages détectée par les signaux déjà en place
+# ci-dessous (extensions, notes de rançon) — l'entropie confirme un
+# signal existant, elle ne surveille pas seule. Prêt à être développé
+# quand ce chantier sera priorisé (voir ROADMAP.md §4, IDEAS.md #84) —
+# pas construit à ce jour, ce fichier reste métadonnées-seules.
 #
 # Ne restaure rien, ne bloque rien, ne tue aucun process.
 
