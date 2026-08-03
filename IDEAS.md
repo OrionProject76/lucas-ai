@@ -278,6 +278,29 @@ Visage low-poly stylisé, shaders néon cyan/bleu avec glow. Flottement organiqu
 | Rôle | Maître (cerveau + GPU) | Client léger (affichage + input) |
 | **Synchro (précisé 31/07)** | **Hybride : auto sur événement + à la demande, conflit résolu par timestamp (dernier écrit gagne)** | idem |
 
+### Organisation du code — `modules/` plat vs dossiers par domaine (précisé 03/08/2026)
+
+Le plan de départ (voir CLAUDE.md, structure dossiers d'origine)
+imaginait un dossier séparé par domaine — `finance/`, `vision/`,
+`voice/`, `automation/`, `web/`. En pratique, chacun de ces domaines
+tient aujourd'hui dans **un seul fichier** (`modules/finance_manager.py`,
+`modules/vision_manager.py`, `modules/voice_manager.py`,
+`modules/automation_manager.py`, `modules/web_search.py`...) : leur
+donner un dossier propre n'apporterait rien, juste un niveau
+d'indirection de plus pour naviguer vers un seul fichier. CLAUDE.md a
+été corrigé le 03/08/2026 pour refléter ça — pas un refactor du code,
+juste la documentation qui suit enfin la réalité.
+
+**Condition de réorganisation, posée maintenant, sans date fixée** :
+reconsidérer un dossier séparé pour un domaine SEULEMENT s'il dépasse
+2-3 fichiers distincts qui vont clairement ensemble — par exemple
+`vision/` le jour où `ocr.py`, `vlm.py` et un futur `classifier.py`
+existeraient séparément, plutôt que regroupés dans
+`modules/vision_manager.py` + `modules/ocr_engine.py` comme aujourd'hui.
+En dessous de ce seuil, ne pas créer de sous-dossier par anticipation —
+c'est exactement le genre de structure prématurée que ce projet a déjà
+dû corriger une fois (voir CLAUDE.md, structure dossiers).
+
 ---
 
 ## 7. Exclusions validées (à ne jamais réintroduire sans décision explicite)

@@ -277,6 +277,23 @@ un jour de les assouplir en connaissance de cause.
 Doctrine complète : `VISION_LONG_TERME.md` §4.1.
 
 ## 📁 Structure Dossiers
+
+**Corrigée le 03/08/2026** — l'arborescence ci-dessous reflète ce qui
+existe réellement sur le disque, pas le plan de départ. Le projet a
+convergé vers **un seul dossier `modules/` plat**, un fichier par
+domaine (finance, vision, voix, automation, web...), plutôt que les
+dossiers séparés `finance/`, `vision/`, `voice/`, `automation/`, `web/`
+imaginés au lancement — jamais créés, parce qu'un seul fichier par
+domaine ne justifie pas son propre dossier. `perception/` n'a jamais été
+construit non plus : audio et webcam dépendent du pont mobile (S25
+Ultra), pas du PC — voir CLAUDE.md § Priorités de Développement.
+
+**Condition de réorganisation posée, pas de date fixée** : reconsidérer
+un dossier séparé pour un domaine seulement s'il dépasse 2-3 fichiers
+distincts (ex. `vision/` = `ocr.py` + `vlm.py` + `classifier.py`) — voir
+IDEAS.md pour le détail. En dessous de ce seuil, un sous-dossier
+n'apporterait rien.
+
 ```
 C:/OrionAI/
 ├── main.py                    # Point d'entrée FastAPI + PySide6
@@ -286,86 +303,62 @@ C:/OrionAI/
 ├── requirements_daemon.txt    # Dépendances daemon
 ├── justfile                   # Commandes rapides
 ├── CLAUDE.md                  # CE FICHIER
-├── lucas_daemon.py            # Daemon 24/7
-├── lucas_report.py            # Rapport matinal standalone
-├── core/                      # Logique métier
-│   ├── __init__.py
-│   ├── llm_manager.py         # Gestion multi-modèles Ollama
-│   ├── reasoning_engine.py    # Chain-of-thought, débat interne
-│   └── decision_engine.py   # Actions autonomes liste blanche
-├── perception/                # Couche 1 — Perception
-│   ├── __init__.py
-│   ├── screen_watcher.py      # Capture écran + OCR + VLM
-│   ├── system_watcher.py      # Hooks Windows (fenêtres, processus)
-│   ├── audio_watcher.py       # Micro + VAD + STT Whisper
-│   ├── webcam_watcher.py      # Émotions + attention webcam
-│   └── input_watcher.py       # Patterns clavier/souris
-├── memory/                    # Couche 2 — Mémoire
-│   ├── __init__.py
-│   ├── memory_palace.py       # 5 types de mémoire
-│   ├── world_model.py         # État temps réel OS
-│   ├── knowledge_graph.py     # Graphe entités/relation
-│   ├── rag_engine.py          # Retrieval Augmented Generation
-│   └── index_documents.py     # Indexation batch ChromaDB
-├── ui/                        # Couche 5 — Interface (PySide6)
-│   ├── __init__.py
-│   ├── main_window.py         # Fenêtre principale
-│   ├── chat_widget.py         # Widget chat streaming
-│   ├── avatar_widget.py       # Avatar 2D QPainter
-│   └── barre_lucas.py         # Barre Luca's remplaçant la taskbar
-├── godot/                     # Couche 5 — Interface 3D (Godot)
-│   ├── project.godot
-│   ├── scenes/
-│   ├── scripts/
-│   └── assets/
-├── voice/                     # Couche 4 — Voix
-│   ├── __init__.py
-│   ├── tts_engine.py          # Text-to-Speech (Piper/Kokoro)
-│   └── stt_engine.py          # Speech-to-Text (Whisper)
-├── automation/                # Couche 4 — Action OS
-│   ├── __init__.py
-│   └── os_controller.py       # Ouvrir apps, orga fichiers, etc.
-├── finance/                   # Module Finance
-│   ├── __init__.py
-│   ├── csv_importer.py        # Import CSV/OFX/QIF
-│   ├── categorizer.py         # Catégorisation auto LLM
-│   └── dashboard.py           # Dashboard Wall Street
-├── web/                       # Module Web
-│   ├── __init__.py
-│   └── scraper.py             # Scraping, recherche
-├── vision/                    # Module Vision
-│   ├── __init__.py
-│   └── vlm_analyzer.py        # Analyse image VLM
-├── security/                  # Sécurité
-│   ├── __init__.py
-│   ├── guardian.py            # Détection malware
-│   └── privacy_shield.py      # Monitoring connexions
-├── training/                  # Entraînement IA
-│   └── train_lora.py          # Fine-tuning LoRA local
-├── data/                      # Données persistantes
-│   ├── conversations/         # Logs conversations (pour LoRA)
-│   ├── documents/             # Documents pour RAG
-│   ├── screenshots/           # Time Travel captures
-│   ├── logs/                  # Logs daemon
-│   ├── reports/               # Rapports matinaux
-│   └── lucas_memory.db        # SQLite principal (memory/lucas_memory.db en réalité — voir §6)
-├── tests/                     # Tests unitaires
-│   ├── __init__.py
-│   ├── test_screen_watcher.py
-│   ├── test_system_watcher.py
-│   ├── test_memory_palace.py
-│   └── test_llm_manager.py
-└── missions/                  # Missions structurées pour Claude
-    ├── mission_01_screen_watcher.md
-    ├── mission_02_system_watcher.md
-    ├── mission_03_audio_watcher.md
-    ├── mission_04_webcam_watcher.md
-    ├── mission_05_input_watcher.md
-    ├── mission_06_world_model.md
-    ├── mission_07_memory_palace.md
-    ├── mission_08_rag_engine.md
-    ├── mission_09_tts_engine.md
-    └── mission_10_stt_engine.md
+├── ROADMAP.md                 # Journal détaillé de ce qui a été fait, testé, décidé
+├── IDEAS.md                   # Catalogue exhaustif des idées
+├── VISION_LONG_TERME.md       # Le nord du projet, dans les mots de Cyril
+├── lucas_daemon.py            # Daemon 24/7 (sécurité niveau 1, rapports)
+├── test_*.py                  # Suite de tests — tous à la racine, pas dans tests/
+├── core/                      # Chef d'orchestre, décisions déterministes
+│   ├── lucas_core.py          # LucasCore — construit le prompt, orchestre tout le reste
+│   ├── router.py               # local vs cloud, RAG oui/non — mots-clés déterministes
+│   ├── intent.py               # écran / documents / aucun — classifieur LLM
+│   ├── reasoning_engine.py    # Chain-of-thought v1 (désactivé par défaut)
+│   ├── world_model.py          # Snapshot système (CPU/RAM/fenêtre active/heure)
+│   ├── dates.py                 # Extraction de périodes (RAG daté)
+│   ├── local_llm.py / cloud_llm.py / ollama_client.py / llm_worker.py / text_utils.py
+│   └── decision_engine.py      # PAS ENCORE CONSTRUIT — liste blanche d'actions OS,
+│                                 planifié, voir ROADMAP.md « Hors tableau »
+├── modules/                   # Un fichier par domaine — voir condition ci-dessus
+│   ├── finance_manager.py + finance_categorizer.py   # Import CSV, catégorisation LLM
+│   ├── rag_manager.py                                 # RAG (ChromaDB, ancré core.dates)
+│   ├── semantic_desktop.py                            # Organisation par sens, lecture seule
+│   ├── vision_manager.py + ocr_engine.py              # VLM (coupé, VLM_ENABLED=False) + OCR
+│   ├── voice_manager.py + piper_engine.py             # TTS routé (edge_tts / Piper)
+│   ├── stt_engine.py + stt_manager.py                 # Speech-to-Text (Whisper)
+│   ├── automation_manager.py                          # Liste blanche : ouvrir une appli
+│   ├── web_search.py                                  # Recherche web, filtre anti-fuite
+│   ├── weather_manager.py                             # Écrit, jamais branché ailleurs (voir ROADMAP §5.2)
+│   └── calculator.py
+├── memory/                     # Mémoire de conversation + indexation RAG
+│   ├── memory_manager.py       # Historique SQLite (memory/lucas_memory.db)
+│   └── index_documents.py      # Indexation batch ChromaDB
+├── ui/                          # Interface PySide6
+│   ├── main_window.py / chat_widget.py / avatar_widget.py
+├── api/                         # API FastAPI unique (PWA + Godot + tests)
+│   ├── server.py                # /chat, /history, /system, /documents..., /ws
+│   └── protocol.py               # Vocabulaire WebSocket partagé
+├── static/                      # PWA mobile (pont S25 Ultra) — servie sous /app
+│   ├── index.html, manifest.json, sw.js
+│   ├── css/style.css
+│   └── js/ (app.js, chat.js, websocket.js, avatar.js, activity.js, security.js,
+│            documents.js, audio.js, camera.js, voice_output.js)
+├── Lucas3D/                    # Godot 4 — avatar 3D (renommé depuis Orion3D/, voir §6)
+│   ├── scenes/ (face/, hud/), scripts/, shaders/
+├── security/                   # Niveau 1 : observation seule, jamais d'action
+│   ├── guardian.py, privacy_shield.py, ransomware_watch.py, persistence_watch.py
+│   ├── history.py, monitor.py, status.py, types.py
+├── training/                    # Vide — LoRA fine-tuning pas encore construit
+├── models/                      # Vide — réservé
+├── tools/                       # mkcert.exe (certificats HTTPS locaux)
+├── demos/                       # Scripts de démonstration/calibrage manuels
+├── data/                        # Données persistantes, en grande partie non versionnées
+│   ├── documents/               # Documents pour RAG
+│   ├── chromadb/                # Base vectorielle
+│   ├── screenshots/, logs/, reports/, voices/
+│   ├── cert.pem, key.pem        # HTTPS pont mobile
+│   └── lucas_daemon.db
+└── missions/                    # Missions structurées historiques
+    ├── mission_01_screen_watcher.md ... mission_10_stt_engine.md
 ```
 
 ## 🧠 Modèles LLM (Ollama)
