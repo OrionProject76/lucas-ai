@@ -1,5 +1,6 @@
 # core/lucas_core.py — le chef d'orchestre
 
+import logging
 import time
 from typing import Callable
 
@@ -31,6 +32,9 @@ from core.world_model import (
 )
 from memory.memory_manager import MemoryManager
 from modules.rag_manager import RAGManager
+
+# Instrumentation temporaire (03/08/2026, voir main.py) — diagnostic vision.
+logger = logging.getLogger(__name__)
 
 # Signature du callback de la console de flux (IDEAS.md #77) : (kind, texte).
 ActivityCallback = Callable[[str, str], None]
@@ -175,6 +179,11 @@ class LucasCore:
         # La vision est décidée AVANT de charger l'historique : quand elle
         # se déclenche, l'historique doit être raccourci (voir plus bas).
         vision_context = ""
+        logger.debug(
+            "_build_messages(%r) : is_cloud=%s, VISION_ENABLED=%s, image_path=%r, "
+            "allow_screen_capture=%s",
+            user_message, is_cloud, VISION_ENABLED, image_path, allow_screen_capture,
+        )
         if not is_cloud and VISION_ENABLED:
             if image_path is not None:
                 vision_context = self._describe_camera_image(image_path, user_message)
@@ -224,6 +233,11 @@ class LucasCore:
                         "écran non lu — demande reçue depuis le téléphone, "
                         "sans confirmation que Cyril est devant ce PC",
                     )
+
+        logger.debug(
+            "_build_messages(%r) : vision_context final (%d caractères) = %r",
+            user_message, len(vision_context), vision_context[:200],
+        )
 
         history = self.memory.load_history()
         if is_cloud:
