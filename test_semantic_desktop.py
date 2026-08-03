@@ -113,25 +113,41 @@ def test_related_documents_empty_when_source_not_indexed(desktop) -> None:
 
 def test_group_by_period_groups_matching_documents(desktop) -> None:
     sd, collection = desktop
-    _index(collection, "bulletin_juillet.pdf", ["contenu"], periods="2025-07")
-    _index(collection, "bulletin_aout.pdf", ["contenu"], periods="2025-08")
+    _index(collection, "bulletin_juillet.pdf", ["contenu"], periods="2025-07,2025")
+    _index(collection, "bulletin_aout.pdf", ["contenu"], periods="2025-08,2025")
     _index(collection, "cv.pdf", ["contenu"])  # aucune période
 
     groups = sd.group_by_period()
 
-    assert groups["2025-07"] == ["bulletin_juillet.pdf"]
-    assert groups["2025-08"] == ["bulletin_aout.pdf"]
+    assert groups["2025"] == ["bulletin_aout.pdf", "bulletin_juillet.pdf"]
     assert groups["sans période"] == ["cv.pdf"]
 
 
 def test_group_by_period_handles_multiple_periods_per_document(desktop) -> None:
+    """Un document qui couvre deux ANNÉES distinctes apparaît dans les deux groupes."""
     sd, collection = desktop
-    _index(collection, "recap_annuel.pdf", ["contenu"], periods="2025-07,2025-08")
+    _index(collection, "recap_annuel.pdf", ["contenu"], periods="2025-12,2025,2026-01,2026")
 
     groups = sd.group_by_period()
 
-    assert groups["2025-07"] == ["recap_annuel.pdf"]
-    assert groups["2025-08"] == ["recap_annuel.pdf"]
+    assert groups["2025"] == ["recap_annuel.pdf"]
+    assert groups["2026"] == ["recap_annuel.pdf"]
+
+
+def test_group_by_period_ignores_month_level_granularity(desktop) -> None:
+    """
+    Régression du bug de granularité (ROADMAP.md §5.8) : 171 groupes pour
+    39 documents réels, parce que core/dates.py ajoute toujours le mois
+    ET l'année pour une même date. group_by_period() ne doit garder que
+    l'année — aucune clé contenant "-" ne doit apparaître dans le résultat.
+    """
+    sd, collection = desktop
+    _index(collection, "bulletin_juillet.pdf", ["contenu"], periods="2025-07,2025")
+
+    groups = sd.group_by_period()
+
+    assert "2025-07" not in groups
+    assert groups["2025"] == ["bulletin_juillet.pdf"]
 
 
 def test_semantic_desktop_never_writes_to_disk() -> None:

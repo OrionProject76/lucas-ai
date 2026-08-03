@@ -1162,18 +1162,48 @@ Trois fonctions, toutes lecture seule :
 (39 documents, lecture seule — vérifié qu'aucune écriture n'a eu lieu) :
 `list_documents()` rend les 39 sources réelles ; `related_documents()`
 sur une offre d'emploi Aide-soignant retrouve deux autres offres du même
-métier — cohérent ; `group_by_period()` produit 171 groupes de périodes
-réels. **Point de vigilance pour la suite** : 171 groupes sur 39
-documents est probablement trop fin pour un usage direct (une période
-par mois ET par année pour le même document) — un regroupement
-utilisable pour Cyril demanderait sans doute de ne garder qu'un niveau
-de granularité, pas mesuré plus loin ici, à affiner si ce module sert un
-jour de base à une vraie fonctionnalité.
+métier — cohérent ; `group_by_period()` produisait 171 groupes de
+périodes réels. **Point de vigilance signalé ici, corrigé le
+03/08/2026** (session autonome suivante) — voir juste en dessous.
 
-8 tests (`test_semantic_desktop.py`, collection ChromaDB simulée) dont un
-qui échoue si le module importe un jour un mécanisme d'écriture fichier
-(`shutil.move`, `.rename(`, `.unlink(`...) — garde-fou explicite du
-périmètre lecture seule, pas juste une note dans un commentaire.
+### Correctif granularité `group_by_period()` — 03/08/2026, session autonome
+
+171 groupes pour 39 documents, diagnostiqué avant de coder quoi que ce
+soit : la lecture de `modules/rag_manager.add_text()` montre que
+`periods` est calculé UNE SEULE FOIS sur le document entier (pas par
+morceau), donc identique sur tous les chunks d'un même document — le
+bruit n'était pas là. La vraie cause est que `core/dates.extract_periods()`
+ajoute TOUJOURS le mois ET l'année pour une même date trouvée
+(volontaire, voir son en-tête — sert le FILTRAGE de recherche
+`RAG_MAX_DISTANCE_DATED`), et `group_by_period()` utilisait les deux
+comme clés de groupe séparées. Un document qui mentionne beaucoup de
+vraies dates (relevé de carrière, CV listant des années d'expérience)
+se retrouvait éclaté sur des dizaines de groupes mois+année
+quasi redondants — `Relevé_de_Carrière2026.pdf` à lui seul contribuait
+136 clés.
+
+**Correctif** : `group_by_period()` (`modules/semantic_desktop.py`) ne
+garde que les clés de période SANS tiret (niveau année). Rien d'autre ne
+change — ni `core/dates.py`, ni le format d'indexation
+(`rag_manager.add_text`) : la précision mois reste entière pour la
+recherche datée, seul ce regroupement d'affichage change de niveau.
+Mesuré sur la vraie collection après correctif : **40 groupes pour 39
+documents** (un par document, plus les années partagées entre
+documents), contre 171 avant.
+
+3 tests mis à jour pour refléter le niveau année (les données de test
+fournissaient directement une chaîne `periods`, ce n'était pas un test
+sur la vraie invariant mois+année de `core/dates.py`) + 1 test de
+non-régression explicite (`test_group_by_period_ignores_month_level_granularity`)
+qui échoue si une clé contenant `-` réapparaît un jour dans le résultat.
+9/9 passent ; suite complète rejouée sans régression ailleurs (aucun
+autre module ne consomme `group_by_period()` à ce jour).
+
+9 tests (`test_semantic_desktop.py`, collection ChromaDB simulée, un
+ajouté par le correctif ci-dessus) dont un qui échoue si le module
+importe un jour un mécanisme d'écriture fichier (`shutil.move`,
+`.rename(`, `.unlink(`...) — garde-fou explicite du périmètre lecture
+seule, pas juste une note dans un commentaire.
 
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 

@@ -87,6 +87,22 @@ class SemanticDesktop:
         périodes apparaît dans chacun de ses groupes. « sans période »
         regroupe ce qui n'en a aucune identifiable.
 
+        ⚠️ GRANULARITÉ — ANNÉE seule, jamais le mois. Validé en conditions
+        réelles le 03/08/2026 sur la vraie collection de Cyril : 171
+        groupes pour 39 documents (voir ROADMAP.md §5.8), parce que
+        `core/dates.extract_periods()` ajoute TOUJOURS le mois ET l'année
+        pour une même date trouvée (« 2025-07 » et « 2025 » à la fois —
+        volontairement, pour le FILTRAGE de recherche RAG, voir
+        `RAG_MAX_DISTANCE_DATED`). Un document qui mentionne beaucoup de
+        dates réelles (relevé de carrière, CV) se retrouvait ainsi éclaté
+        sur des dizaines de groupes mois+année quasi redondants pour un
+        simple parcours par période. Filtrer sur l'année seule ramène la
+        même collection à 40 groupes — un par document, plus les années
+        partagées entre plusieurs documents. Ne touche ni `core/dates.py`
+        ni l'indexation (`rag_manager.add_text`) : la précision mois reste
+        entière pour la recherche datée, seul ce regroupement d'affichage
+        change de niveau.
+
         Regroupement déterministe, pas une classification par sens/projet
         au sens plein de l'idée catalogue — voir l'en-tête du module.
         """
@@ -100,7 +116,8 @@ class SemanticDesktop:
             if not source:
                 continue
             periods = meta.get("periods") or ""
-            keys = periods.split(",") if periods else ["sans période"]
+            all_keys = periods.split(",") if periods else []
+            keys = [key for key in all_keys if "-" not in key] or ["sans période"]
             for key in keys:
                 groups.setdefault(key, set()).add(source)
 
