@@ -179,7 +179,7 @@ Visage low-poly stylisé, shaders néon cyan/bleu avec glow. Flottement organiqu
 15. Emotional Resonance — 5 capteurs : voix, visage, texte, clavier, physiologie
 
 ### 🔍 Modules sémantiques
-16. Semantic Desktop — Fichiers organisés par sens/concept, pas par dossiers
+16. Semantic Desktop — Fichiers organisés par sens/concept, pas par dossiers. **v1 minimal construit le 03/08/2026** (`modules/semantic_desktop.py`, lecture seule — voir `ROADMAP.md` §5.8) : liste, documents apparentés, regroupement par période. L'auto-organisation réelle (déplacer/renommer des fichiers) reste hors périmètre tant que `core/decision_engine.py` n'existe pas.
 17. Knowledge Graph Live 3D — Graphe de connaissances temps réel en 3D
 18. Concept Mapping Auto — Cartes conceptuelles auto-générées
 19. Semantic Search Universel — Recherche par sens, pas par mots-clés

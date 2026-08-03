@@ -1132,6 +1132,49 @@ se décide pas seul, sans que Cyril l'ait entendu sur de vraies
 questions — même logique que `VLM_ENABLED`. Rien à activer sans son
 retour ; le module existe, testé, prêt.
 
+## 5.8 Semantic Desktop v1 — construit et testé le 03/08/2026, lecture seule
+
+Même session autonome. `modules/semantic_desktop.py` (IDEAS.md pilier 5,
+catalogue #16) : **périmètre restreint en autonomie**, décision prise
+sans Cyril présent pour trancher — l'idée catalogue parle
+d'« auto-organisation selon habitudes », c'est-à-dire déplacer/renommer
+de vrais fichiers. Ça relève d'une action système à risque (liste
+blanche + confirmation) et `core/decision_engine.py` n'existe toujours
+pas (voir §3, « Hors tableau — Decision Engine »). Choix fait : ce
+module reste **strictement lecture seule** — jamais un déplacement, un
+renommage ou une modification de fichier sur le disque de Cyril. Pas de
+nouvelle classification LLM non plus (« pas de GraphRAG complexe ») :
+tout repose sur l'infrastructure RAG déjà en place
+(`modules/rag_manager.py` — ChromaDB, métadonnées `source`/`periods`
+déjà calculées à l'indexation).
+
+Trois fonctions, toutes lecture seule :
+- `list_documents()` — documents actuellement indexés.
+- `related_documents(source_id, top_k)` — documents sémantiquement
+  proches d'un document donné (interroge ChromaDB avec le premier
+  morceau du document source), déduplication par document, jamais le
+  document source lui-même.
+- `group_by_period()` — regroupement déterministe par période déjà
+  extraite (`core/dates.py`), pas une classification par sens/projet au
+  sens plein de l'idée catalogue.
+
+**Validé en conditions réelles, sur la vraie collection de Cyril**
+(39 documents, lecture seule — vérifié qu'aucune écriture n'a eu lieu) :
+`list_documents()` rend les 39 sources réelles ; `related_documents()`
+sur une offre d'emploi Aide-soignant retrouve deux autres offres du même
+métier — cohérent ; `group_by_period()` produit 171 groupes de périodes
+réels. **Point de vigilance pour la suite** : 171 groupes sur 39
+documents est probablement trop fin pour un usage direct (une période
+par mois ET par année pour le même document) — un regroupement
+utilisable pour Cyril demanderait sans doute de ne garder qu'un niveau
+de granularité, pas mesuré plus loin ici, à affiner si ce module sert un
+jour de base à une vraie fonctionnalité.
+
+8 tests (`test_semantic_desktop.py`, collection ChromaDB simulée) dont un
+qui échoue si le module importe un jour un mécanisme d'écriture fichier
+(`shutil.move`, `.rename(`, `.unlink(`...) — garde-fou explicite du
+périmètre lecture seule, pas juste une note dans un commentaire.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
