@@ -238,7 +238,7 @@ class LucasDaemon:
                 import win32gui
                 hwnd = win32gui.GetForegroundWindow()
                 app_name = win32gui.GetWindowText(hwnd)
-            except:
+            except Exception:
                 app_name = "unknown"
 
             conn = sqlite3.connect(DB_FILE)
