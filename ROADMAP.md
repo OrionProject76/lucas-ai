@@ -220,9 +220,25 @@ et `test_index_documents.py`.
 | **Phase 0 — Audit** | S0 | Nettoyage, inventaire | ✅ Fait (avec incident de suppression accidentelle résolu — voir CLAUDE.md) |
 | **Phase 1 — Cerveau solide** | S1 | FastAPI unique + World Model | ✅ **Fait et validé aujourd'hui** |
 | **Phase 2 — Mémoire & Finance** | S2 | RAG, TTS, Finance CSV | ✅ Fait le 01/08 — reste la validation TTS à l'oreille dans l'UI |
-| **Phase 3 — Vision & Voix** | S3-S4 | VLM écran, Avatar QPainter V3, 5 modes de présence | 🟡 En cours — VLM écran ✅, 5 modes de présence ✅ |
+| **Phase 3 — Vision & Voix** | S3-S4 | VLM écran, Avatar QPainter V3, 5 modes de présence, barge-in (voir IDEAS.md #83) | 🟡 En cours — VLM écran ✅, 5 modes de présence ✅, barge-in implémenté le 03/08/2026 (§5.4 point 5), pas encore validé en conditions réelles |
 | **Phase 4 — Expansion** | S5-S6 | PWA mobile, sync, Godot 4 V1 (branche expérimentale) | 🟡 Amorcé — côté serveur du pont audio branché (02/08), PWA/auth/tunnel restent à faire |
 | **Phase 5 — Polish** | S7-S8 | Sécurité finale, packaging, release v1.0 | À venir |
+
+### Hors tableau — Decision Engine, pas encore planifié (ajouté 03/08/2026)
+
+**Cartes d'approbation (ALLOW/DENY)** et **STOP mid-tool-call**
+(`IDEAS.md` #80 et #81) : exigences UX pour la future liste blanche
+Self-Decision. Volontairement absentes du tableau ci-dessus — aucune de
+ses phases ne les couvre. `core/decision_engine.py` n'existe pas encore
+(voir la structure de dossiers de `CLAUDE.md` — planifié, pas construit) ;
+le seul mécanisme de liste blanche réel aujourd'hui est
+`modules/automation_manager.py`, au périmètre plus étroit (lancer une
+appli). « OS Controller + Automation » apparaît dans la liste **S1-S8**
+de `CLAUDE.md` (S6) — une numérotation distincte de ce tableau de
+Phases, pas une deuxième mention du même jalon.
+
+À rattacher à une phase (probablement Phase 4 ou une future Phase 6, à
+créer) quand ce chantier sera réellement planifié — pas avant.
 
 ### État détaillé de la Phase 3 (au 01/08/2026)
 
