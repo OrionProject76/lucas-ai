@@ -1205,6 +1205,84 @@ importe un jour un mécanisme d'écriture fichier (`shutil.move`,
 `.rename(`, `.unlink(`...) — garde-fou explicite du périmètre lecture
 seule, pas juste une note dans un commentaire.
 
+### Contrepartie mobile (PWA) — 03/08/2026, session autonome
+
+Semantic Desktop n'avait aucune route REST : accessible uniquement en
+important `modules.semantic_desktop` côté Python, invisible depuis le
+pont mobile. Trois routes ajoutées à `api/server.py`, même garde de
+jeton que `/history` (les noms de fichiers de Cyril sont aussi révélateurs
+que l'historique de conversation) :
+
+- `GET /documents` — `list_documents()`
+- `GET /documents/periods` — `group_by_period()`, niveau année (correctif
+  ci-dessus)
+- `GET /documents/{source_id}/related?top_k=N` — `related_documents()`
+
+Nouveau panneau PWA « Mes documents » (`static/js/documents.js`, icône 📁
+à côté du bouton sécurité) : tiroir qui charge `/documents/periods` à
+l'ouverture (une seule fois par session), années triées de la plus
+récente à la plus ancienne, « sans période » toujours en dernier. Cliquer
+un document interroge `/documents/{id}/related` et affiche la liste
+inline, avec un état de chargement mis en cache par document (pas de
+requête répétée à chaque clic).
+
+**Reasoning Engine n'a pas de contrepartie séparée à construire** : `/chat`
+et `/ws` passent tous les deux par `LucasCore.ask()` → `_build_messages()`,
+donc le mobile bénéficie automatiquement du même comportement que l'UI
+PySide6 dès que `REASONING_ENGINE_ENABLED` passe à `True` — rien à
+brancher spécifiquement.
+
+**Observation en conditions réelles, pas un bug de ce correctif** : le
+groupe le plus récent affiché est « 2094 », suivi de « 2092 », « 2056 »...
+— des années extraites du CORPS d'un vrai document (`extract_periods()`
+est volontairement généreux, voir `core/dates.py`), pas de vraies dates.
+`group_by_period()` fait exactement ce qui est demandé (une clé par année
+détectée) ; c'est la détection elle-même qui, sur ce document précis,
+trouve une séquence de chiffres qui ressemble à une année sans en être
+une. Visible seulement maintenant qu'il existe un écran pour parcourir
+les groupes — non traité ici : toucher `extract_periods()` sans mesure
+risquerait de dérégler le filtrage RAG déjà calibré (`RAG_MAX_DISTANCE_DATED`)
+pour un gain d'affichage seulement. À revisiter si Cyril trouve ça gênant
+en usage réel.
+
+**Validé en conditions réelles** : instance uvicorn jetable sur le port
+8801 (jamais touché le port 8000 — voir l'incident ci-dessous), PWA
+ouverte dans un vrai Chrome via `claude-in-chrome`, jeton réel de `.env`.
+`/documents/periods` rend les 40 vrais groupes ; ouvrir un groupe affiche
+le vrai nom de fichier ; cliquer un document interroge `/documents/{id}/related`
+et affiche soit les documents proches réels, soit « Aucun document proche
+trouvé » ; réouvrir/refermer un groupe fonctionne ; aucune erreur console
+au chargement ni après interaction. Instance de test arrêtée après
+vérification.
+
+5 tests ajoutés (`test_server.py`, `SemanticDesktop` mocké — même
+garde-fou de jeton vérifié explicitement).
+
+**⚠️ Incident trouvé pendant cette validation, sans lien avec le code
+ci-dessus** : le port 8000 (le VRAI service, celui que le téléphone de
+Cyril utilise) était injoignable au moment du test — `curl /status`
+passait de `200` à une connexion refusée entre deux vérifications.
+Cause trouvée : **deux process `python -m uvicorn api.server:app --host
+0.0.0.0 --port 8000 ...` tournent en même temps**, lancés à la même
+seconde exacte (03/08/2026 00:25:04) — l'un depuis `venv\Scripts\python.exe`,
+l'autre depuis l'installation Python système
+(`C:\Users\PC\AppData\Local\Programs\Python\...`). Ni l'un ni l'autre
+n'a `--reload` : mes modifications de `api/server.py` ne peuvent donc
+PAS être la cause du redémarrage — les deux processus se disputent le
+même port depuis avant que je ne touche au fichier. Même famille de
+panne que « Ollama : ne jamais avoir deux instances actives »
+(CLAUDE.md, leçons du 30/07/2026), version FastAPI.
+
+**Volontairement non touché** : tuer l'un des deux process aurait pu
+couper une vraie connexion active (le pont mobile avait une connexion
+`ESTABLISHED` au premier diagnostic) sans certitude sur lequel des deux
+processus la sert réellement — exactement le risque que la mémoire de
+session sur les déconnexions silencieuses (02/08/2026) demande d'éviter.
+**À traiter par Cyril à son retour** : identifier lequel de `just all`
+(ou un lancement manuel) a démarré le service en double, tuer l'un des
+deux, vérifier qu'un seul `python.exe` écoute sur 8000 — même geste que
+pour Ollama.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

@@ -220,6 +220,60 @@ def test_history_is_returned_as_role_content_pairs(client, fake_core) -> None:
     ]
 
 
+# ── Semantic Desktop (contrepartie mobile, 03/08/2026) ─────────────────
+
+
+@pytest.fixture
+def fake_semantic_desktop(monkeypatch):
+    """Remplace SemanticDesktop par un double — aucun ChromaDB réel touché."""
+
+    class _FakeDesktop:
+        def list_documents(self):
+            return ["bulletin_juillet.pdf", "cv.pdf"]
+
+        def group_by_period(self):
+            return {"2025": ["bulletin_juillet.pdf"], "sans période": ["cv.pdf"]}
+
+        def related_documents(self, source_id, top_k=3):
+            return [f"proche_de_{source_id}_{i}" for i in range(top_k)]
+
+    monkeypatch.setattr("api.server.SemanticDesktop", _FakeDesktop)
+    return _FakeDesktop
+
+
+def test_documents_lists_indexed_sources(client, fake_semantic_desktop) -> None:
+    payload = client.get("/documents").json()
+    assert payload == {"documents": ["bulletin_juillet.pdf", "cv.pdf"]}
+
+
+def test_documents_periods_groups_by_year(client, fake_semantic_desktop) -> None:
+    payload = client.get("/documents/periods").json()
+    assert payload == {
+        "periods": {"2025": ["bulletin_juillet.pdf"], "sans période": ["cv.pdf"]}
+    }
+
+
+def test_documents_related_respects_top_k(client, fake_semantic_desktop) -> None:
+    payload = client.get("/documents/cv.pdf/related?top_k=2").json()
+    assert payload == {"related": ["proche_de_cv.pdf_0", "proche_de_cv.pdf_1"]}
+
+
+def test_documents_related_defaults_top_k_to_three(client, fake_semantic_desktop) -> None:
+    payload = client.get("/documents/cv.pdf/related").json()
+    assert len(payload["related"]) == 3
+
+
+def test_documents_endpoints_require_the_token(client, fake_semantic_desktop, monkeypatch) -> None:
+    """
+    Même garde que /history : les noms de fichiers personnels de Cyril
+    (bulletins, attestations...) sont aussi révélateurs que l'historique.
+    """
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    assert client.get("/documents").status_code == 401
+    assert client.get("/documents/periods").status_code == 401
+    assert client.get("/documents/cv.pdf/related").status_code == 401
+
+
 # ── WebSocket ─────────────────────────────────────────────────────────
 
 def _next_of_type(ws, message_type: str, limit: int = 12) -> dict:

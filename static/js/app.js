@@ -37,6 +37,12 @@
             popoverEl: document.getElementById("security-popover"),
             textEl: document.getElementById("security-popover-text"),
         });
+        new window.Lucas.DocumentsPanel({
+            toggleEl: document.getElementById("documents-toggle"),
+            drawerEl: document.getElementById("documents-drawer"),
+            closeEl: document.getElementById("documents-close"),
+            logEl: document.getElementById("documents-log"),
+        });
         const voiceOutput = new window.Lucas.VoiceOutput({
             toggleEl: document.getElementById("speak-toggle"),
             onBargeIn: () => activity.add("voice", "Interruption détectée — coupée immédiatement."),

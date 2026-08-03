@@ -28,6 +28,7 @@ from core.lucas_core import LucasCore
 from core.router import mentions_pc_explicitly, should_use_vision
 from core.world_model import get_snapshot
 from memory.memory_manager import save_event_from_any_thread
+from modules.semantic_desktop import SemanticDesktop
 from modules.stt_engine import STTEngine, STTUnavailable
 from modules.voice_manager import VoiceManager
 from security.status import get_status as get_security_status
@@ -174,6 +175,42 @@ def system_snapshot():
             status_code=500,
             detail=f"Dépendance manquante pour le World Model : {exc}",
         ) from exc
+
+
+# ── Semantic Desktop (IDEAS.md #16, ROADMAP.md §5.8) — lecture seule ───
+#
+# Contrepartie mobile du module construit le 03/08/2026 : jusqu'ici
+# accessible uniquement en important modules.semantic_desktop côté
+# Python, sans route REST. Même garde de jeton que /history — la liste
+# des documents personnels de Cyril (noms de fichiers : bulletins,
+# attestations...) est aussi révélatrice que l'historique de conversation.
+#
+# SemanticDesktop() est recréé à chaque appel, comme LucasCore() et
+# RAGManager() ailleurs dans ce fichier et dans core/lucas_core.py — même
+# raisonnement : aucun état à partager entre requêtes, et éviter un
+# singleton partagé entre threads du pool FastAPI.
+
+
+@app.get("/documents", dependencies=[Depends(verify_token)])
+def documents():
+    """Documents personnels actuellement indexés (RAG), triés."""
+    return {"documents": SemanticDesktop().list_documents()}
+
+
+@app.get("/documents/periods", dependencies=[Depends(verify_token)])
+def documents_by_period():
+    """
+    Documents regroupés par année détectée (voir
+    modules.semantic_desktop.group_by_period — niveau année seul depuis
+    le correctif du 03/08/2026, ROADMAP.md §5.8).
+    """
+    return {"periods": SemanticDesktop().group_by_period()}
+
+
+@app.get("/documents/{source_id}/related", dependencies=[Depends(verify_token)])
+def related_documents(source_id: str, top_k: int = 3):
+    """Documents sémantiquement proches de `source_id` (lui-même exclu)."""
+    return {"related": SemanticDesktop().related_documents(source_id, top_k=top_k)}
 
 
 # ── WebSocket : canal unique Luca's ↔ Godot ─────────────────────
