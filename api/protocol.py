@@ -19,6 +19,13 @@
 
 from typing import Any
 
+# source_agent : hook multi-agents (IDEAS.md #38, toujours reporté v1.1+ —
+# CLAUDE.md règle 12) posé le 03/08/2026 à la demande de Cyril. Un seul
+# agent existe aujourd'hui — cette valeur ne varie jamais, rien ne la lit
+# côté client. Coûte une ligne par message, évite de devoir retoucher tout
+# le protocole si un jour plusieurs agents émettent sur ce canal.
+DEFAULT_SOURCE_AGENT = "main"
+
 # Les cinq modes de présence, en minuscules pour le transport JSON.
 # Doivent rester alignés sur ui/avatar_widget.PRESENCE_STATES.
 STATE_IDLE = "idle"
@@ -45,7 +52,11 @@ def avatar_state(state: str, text: str = "") -> dict:
     """
     if state not in PRESENCE_STATES:
         state = STATE_IDLE
-    message: dict[str, Any] = {"type": "avatar_state", "state": state}
+    message: dict[str, Any] = {
+        "type": "avatar_state",
+        "state": state,
+        "source_agent": DEFAULT_SOURCE_AGENT,
+    }
     if text:
         message["text"] = text
     return message
@@ -59,7 +70,12 @@ def chat(text: str, from_luca: bool = True) -> dict:
     02/08/2026 (voir ROADMAP §6) — renommé en même temps que le client
     Godot (scripts/websocket_client.gd), sur les deux faces du contrat.
     """
-    return {"type": "chat", "text": text, "from_lucas": from_luca}
+    return {
+        "type": "chat",
+        "text": text,
+        "from_lucas": from_luca,
+        "source_agent": DEFAULT_SOURCE_AGENT,
+    }
 
 
 def system(cpu: float, ram: float, gpu: float = 0.0) -> dict:
@@ -75,6 +91,7 @@ def system(cpu: float, ram: float, gpu: float = 0.0) -> dict:
         "cpu": round(float(cpu), 1),
         "ram": round(float(ram), 1),
         "gpu": round(float(gpu), 1),
+        "source_agent": DEFAULT_SOURCE_AGENT,
     }
 
 
@@ -98,6 +115,7 @@ def security_status(
         "type": "security_status",
         "active": active,
         "findings_24h": findings_24h,
+        "source_agent": DEFAULT_SOURCE_AGENT,
     }
     if last_scan_at:
         message["last_scan_at"] = last_scan_at
@@ -119,7 +137,12 @@ def speech(audio_base64: str, mime: str) -> dict:
     piège pour quiconque relit le protocole plus tard — même sens que
     ceux du client, pas le nom qu'on utilise pour en parler.
     """
-    return {"type": "speech", "audio_base64": audio_base64, "mime": mime}
+    return {
+        "type": "speech",
+        "audio_base64": audio_base64,
+        "mime": mime,
+        "source_agent": DEFAULT_SOURCE_AGENT,
+    }
 
 
 def read_speak_flag(data: dict) -> bool:
@@ -139,7 +162,7 @@ def read_speak_flag(data: dict) -> bool:
 
 def error(detail: str) -> dict:
     """Panne côté serveur, à afficher plutôt qu'à laisser en silence."""
-    return {"type": "error", "detail": detail}
+    return {"type": "error", "detail": detail, "source_agent": DEFAULT_SOURCE_AGENT}
 
 
 # Émis pendant LucasCore.ask() (voir core/lucas_core.py, paramètre
@@ -164,7 +187,12 @@ def activity(kind: str, text: str) -> dict:
     restent fidèles à quand chaque étape a réellement eu lieu, mais
     l'affichage arrive en rafale, pas au fil de l'eau.
     """
-    return {"type": "activity", "kind": kind, "text": text}
+    return {
+        "type": "activity",
+        "kind": kind,
+        "text": text,
+        "source_agent": DEFAULT_SOURCE_AGENT,
+    }
 
 
 def read_user_text(data: dict) -> str:

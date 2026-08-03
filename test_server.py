@@ -296,7 +296,7 @@ def test_websocket_pushes_system_load(client) -> None:
     with client.websocket_connect("/ws") as ws:
         message = _next_of_type(ws, "system")
 
-    assert set(message) == {"type", "cpu", "ram", "gpu"}
+    assert set(message) == {"type", "cpu", "ram", "gpu", "source_agent"}
 
 
 def test_websocket_chat_cycle(client, fake_core) -> None:

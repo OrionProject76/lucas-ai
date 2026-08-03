@@ -297,7 +297,16 @@ class RAGManager:
             self.collection.add(
                 documents=chunks,
                 metadatas=[
-                    {"source": doc_id, "chunk": i, "sha": digest, "periods": periodes}
+                    # agent_id : hook multi-agents (IDEAS.md #38, CLAUDE.md
+                    # règle 12), posé le 03/08/2026 — aucune recherche ne
+                    # filtre dessus aujourd'hui, un seul agent existe.
+                    {
+                        "source": doc_id,
+                        "chunk": i,
+                        "sha": digest,
+                        "periods": periodes,
+                        "agent_id": "orion_main",
+                    }
                     for i in range(len(chunks))
                 ],
                 ids=[f"{doc_id}_{i}" for i in range(len(chunks))],

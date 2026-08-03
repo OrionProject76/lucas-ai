@@ -27,6 +27,7 @@ def test_avatar_state_carries_the_state() -> None:
     assert protocol.avatar_state("thinking") == {
         "type": "avatar_state",
         "state": "thinking",
+        "source_agent": "main",
     }
 
 
@@ -50,7 +51,12 @@ def test_unknown_state_falls_back_to_idle() -> None:
 
 def test_chat_uses_the_field_names_godot_reads() -> None:
     message = protocol.chat("salut")
-    assert message == {"type": "chat", "text": "salut", "from_lucas": True}
+    assert message == {
+        "type": "chat",
+        "text": "salut",
+        "from_lucas": True,
+        "source_agent": "main",
+    }
 
 
 def test_activity_carries_kind_and_text() -> None:
@@ -58,6 +64,7 @@ def test_activity_carries_kind_and_text() -> None:
         "type": "activity",
         "kind": "screen_read",
         "text": "écran lu — texte trouvé",
+        "source_agent": "main",
     }
 
 
@@ -69,6 +76,7 @@ def test_security_status_carries_the_core_fields() -> None:
         "findings_24h": 3,
         "last_scan_at": "2026-08-02T21:00:00",
         "latest_summary": "un résumé",
+        "source_agent": "main",
     }
 
 
@@ -90,6 +98,7 @@ def test_speech_carries_audio_and_mime() -> None:
         "type": "speech",
         "audio_base64": "QUJD",
         "mime": "audio/mpeg",
+        "source_agent": "main",
     }
 
 
@@ -115,6 +124,7 @@ def test_system_rounds_and_defaults_gpu() -> None:
     """
     assert protocol.system(12.345, 67.891) == {
         "type": "system", "cpu": 12.3, "ram": 67.9, "gpu": 0.0,
+        "source_agent": "main",
     }
 
 

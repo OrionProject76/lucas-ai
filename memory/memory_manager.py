@@ -49,11 +49,20 @@ class MemoryManager:
         self._create_tables()
 
     def _create_tables(self):
+        # agent_id : hook multi-agents (IDEAS.md #38, toujours reporté v1.1+
+        # — CLAUDE.md règle 12) posé le 03/08/2026 à la demande de Cyril.
+        # Valeur par défaut 'orion_main' identique pour tout le monde tant
+        # qu'un seul agent existe — aucune requête ne filtre dessus
+        # aujourd'hui, la colonne ne coûte rien et évite une migration plus
+        # tard. 'orion_main' et pas 'lucas_main' : identifiant de stockage
+        # interne, même logique que la collection ChromaDB `orion_docs`
+        # restée inchangée (voir CLAUDE.md, "Renommage du projet").
         self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS conversations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 role TEXT NOT NULL,
                 message TEXT NOT NULL,
+                agent_id TEXT NOT NULL DEFAULT 'orion_main',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -67,10 +76,26 @@ class MemoryManager:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 event_type TEXT NOT NULL,
                 details TEXT,
+                agent_id TEXT NOT NULL DEFAULT 'orion_main',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # Migration : les deux tables existaient déjà avant l'ajout de
+        # agent_id (base réelle de Cyril comprise) — CREATE TABLE IF NOT
+        # EXISTS ne touche pas un schéma déjà présent, un ALTER TABLE
+        # explicite est nécessaire. Noms de tables fixes, jamais une entrée
+        # utilisateur — pas de risque d'injection dans ce f-string.
+        self._migrate_add_agent_id_column("conversations")
+        self._migrate_add_agent_id_column("system_events")
         self.conn.commit()
+
+    def _migrate_add_agent_id_column(self, table: str) -> None:
+        self.cursor.execute(f"PRAGMA table_info({table})")
+        columns = {row[1] for row in self.cursor.fetchall()}
+        if "agent_id" not in columns:
+            self.cursor.execute(
+                f"ALTER TABLE {table} ADD COLUMN agent_id TEXT NOT NULL DEFAULT 'orion_main'"
+            )
 
     # ── Conversations (inchangé) ──────────────────────────────
 
