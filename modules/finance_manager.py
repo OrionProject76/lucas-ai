@@ -11,6 +11,7 @@
 # Les exports au format débit/crédit séparés sont convertis à l'import.
 
 import csv
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
@@ -48,7 +49,7 @@ def _normalize_header(name: str) -> str:
     return "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
 
 
-def _map_columns(fieldnames: list[str]) -> dict[str, str]:
+def _map_columns(fieldnames: Sequence[str] | None) -> dict[str, str]:
     """Associe nos noms canoniques aux colonnes réelles du fichier."""
     mapping: dict[str, str] = {}
     for actual in fieldnames or []:

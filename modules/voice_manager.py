@@ -36,7 +36,7 @@ class VoiceManager:
     def __init__(
         self,
         voice: str | None = None,
-        log_event: Callable[[str, str], None] | None = None,
+        log_event: Callable[[str, str], object] | None = None,
     ) -> None:
         self.voice = voice or EDGE_TTS_VOICE
         self.output_path = "data/output.mp3"

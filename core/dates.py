@@ -135,9 +135,9 @@ def extract_query_period(question: str) -> str | None:
     # « 01/07/2025 »
     match = re.search(r"\b(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})\b", plain)
     if match:
-        mois, annee = int(match.group(2)), int(match.group(3))
-        if _valid(annee, mois):
-            return f"{annee}-{mois:02d}"
+        mois_num, annee = int(match.group(2)), int(match.group(3))
+        if _valid(annee, mois_num):
+            return f"{annee}-{mois_num:02d}"
 
     # « en 2025 », « de 2026 » — l'année seule reste utile pour trier
     # cinq ans de documents.
