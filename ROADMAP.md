@@ -1261,27 +1261,57 @@ garde-fou de jeton vérifié explicitement).
 **⚠️ Incident trouvé pendant cette validation, sans lien avec le code
 ci-dessus** : le port 8000 (le VRAI service, celui que le téléphone de
 Cyril utilise) était injoignable au moment du test — `curl /status`
-passait de `200` à une connexion refusée entre deux vérifications.
-Cause trouvée : **deux process `python -m uvicorn api.server:app --host
-0.0.0.0 --port 8000 ...` tournent en même temps**, lancés à la même
-seconde exacte (03/08/2026 00:25:04) — l'un depuis `venv\Scripts\python.exe`,
-l'autre depuis l'installation Python système
-(`C:\Users\PC\AppData\Local\Programs\Python\...`). Ni l'un ni l'autre
-n'a `--reload` : mes modifications de `api/server.py` ne peuvent donc
-PAS être la cause du redémarrage — les deux processus se disputent le
-même port depuis avant que je ne touche au fichier. Même famille de
-panne que « Ollama : ne jamais avoir deux instances actives »
-(CLAUDE.md, leçons du 30/07/2026), version FastAPI.
+passait de `200` à une connexion refusée entre deux vérifications. Deux
+process `python -m uvicorn api.server:app --host 0.0.0.0 --port 8000 ...`
+tournaient en même temps, lancés à la même seconde exacte (03/08/2026
+00:25:04) — l'un depuis `venv\Scripts\python.exe`, l'autre depuis
+l'installation Python système. Ni l'un ni l'autre n'avait `--reload` :
+mes modifications de `api/server.py` n'étaient donc pas la cause.
 
-**Volontairement non touché** : tuer l'un des deux process aurait pu
-couper une vraie connexion active (le pont mobile avait une connexion
-`ESTABLISHED` au premier diagnostic) sans certitude sur lequel des deux
-processus la sert réellement — exactement le risque que la mémoire de
-session sur les déconnexions silencieuses (02/08/2026) demande d'éviter.
-**À traiter par Cyril à son retour** : identifier lequel de `just all`
-(ou un lancement manuel) a démarré le service en double, tuer l'un des
-deux, vérifier qu'un seul `python.exe` écoute sur 8000 — même geste que
-pour Ollama.
+**Résolu le même jour, cause confirmée** (pas juste une hypothèse) :
+
+1. `netstat -ano | findstr :8000` a montré qu'**un seul des deux PID
+   tenait réellement le socket LISTENING** (le python système), avec une
+   vraie connexion `ESTABLISHED` (un Chrome sur le LAN, pas le téléphone
+   ce jour-là). L'autre PID (le python venv) ne tenait rien : son
+   `bind()` avait échoué silencieusement au démarrage.
+2. Ce PID venv a été tué, jugé sans risque puisqu'il ne servait aucune
+   connexion. **Le service entier est tombé dans la foulée** — le PID
+   système qui tenait le socket a disparu lui aussi, sans lien de
+   parenté détectable au premier regard (process trees différents en
+   apparence).
+3. **Cause réelle trouvée en creusant** (`venv/pyvenv.cfg`,
+   `Get-CimInstance ParentProcessId`) : `venv\Scripts\python.exe` sur
+   Windows n'est **pas un vrai interpréteur** — c'est le stub
+   « venvlauncher » standard de CPython (270 Ko), qui relance
+   systématiquement le VRAI interpréteur de base
+   (`pyvenv.cfg` → `home = ...\Python312`) **en process ENFANT**. Chaque
+   lancement de `venv\Scripts\python.exe -m uvicorn ...` produit donc
+   TOUJOURS deux process — le stub (parent) et l'interpréteur réel
+   (enfant), celui qui ouvre effectivement le socket. Reproduit à
+   l'identique en relançant proprement juste après : même arbre à deux
+   process pour un seul et unique lancement.
+   **Le PID « venv » tué à l'étape 2 n'était donc pas un doublon sans
+   rapport : c'était le PARENT du process qui tenait le socket.** Le
+   tuer en `-Force` a très probablement coupé l'enfant avec lui (handles
+   hérités du parent — sortie standard, console/job). Aucune preuve de
+   journal Windows disponible (l'audit de fin de process n'est pas
+   activé sur cette machine), mais le mécanisme est démontré et
+   cohérent avec toutes les observations — **cause confirmée**, pas
+   « non confirmée ».
+4. Instance relancée proprement (`venv/Scripts/python.exe -m uvicorn
+   ...`), vérifiée par `netstat` (un seul PID en LISTENING) et par
+   `curl /status` (200). Service restauré.
+
+**Ce que ça change pour la suite** : ce n'était donc jamais un vrai
+« double lancement » façon Ollama (deux instances indépendantes qui se
+battent pour le port depuis deux origines différentes) — c'est UN SEUL
+lancement qui produit structurellement deux process sur Windows à
+chaque fois. La leçon Ollama (« vérifier qu'un seul process tourne »)
+ne suffit donc pas ici : il faut regarder LEQUEL des deux tient le
+socket avant de toucher à quoi que ce soit, et ne jamais tuer le PID
+« lanceur » seul en le croyant inoffensif — voir CLAUDE.md, principe
+ajouté dans « Leçons d'infrastructure ».
 
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 

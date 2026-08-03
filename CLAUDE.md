@@ -476,6 +476,34 @@ même dossier parent. Un seul `ollama.exe` tournait au moment de la
 vérification (pas de doublon actif ce jour-là), mais le risque se
 reproduirait à chaque redémarrage tant que le raccourci restait en place.
 
+### `venv\Scripts\python.exe` sur Windows : toujours un parent, jamais l'interpréteur lui-même
+
+Trouvé le 03/08/2026 en diagnostiquant une panne du pont mobile
+(`api/server.py` injoignable sur le port 8000, voir `ROADMAP.md` §5.8) :
+un PID jugé « doublon mort, sans connexion active, donc sans risque » a
+été tué — et le service entier est tombé avec lui.
+
+Cause : `venv\Scripts\python.exe` est le stub « venvlauncher » standard
+de CPython, pas un vrai interpréteur — il relance systématiquement le
+Python de base (`pyvenv.cfg` → `home = ...`) **en process ENFANT**, qui
+hérite des handles du parent (sortie standard, console/job) et qui seul
+ouvre effectivement les sockets/fichiers. Un seul lancement produit donc
+TOUJOURS deux process sur Windows. Le PID tué n'était pas un doublon
+sans rapport : c'était le parent du process qui tenait réellement le
+service.
+
+**Principe général, pas limité à ce cas** : avant de tuer tout process
+jugé « doublon » ou « orphelin » (Ollama, uvicorn, ou tout ce que
+Self-Healing gérera plus tard), vérifier la relation parent-enfant
+(`Get-CimInstance ... | Select ParentProcessId`, ou équivalent) — pas
+seulement si le port/socket est tenu. Un process qui ne sert directement
+aucune requête peut quand même être le parent de celui qui en sert.
+**Cibler celui qui tient effectivement la ressource (port en
+LISTENING, fichier ouvert...) pour savoir QUOI arrêter, mais vérifier
+l'arbre parent-enfant complet avant de décider QUI tuer** — arrêter tout
+l'arbre ensemble si le lien existe, jamais le parent seul en le croyant
+indépendant de l'enfant.
+
 ### SQLite et FastAPI : attention aux threads
 FastAPI traite chaque requête HTTP dans un thread du pool par défaut.
 SQLite refuse par défaut d'être utilisé depuis un thread différent de celui
