@@ -1,5 +1,6 @@
 # core/lucas_core.py — le chef d'orchestre
 
+import re
 import time
 from typing import Callable
 
@@ -32,6 +33,7 @@ from core.router import (
     should_use_rag,
     should_use_vision,
 )
+from core.text_utils import normalize
 from core.world_model import (
     format_events_for_prompt,
     format_for_prompt,
@@ -116,6 +118,33 @@ def fit_history_to_budget(
         kept.append((role, content))
         used += len(content)
     return list(reversed(kept))
+
+
+# ⚠️ Filtre heuristique par mots-clés/regex — PAS une solution robuste
+# définitive. Premier passage pragmatique, cohérent avec le reste du
+# projet (MVP puis itération). Une fois le schéma mémoire
+# confiance/provenance implémenté (IDEAS.md #2bis), ce filtrage pourra se
+# faire proprement via une métadonnée (ex. un type "vision_refusal" posé
+# à l'écriture) plutôt que par correspondance de texte sur la réponse
+# après coup — pas encore construit, ce lien n'est pas fait ici.
+#
+# Motifs tirés des formulations RÉELLEMENT observées le 03/08/2026 (voir
+# real_vision_test*.py, session précédente) : 3 refus capturés sur la
+# vraie base de Cyril, plus un 4e reproduit en direct sur une copie de
+# cette même base. Comparés après normalize() (minuscules, sans accents,
+# apostrophes uniformisées — voir core/text_utils.py) pour ne pas
+# dépendre d'une casse ou d'un accent exacts.
+VISION_REFUSAL_PATTERNS = [
+    r"n'ai pas acces a\s+(une|aucune|cette|l'|votre|ton|mon)?\s*(image|ecran|contexte visuel)",
+    r"ne peux pas regarder a distance",
+    r"fonctionne localement.*ne peux pas regarder",
+]
+
+
+def is_vision_refusal(content: str) -> bool:
+    """Ce tour ressemble-t-il à un refus de vision déjà observé en réel ?"""
+    normalized = normalize(content)
+    return any(re.search(pattern, normalized) for pattern in VISION_REFUSAL_PATTERNS)
 
 
 class LucasCore:
@@ -403,6 +432,28 @@ class LucasCore:
         # compris (03/08/2026) : même bloc, même risque de noyade.
         if not is_cloud and (vision_context or rag_context or finance_context):
             history = history[-SOURCE_HISTORY_MESSAGES:]
+
+        # ⚠️ AUTO-IMITATION DE REFUS DE VISION — trouvé en conditions
+        # réelles le 03/08/2026 (screenshot + vraie base à l'appui, voir
+        # real_vision_test*.py de la session précédente) : qwen2.5:7b
+        # répond "je n'ai pas accès à l'écran" malgré une consigne
+        # explicite contraire dans vision_context ("Ne dis JAMAIS que tu
+        # ne peux pas voir l'écran : tu viens de le faire"), parce que
+        # les tours d'historique juste avant sont des refus identiques
+        # répétés — le modèle imite le motif qu'il vient de produire
+        # plutôt que la consigne qui le contredit.
+        #
+        # Ne filtre QUE les réponses de l'ASSISTANT (les questions de
+        # Cyril restent intactes — "Décris ce que tu vois" répété trois
+        # fois n'est pas le problème, c'est la réponse qui l'est), et
+        # UNIQUEMENT quand un nouveau bloc vision va réellement être
+        # injecté pour CE tour — aucun effet sur le RAG, la finance ou
+        # une conversation qui ne déclenche pas la vision.
+        if not is_cloud and vision_context:
+            history = [
+                (role, content) for role, content in history
+                if not (role == "assistant" and is_vision_refusal(content))
+            ]
 
         # ⚠️ TROISIÈME VISAGE DU MÊME BUG, et le plus large.
         #

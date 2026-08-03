@@ -1152,25 +1152,69 @@ sujet complet ? À reprendre avec le même protocole de mesure que les
 bugs précédents (reconstruction sur copie de base réelle, tirages
 multiples, isolation par historique vierge) avant tout correctif.
 
-## 5.6 ⏸️ Diagnostic en pause (03/08/2026) — comportement KO signalé sur vision/intent
+## 5.6 ✅ Vision/intent — DEUX aspects désormais résolus (câblage ET auto-imitation)
 
-Cyril a signalé un « comportement KO » en déclenchant la vision (cliquer
-pour la reproduire), sans jamais pouvoir transmettre la description
-complète du symptôme ni le contenu réel d'un log — ses messages de suivi
-se sont coupés à chaque tentative. Une instrumentation de debug a été
-posée le jour même (`logging.basicConfig` dans `main.py`, `logger.debug()`
-dans `ui/main_window.py`, `core/router.py`, `core/intent.py`,
-`core/lucas_core.py`) pour tracer la décision vision/intent de bout en
-bout, avec instruction explicite de s'arrêter une fois posée et d'attendre
-une vraie reproduction — jamais reçue.
+**Historique.** Cyril a signalé un « comportement KO » en déclenchant la
+vision, sans jamais pouvoir transmettre la description complète du
+symptôme ni le contenu réel d'un log — ses messages de suivi se sont
+coupés à chaque tentative. Une instrumentation de debug a été posée le
+jour même (`logging.basicConfig` dans `main.py`, `logger.debug()` dans
+`ui/main_window.py`, `core/router.py`, `core/intent.py`,
+`core/lucas_core.py`), puis retirée (686/686 tests verts) faute de
+reproduction — **mis en pause volontairement, pas abandonné.**
 
-**Mis en pause volontairement par Cyril, pas abandonné.** L'instrumentation
-a été retirée le 03/08/2026 (le code est revenu à son état d'avant
-diagnostic, 686/686 tests toujours verts) plutôt que laissée à traîner
-sans échéance. **À rouvrir si le symptôme se reproduit** — dans ce cas,
-reprendre avec la description complète du comportement observé (pas
-seulement « ça ne va pas ») et, si possible, la remettre en place pour
-capturer un vrai `logs/intent_debug.log` avant toute hypothèse de cause.
+### Aspect 1 — le câblage : confirmé correct, pas la cause
+
+Repris dans une session suivante avec un vrai test (pas unitaire) :
+chaîne tracée de bout en bout (`ui/main_window.py` → `ContextWorker` →
+`LucasCore.prepare()` → `_build_messages()` → `should_use_vision()` →
+`core.intent.classify()`), aucun code mort, aucun import cassé. `git
+diff` sur `core/intent.py` depuis la pause : vide — rien n'y a changé.
+
+### Aspect 2 — auto-imitation de refus : cause réelle trouvée et corrigée le 03/08/2026
+
+**Reproduit en direct**, screenshot à l'appui (copie de la vraie base de
+Cyril, jamais le fichier live ; vrai Ollama ; vraie capture d'écran/OCR) :
+`classify()` détecte bien la question comme `ECRAN`, l'OCR lit
+réellement l'écran, le bloc vision est injecté avec la consigne
+explicite « Ne dis JAMAIS que tu ne peux pas voir l'écran : tu viens de
+le faire. » **Le modèle (qwen2.5:7b) répond quand même qu'il n'a pas
+accès à l'écran** — parce que les derniers tours d'historique
+(`SOURCE_HISTORY_MESSAGES`) sont des refus identiques répétés : il
+imite son propre motif d'échec récent plutôt que de suivre la consigne
+qui le contredit. Aggravé par le réflexe naturel de réessayer une
+question qui échoue — chaque nouvel essai renforce le motif imité.
+
+**Correctif** (`core/lucas_core.py`) : `is_vision_refusal()`, un filtre
+par mots-clés/regex qui retire de l'historique récent les réponses de
+l'ASSISTANT (jamais les questions de Cyril) qui ressemblent à un refus
+de vision déjà observé, uniquement quand un nouveau bloc vision va être
+injecté pour le tour courant — aucun effet sur le RAG, la finance ou une
+conversation ordinaire. Motifs construits à partir des formulations
+RÉELLEMENT observées (pas inventées).
+
+**⚠️ Filtre heuristique, explicitement pas une solution définitive.**
+Revalidé le même jour sur l'état réel de la base de Cyril, qui avait
+entre-temps accumulé 8 refus consécutifs supplémentaires (Cyril a
+continué à tester pendant le correctif) : le filtre n'a reconnu qu'une
+partie des formulations (le modèle paraphrase différemment à chaque
+fois, il ne répète pas verbatim) — 2 refus sur 3 dans la fenêtre
+d'historique ont échappé au filtre, formulés différemment des 3 motifs
+connus. **Malgré cette couverture incomplète, la réponse finale a
+correctement décrit l'écran réel** au lieu de refuser — première fois
+que ce scénario aboutit depuis le début de ce signalement. Pas assez de
+recul pour garantir que ça tienne à chaque fois ; à surveiller.
+
+**Piste de fond, pas construite maintenant** : une fois le schéma
+mémoire confiance/provenance implémenté (`IDEAS.md` #2bis), ce filtrage
+pourra se faire proprement via une métadonnée posée à l'écriture
+plutôt que par correspondance de texte après coup, sans dépendre des
+formulations exactes que le modèle choisit d'utiliser.
+
+Tests : `test_vision_routing.py` — historique synthétique à 3 refus
+consécutifs (confirmé filtré), garde qu'un tour normal (sans nouveau
+déclenchement vision) n'est jamais filtré, reconnaissance des 3
+formulations réelles connues. 742/742 tests passent au total.
 
 Distinct du point OCR/classifieur (§3, tableau Phase 3, « Vision écran »)
 qui reste, lui, clos et sans lien avec ce signalement.

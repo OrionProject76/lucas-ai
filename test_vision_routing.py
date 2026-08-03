@@ -939,5 +939,99 @@ def test_generic_screen_wording_does_not_get_the_pc_override(core, monkeypatch) 
     assert not any(VISION_MARKER in m["content"] for m in messages)
 
 
+# ── Auto-imitation de refus de vision (03/08/2026) ─────────────────────
+#
+# Régression trouvée en conditions réelles (screenshot + vraie base de
+# Cyril à l'appui, voir real_vision_test*.py de la session du 03/08) :
+# qwen2.5:7b répondait "je n'ai pas accès à l'écran" malgré une consigne
+# explicite contraire (VISION_MARKER + "Ne dis JAMAIS que tu ne peux pas
+# voir l'écran"), parce que les tours d'historique juste avant étaient
+# des refus identiques répétés — le modèle imitait le motif plutôt que
+# la consigne. Les trois formulations ci-dessous sont celles RÉELLEMENT
+# observées ce jour-là, pas des exemples inventés.
+
+REAL_VISION_REFUSALS = [
+    "Je n'ai pas accès à une image ni à un contexte visuel pour analyser. "
+    "Si vous souhaitez que je décrive quelque chose, veuillez me fournir "
+    "le détail ou la capture d'écran concernée.",
+    "Désolé, mais je n'ai pas accès à aucune image ou contexte visuel. "
+    "Si vous souhaitez que je décrive quelque chose, veuillez me fournir "
+    "les détails ou la capture d'écran concernée.",
+    "Je n'ai pas accès à votre écran en ce moment, car je fonctionne "
+    "localement sur le PC de Cyril et ne peux pas regarder à distance.",
+]
+
+
+def test_repeated_vision_refusals_are_filtered_from_history(monkeypatch):
+    """
+    Historique synthétique : 3 tours consécutifs où Cyril redemande
+    "Décris ce que tu vois." et reçoit un vrai refus déjà observé. Une
+    fois le nouveau bloc vision injecté, aucun de ces refus ne doit
+    rester dans le contexte envoyé au modèle.
+    """
+    monkeypatch.setattr(lucas_core, "get_snapshot", dict)
+    monkeypatch.setattr(
+        lucas_core, "format_for_prompt",
+        lambda snapshot, include_window=True: "[système]",
+    )
+
+    history = []
+    for refusal in REAL_VISION_REFUSALS:
+        history.append(("user", "Décris ce que tu vois."))
+        history.append(("assistant", refusal))
+
+    instance = LucasCore.__new__(LucasCore)
+    instance.memory = _FakeMemory(history=history)
+
+    _fake_vision(monkeypatch, "un terminal affichant du code Python")
+    messages = instance._build_messages("Décris ce que tu vois.", "local")
+
+    assert not any(
+        refusal in m["content"] for refusal in REAL_VISION_REFUSALS for m in messages
+    ), "un refus de vision déjà observé ne doit plus apparaître dans le contexte envoyé"
+
+    # Seul le motif à imiter (la réponse) disparaît — les questions de
+    # Cyril, elles, restent dans l'historique.
+    assert any(m["content"] == "Décris ce que tu vois." for m in messages)
+
+
+def test_vision_refusal_filter_is_a_no_op_without_a_new_vision_block(monkeypatch):
+    """
+    Le filtre ne doit jouer AUCUN rôle en dehors d'un nouveau
+    déclenchement vision — sinon une vraie conversation sur un tout
+    autre sujet qui ressemble un peu à un refus perdrait de l'historique
+    pour rien.
+    """
+    monkeypatch.setattr(lucas_core, "get_snapshot", dict)
+    monkeypatch.setattr(
+        lucas_core, "format_for_prompt",
+        lambda snapshot, include_window=True: "[système]",
+    )
+
+    history = [
+        ("user", "Décris ce que tu vois."),
+        ("assistant", REAL_VISION_REFUSALS[0]),
+    ]
+    instance = LucasCore.__new__(LucasCore)
+    instance.memory = _FakeMemory(history=history)
+
+    messages = instance._build_messages("quelle heure il est", "local")
+
+    assert any(REAL_VISION_REFUSALS[0] in m["content"] for m in messages), (
+        "sans nouveau bloc vision, l'historique ne doit pas être filtré"
+    )
+
+
+@pytest.mark.parametrize("refusal", REAL_VISION_REFUSALS)
+def test_is_vision_refusal_recognizes_the_three_real_cases(refusal: str) -> None:
+    assert lucas_core.is_vision_refusal(refusal)
+
+
+def test_is_vision_refusal_ignores_ordinary_answers() -> None:
+    assert not lucas_core.is_vision_refusal(
+        "Bonjour Cyril ! Je vois que tu regardes un terminal. Comment puis-je t'aider ?"
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))
