@@ -632,3 +632,57 @@ le comportement par défaut (tout se répercute partout), ou un choix
 explicite de Cyril par question/session ? Un défaut « tout partout »
 pourrait surprendre — parler discrètement depuis le téléphone ferait
 soudain parler l'avatar du PC à voix haute dans la pièce.
+
+### 🛡️ Modules Interaction & Confiance (ajoutés session du 03/08/2026)
+
+**Numérotation** : Cyril a désigné ces quatre idées #67-70 dans son
+message — ces numéros sont déjà pris (§5, "Suivi & validation à
+distance", "Modèles spécialisés en complément", "Contrainte matérielle
+confirmée"). Renumérotées #80-83, à la suite de #79, même situation déjà
+rencontrée et déjà documentée dans la note de numérotation de la section
+5 (recompte du 02-03/08/2026) — pas une nouvelle anomalie, le même
+phénomène qui se reproduit.
+
+## 80. Cartes d'approbation (ALLOW/DENY) — UX de confirmation Self-Decision
+
+Pour toute action de la future liste blanche Self-Decision (le composant
+`core/decision_engine.py` prévu dans la structure de `CLAUDE.md` mais
+**pas encore construit** — voir #38, le seul mécanisme d'action-sur-liste-
+blanche qui existe réellement aujourd'hui est `modules/automation_manager.py`,
+au périmètre plus étroit : lancer une appli). Une carte explicite (action
+proposée, contexte, boutons Autoriser/Refuser) plutôt qu'une boîte de
+dialogue générique — rend visible CE qui va être fait et POURQUOI, pas
+seulement qu'une confirmation est demandée.
+
+Prématuré tant que Decision Engine n'existe pas : cataloguée comme
+exigence UX à respecter quand ce chantier s'ouvrira, pas une action à
+mener maintenant.
+
+## 81. STOP mid-tool-call — interruption immédiate d'une action en cours
+
+Raccourci dédié (ex. Échap) pour interrompre une action Self-Decision
+**en cours d'exécution**, sans attendre sa fin naturelle. Même principe
+de contrôle immédiat que le barge-in (#83 ci-dessous) mais côté action
+système plutôt que côté voix — dépend, comme #80, d'un Decision Engine
+qui n'existe pas encore.
+
+## 82. Session unifiée voix+texte — mémoire commune aux deux canaux
+
+**Déjà satisfait par l'architecture existante**, vérifié en relisant
+`api/server.py` (`websocket_endpoint`) : le message vocal transcrit
+(`transcript.text`, branche `"audio"`) et le message tapé (branche
+`"chat"`) convergent vers le MÊME appel `LucasCore.ask()`, sur la même
+connexion WebSocket, donc dans la même table `conversations` (voir
+`memory/memory_manager.py`). Il n'y a jamais eu deux sessions séparées à
+unifier — le pont mobile (Phase 4) a été construit directement sur ce
+modèle. Rien à faire ici, gardé pour mémoire plutôt que supprimé sans
+trace (même principe que les autres entrées closes de ce catalogue).
+
+## 83. Barge-in — interrompre Luca's pendant qu'elle parle
+
+**Conçu et implémenté le 03/08/2026** (`static/js/voice_output.js`,
+`VoiceOutput._startBargeInWatch()`) — voir `ROADMAP.md` §5.4 point 5 pour
+le détail technique complet (seuil RMS, `echoCancellation`, fermeture du
+micro dès la fin de la lecture) et sa limite connue : **pas testé en
+conditions réelles**, cette machine n'a pas de micro physique. À valider
+par Cyril sur le S25 Ultra.
