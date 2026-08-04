@@ -351,6 +351,20 @@ Aucune des deux n'est enregistrée automatiquement dans un
 n'a pas été modifié : toujours aucune confirmation avant de lancer une
 appli — voir `ROADMAP.md` §5.15 pour le détail.
 
+**⚠️ Précision du 04/08/2026 (nuit suivante) — premier câblage réel, accord
+explicite de Cyril** : le paragraphe ci-dessus décrit l'état AVANT cette
+date, gardé pour l'historique. Depuis, `automation_manager_actions()`
+**est** enregistré dans un vrai `DecisionEngine` construit à chaque appel
+dans `core/lucas_core.py::_build_messages()` — le lancement d'appli
+depuis le chat passe désormais par la chaîne complète (résolution
+d'`ActionSpec` → décision → journalisation dans une table SQLite dédiée,
+`action_log` → exécution). **Toujours aucune confirmation UI** : Cyril a
+explicitement demandé de garder ce comportement pour cette migration
+(`confirm=lambda spec: True`, choix documenté en commentaire à l'endroit
+exact du câblage) — la confirmation viendra avec les cartes d'approbation
+(`IDEAS.md` #80), chantier distinct, non ouvert. Détail complet,
+garde-fous et validation réelle : `ROADMAP.md` §5.25.
+
 ## 📁 Structure Dossiers
 
 **Corrigée le 03/08/2026** — l'arborescence ci-dessous reflète ce qui

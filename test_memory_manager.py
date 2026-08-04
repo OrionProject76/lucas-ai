@@ -245,5 +245,43 @@ def test_thread_safe_logger_reports_a_close_failure_but_still_returns_true(
     assert "Fermeture de connexion impossible" in capsys.readouterr().out
 
 
+# ── action_log (Decision Engine, premier câblage réel, 04/08/2026) ─────
+#
+# Table DÉDIÉE, distincte de system_events — voir core/lucas_core.py et
+# ROADMAP.md §5.25 pour le câblage complet (chat -> Decision Engine ->
+# automation_manager).
+
+def test_save_action_then_load_recent_actions(memory) -> None:
+    memory.save_action("launch_chrome", "chat", "executed")
+
+    actions = memory.load_recent_actions()
+
+    assert len(actions) == 1
+    assert actions[0]["action"] == "launch_chrome"
+    assert actions[0]["source"] == "chat"
+    assert actions[0]["result"] == "executed"
+    assert actions[0]["created_at"] is not None
+
+
+def test_load_recent_actions_returns_most_recent_first(memory) -> None:
+    memory.save_action("launch_notepad", "chat", "executed")
+    memory.save_action("launch_photoshop", "chat", "denied")
+
+    actions = memory.load_recent_actions()
+
+    assert [a["action"] for a in actions] == ["launch_photoshop", "launch_notepad"]
+
+
+def test_load_recent_actions_respects_the_limit(memory) -> None:
+    for i in range(5):
+        memory.save_action(f"launch_app{i}", "chat", "executed")
+
+    assert len(memory.load_recent_actions(limit=2)) == 2
+
+
+def test_load_recent_actions_is_empty_on_a_fresh_database(memory) -> None:
+    assert memory.load_recent_actions() == []
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

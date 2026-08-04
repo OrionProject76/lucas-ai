@@ -2490,6 +2490,114 @@ d'en-tête après préambule) couvrent déjà ce second fichier sans
 modification, confirmant qu'il s'agissait bien de correctifs généraux et
 non d'un rafistolage propre au premier fichier.
 
+## 5.25 Premier câblage réel sur Decision Engine — lancement d'appli, accord explicite de Cyril
+
+Accord donné explicitement par Cyril le 04/08/2026 (nuit suivante) pour
+UNE SEULE action : migrer le lancement d'appli existant
+(`modules/automation_manager.py`) pour qu'il passe par la chaîne
+`core/decision_engine.py` complète — `ActionSpec` → décision →
+journalisation → exécution — au lieu d'un chemin direct. Aucune
+nouvelle capacité, aucune nouvelle entrée de liste blanche.
+
+⚠️ **Prémisse vérifiée avant d'écrire quoi que ce soit, et fausse** :
+l'instruction supposait un « chemin direct chat → automation_manager
+existant depuis des semaines » à migrer. Recherche faite (`grep` sur
+tout le dépôt) : `AutomationManager`/`WHITELISTED_APPS` n'étaient
+référencés nulle part dans `core/lucas_core.py`, `core/router.py`,
+`api/server.py` ni `ui/main_window.py` — le SEUL appelant réel de
+`AutomationManager.open_app()` était `demos/demo_automation.py` (script
+manuel). « Ouvre chrome » depuis le vrai chat ne faisait donc
+strictement rien avant ce chantier. Signalé à Cyril immédiatement ; le
+câblage a continué, car l'objectif réel (chat → Decision Engine →
+automation_manager, sans confirmation, journalisé) restait exactement
+celui demandé — il n'y avait simplement rien à « migrer », c'est le
+premier chemin, pas un remplacement.
+
+### Ce qui a été câblé
+
+**`core/router.py`** : `should_use_automation()`/`extract_app_name()` —
+déterministe, comme le reste du routeur. ⚠️ **Un vrai risque de faux
+positif trouvé en écrivant le test de non-déclenchement** : un simple mot-
+clé verbe + présence du nom d'appli n'importe où dans la phrase aurait
+fait de « lance une réflexion sur Chrome » un vrai lancement de
+navigateur — contrairement au calcul/à la météo, cette action a un VRAI
+effet de bord. Corrigé par une exigence de PROXIMITÉ (le nom d'appli doit
+suivre le verbe à au plus un mot d'écart, un article typiquement), même
+famille de correctif que les marqueurs AURA (§5.20). Alias français
+ajoutés pour les entrées existantes de la liste blanche (`"bloc-notes"`
+→ `notepad`, `"explorateur"` → `explorer`) — même application, même
+liste blanche, meilleure reconnaissance de la façon dont Cyril les
+nomme réellement (sa propre phrase de validation, « ouvre le
+bloc-notes », ne déclenchait rien sans cet alias).
+
+**`memory/memory_manager.py`** : table `action_log` dédiée (`action`,
+`source`, `timestamp`, `result`), distincte de `system_events` —
+`save_action()`/`load_recent_actions()`. `automation_manager.py`
+continue par ailleurs de journaliser ses propres détails d'exécution
+(appli manquante, erreur OS...) dans `system_events`, sans changement :
+les deux tables sont complémentaires, pas redondantes.
+
+**`core/lucas_core.py::_build_messages()`** : nouveau bloc, après météo,
+avec un vrai effet de bord (contrairement aux blocs calculatrice/météo/
+recherche web, purement informationnels). `not is_cloud` gardé, même
+motif que les autres sources.
+
+⚠️ **Point d'architecture réel, tranché ici plutôt que remonté** :
+`ActionCategory.EXECUTE` exige structurellement une confirmation dans
+`DecisionEngine.request()` (`CONFIRMATION_REQUIRED`) — sans `confirm`
+injecté, toute action EXECUTE est refusée par défaut. Or Cyril demande
+explicitement de garder le comportement actuel (aucune confirmation)
+pour cette migration. Résolu par `confirm=lambda spec: True`, choix
+EXPLICITE et TEMPORAIRE documenté en commentaire à l'endroit exact du
+câblage — ne change rien à `core/decision_engine.py` lui-même (le
+contrat "EXECUTE demande confirmation" reste intact pour tout futur
+appelant), seulement à la façon dont CE fournisseur de confirmation
+répond, en attendant les cartes d'approbation (`IDEAS.md` #80). Jugé ne
+PAS engager plus que cette action : réversible en un remplacement de
+callable, aucun changement de code partagé.
+
+⚠️ **Deuxième point trouvé en écrivant le test de refus** :
+`DecisionEngine._require()` lève `ActionDenied` directement pour une
+action inconnue de la liste blanche, SANS appeler son `log_event`
+interne (seul le refus de CONFIRMATION passe par ce chemin) — un refus
+"hors liste blanche" ne se serait donc jamais journalisé si on avait
+compté sur le `log_event` interne du moteur. Corrigé en journalisant
+explicitement dans le code de câblage (`core/lucas_core.py`), dans les
+DEUX branches (succès/refus), plutôt que de dépendre de la complétude du
+journal interne de `core/decision_engine.py` — celui-ci reste inchangé.
+
+### Ce qui reste exclu, sans ambiguïté
+
+Aucune nouvelle entrée de liste blanche. Aucune confirmation UI (cartes
+#80, chantier distinct). Aucun autre type d'action (lecture/écriture)
+câblé sur le moteur. Le mécanisme de confiance/provenance et le RAG
+restent inchangés par ce chantier.
+
+### Validé
+
+**Tests** : 20 tests ajoutés — `test_router.py` (9 unitaires
+`should_use_automation()`/`extract_app_name()`, dont le faux positif
+trouvé et l'alias français ; 5 d'intégration `_build_messages()` :
+jamais vers le cloud, exécution + journal sur appli autorisée, silence
+sur question sans rapport, refus + journal sur liste blanche
+désynchronisée en test défensif) ; `test_memory_manager.py` (4,
+`action_log`). Suite complète : **1057 passed**.
+
+**Validation réelle, pas seulement mockée** : `LucasCore.prepare()` réel
+sur base temporaire, question « ouvre le bloc-notes » →
+1. Bloc `ACTION RÉELLE EFFECTUÉE : L'application notepad a été
+   ouverte.` confirmé dans les messages construits.
+2. **Vrai processus Notepad confirmé lancé** (`Get-Process notepad`,
+   PID réel, horodatage **identique à la seconde près** à celui
+   enregistré dans `action_log`) — fermé proprement après vérification.
+3. `action_log` contient exactement 1 entrée :
+   `{action: launch_notepad, source: chat, result: executed}`.
+
+`CLAUDE.md` mis à jour (précision datée, section "liste blanche de
+`core/decision_engine.py`") : l'ancien constat "aucune des deux n'est
+enregistrée dans un DecisionEngine en cours d'exécution" ne vaut plus
+depuis ce chantier — gardé pour l'historique, précisé plutôt que réécrit.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

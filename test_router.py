@@ -9,11 +9,13 @@ import pytest
 
 from config import CLOUD_HISTORY_MESSAGES
 from core.router import (
+    extract_app_name,
     extract_calculation,
     extract_city,
     is_sensitive,
     mentions_pc_explicitly,
     route,
+    should_use_automation,
     should_use_calculator,
     should_use_finance,
     should_use_rag,
@@ -208,6 +210,53 @@ def test_extract_city_returns_none_when_no_city_is_named() -> None:
     assert extract_city("quel temps fait-il ?") is None
 
 
+# ── should_use_automation() / extract_app_name() (câblé 04/08/2026) ────
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "ouvre chrome", "ouvre Chrome", "lance la calculatrice",
+        "démarre notepad", "peux-tu ouvrir explorer",
+    ],
+)
+def test_should_use_automation_detects_launch_requests(question: str) -> None:
+    assert should_use_automation(question)
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        # ⚠️ Trouvé en écrivant ce test : "chrome" apparaît dans la phrase,
+        # mais loin du verbe — sans l'exigence de proximité, ceci aurait
+        # réellement lancé le navigateur (voir core/router.py).
+        "lance une réflexion sur Chrome",
+        "ouvre le débat sur les réseaux sociaux",  # verbe présent, appli inconnue
+        "quelle heure est-il ?",
+        "combien font 45 + 32",
+    ],
+)
+def test_should_use_automation_ignores_unrelated_questions(question: str) -> None:
+    assert not should_use_automation(question)
+
+
+def test_extract_app_name_finds_a_whitelisted_app() -> None:
+    assert extract_app_name("ouvre chrome") == "chrome"
+
+
+def test_extract_app_name_is_case_insensitive() -> None:
+    assert extract_app_name("OUVRE CHROME") == "chrome"
+
+
+def test_extract_app_name_returns_none_for_an_unknown_app() -> None:
+    """Jamais deviner une appli hors liste blanche : aucun effet ne doit en découler."""
+    assert extract_app_name("ouvre photoshop") is None
+
+
+def test_extract_app_name_recognizes_the_french_name_for_notepad() -> None:
+    """"bloc-notes" est le nom réel utilisé par un francophone, pas "notepad"."""
+    assert extract_app_name("ouvre le bloc-notes") == "notepad"
+
+
 # ── Robustesse de la saisie réelle ────────────────────────────────────
 #
 # Ces cas viennent d'un test en conditions réelles, pas d'une revue de
@@ -281,6 +330,7 @@ class _FakeMemory:
 
     def __init__(self, history: list[tuple[str, str]]) -> None:
         self._history = history
+        self.actions_logged: list[dict] = []
 
     def load_history(self) -> list[tuple[str, str]]:
         return self._history
@@ -298,6 +348,9 @@ class _FakeMemory:
 
     def load_recent_events_with_metadata(self, limit: int = 5) -> list[dict]:
         return []
+
+    def save_action(self, action: str, source: str, result: str) -> None:
+        self.actions_logged.append({"action": action, "source": source, "result": result})
 
 
 @pytest.fixture
@@ -536,6 +589,72 @@ def test_weather_context_absent_when_question_unrelated(core_with_history: Lucas
     monkeypatch.setattr("modules.weather_manager.WeatherManager", _FakeWeatherManager)
     messages = core_with_history._build_messages("bonjour", "local")
     assert not any("MÉTÉO" in m["content"] for m in messages)
+
+
+# ── Automation / Decision Engine (premier câblage réel, 04/08/2026) ────
+#
+# Premier bloc de _build_messages() qui a un VRAI effet de bord — les
+# fakes ci-dessous remplacent AutomationManager pour ne jamais lancer de
+# vrai process pendant les tests, même principe que _FakeWeatherManager
+# pour ne jamais appeler le vrai wttr.in.
+
+class _FakeAutomationManager:
+    def __init__(self, log_event=None) -> None:
+        self.log_event = log_event
+
+    def open_app(self, app_name: str) -> str:
+        return f"L'application {app_name} a été ouverte."
+
+
+@requires_core
+def test_cloud_never_triggers_automation(core_with_history: LucasCore, monkeypatch) -> None:
+    """Un vrai lancement d'appli ne doit jamais être déclenché par une question cloud."""
+    monkeypatch.setattr("modules.automation_manager.AutomationManager", _FakeAutomationManager)
+    messages = core_with_history._build_messages("ouvre chrome", "cloud")
+    assert not any("ACTION RÉELLE" in m["content"] for m in messages)
+    assert core_with_history.memory.actions_logged == []
+
+
+@requires_core
+def test_local_launches_the_requested_app_and_logs_it(core_with_history: LucasCore, monkeypatch) -> None:
+    monkeypatch.setattr("modules.automation_manager.AutomationManager", _FakeAutomationManager)
+    messages = core_with_history._build_messages("ouvre chrome", "local")
+    joined = " ".join(m["content"] for m in messages)
+
+    assert "ACTION RÉELLE EFFECTUÉE" in joined
+    assert "chrome a été ouverte" in joined
+    assert "INTERDIT" in joined
+
+    assert len(core_with_history.memory.actions_logged) == 1
+    logged = core_with_history.memory.actions_logged[0]
+    assert logged["action"] == "launch_chrome"
+    assert logged["source"] == "chat"
+    assert logged["result"] == "executed"
+
+
+@requires_core
+def test_automation_context_absent_when_question_unrelated(core_with_history: LucasCore, monkeypatch) -> None:
+    monkeypatch.setattr("modules.automation_manager.AutomationManager", _FakeAutomationManager)
+    messages = core_with_history._build_messages("bonjour", "local")
+    assert not any("ACTION RÉELLE" in m["content"] for m in messages)
+    assert core_with_history.memory.actions_logged == []
+
+
+@requires_core
+def test_automation_denial_is_logged_as_denied(core_with_history: LucasCore, monkeypatch) -> None:
+    """
+    Défensif : si la liste blanche du Decision Engine se désynchronise un
+    jour de celle d'automation_manager, le refus doit être clair et
+    journalisé — pas une exception non rattrapée.
+    """
+    monkeypatch.setattr("modules.automation_manager.AutomationManager", _FakeAutomationManager)
+    monkeypatch.setattr("core.decision_engine.automation_manager_actions", tuple)
+    messages = core_with_history._build_messages("ouvre chrome", "local")
+    joined = " ".join(m["content"] for m in messages)
+
+    assert "ACTION REFUSÉE" in joined
+    assert len(core_with_history.memory.actions_logged) == 1
+    assert core_with_history.memory.actions_logged[0]["result"] == "denied"
 
 
 @requires_core

@@ -28,10 +28,12 @@ from core.local_llm import ask_local
 from core.memory_weighting import annotate_uncertain_events, annotate_uncertain_history
 from core.reasoning_engine import ReasoningEngine
 from core.router import (
+    extract_app_name,
     extract_calculation,
     extract_city,
     mentions_pc_explicitly,
     route,
+    should_use_automation,
     should_use_calculator,
     should_use_finance,
     should_use_rag,
@@ -169,8 +171,9 @@ class LucasCore:
         Construit la liste de messages envoyée au LLM.
         Ordre : prompt système → contexte système (World Model) →
         événements récents → contexte documents (RAG, si pertinent) →
-        historique de conversation → vision/RAG/finance/calcul (dans cet
-        ordre, juste avant la question — voir plus bas).
+        historique de conversation → vision/RAG/finance/calcul/recherche
+        web/météo/automation (dans cet ordre, juste avant la question —
+        voir plus bas).
 
         `destination` ("local" ou "cloud") restreint ce qui est joint quand la
         requête sort de la machine : pas de contexte RAG, pas d'événements
@@ -508,6 +511,63 @@ class LucasCore:
                     )
                     _emit(on_activity, "weather_checked", f"météo — {city} indisponible")
 
+        # Automation (modules/automation_manager.py, PREMIER câblage réel de
+        # core/decision_engine.py, accord explicite de Cyril, 04/08/2026 —
+        # voir ROADMAP.md §5.25). Contrairement aux blocs ci-dessus, celui-ci
+        # a un VRAI effet de bord (lance un process) — pas seulement du
+        # contexte injecté pour le LLM.
+        #
+        # ⚠️ `confirm=lambda spec: True` est un choix EXPLICITE et TEMPORAIRE,
+        # pas un oubli : Cyril demande explicitement de garder le
+        # comportement actuel (aucune confirmation) pour cette migration —
+        # la confirmation UI viendra avec les cartes d'approbation
+        # (IDEAS.md #80), chantier distinct. `ActionCategory.EXECUTE` exige
+        # structurellement une confirmation (core/decision_engine.py) ; ce
+        # callable en tient lieu, en attendant une vraie UI.
+        #
+        # ⚠️ Le journal (action_log) est écrit ICI, explicitement, PAS via
+        # le `log_event` interne de DecisionEngine : `_require()` lève
+        # `ActionDenied` directement pour une action inconnue de la liste
+        # blanche, sans jamais appeler `self._log(...)` — seul le refus de
+        # CONFIRMATION passe par ce chemin interne. Écrire le journal ici,
+        # dans les deux branches (succès/refus), garantit qu'une action
+        # hors liste blanche est journalisée comme refus quel que soit
+        # l'endroit précis où `ActionDenied` a été levée à l'intérieur de
+        # `core/decision_engine.py` — trouvé en écrivant le test de refus.
+        automation_context = ""
+        if not is_cloud and should_use_automation(user_message):
+            from core.decision_engine import (
+                ActionDenied,
+                DecisionEngine,
+                automation_manager_actions,
+            )
+            from modules.automation_manager import AutomationManager
+
+            app_name = extract_app_name(user_message)
+            action_name = f"launch_{app_name}"
+            engine = DecisionEngine(confirm=lambda spec: True)
+            for spec in automation_manager_actions():
+                engine.register(spec)
+
+            automation = AutomationManager(log_event=self.log_event)
+            try:
+                result_message = engine.request(action_name, run=lambda: automation.open_app(app_name))
+                self.memory.save_action(action=action_name, source="chat", result="executed")
+                automation_context = (
+                    f"ACTION RÉELLE EFFECTUÉE : {result_message}\n\n"
+                    "Confirme ceci à Cyril. INTERDIT : prétendre avoir fait "
+                    "autre chose, ou inventer un résultat différent."
+                )
+                _emit(on_activity, "automation_requested", f"lancement — {app_name}")
+            except ActionDenied as exc:
+                self.memory.save_action(action=action_name, source="chat", result="denied")
+                automation_context = (
+                    f"ACTION REFUSÉE : {exc}\n\n"
+                    "Dis-le clairement à Cyril plutôt que de prétendre avoir "
+                    "lancé l'application."
+                )
+                _emit(on_activity, "automation_requested", f"lancement refusé — {app_name}")
+
         # ⚠️ SECONDE MOITIÉ DU MÊME BUG, et elle vaut pour LES DEUX SOURCES.
         #
         # Remettre le bloc au bon endroit ne suffisait pas : avec 100
@@ -531,6 +591,7 @@ class LucasCore:
         if not is_cloud and (
             vision_context or rag_context or finance_context
             or calculation_context or websearch_context or weather_context
+            or automation_context
         ):
             history = history[-SOURCE_HISTORY_MESSAGES:]
 
@@ -609,6 +670,9 @@ class LucasCore:
 
         if weather_context:
             messages.append({"role": "system", "content": weather_context})
+
+        if automation_context:
+            messages.append({"role": "system", "content": automation_context})
 
         if current_question is not None:
             messages.append(

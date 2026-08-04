@@ -341,3 +341,71 @@ def extract_city(text: str) -> str | None:
 def should_use_weather(text: str) -> bool:
     """Déclenchement déterministe — même raisonnement que should_use_finance()."""
     return contains_any(text, KEYWORDS_WEATHER)
+
+
+# ── Automation (modules/automation_manager.py) — câblé le 04/08/2026 ───
+#
+# Premier câblage réel de core/decision_engine.py, accord explicite de
+# Cyril (une seule action : lancement d'appli, sans confirmation, comme
+# aujourd'hui). ⚠️ Vérifié avant d'écrire quoi que ce soit : il n'existait
+# aucun « chemin direct » chat → automation_manager à migrer — le module
+# n'était appelé nulle part dans core/lucas_core.py, core/router.py ni
+# api/server.py, uniquement depuis demos/demo_automation.py (script
+# manuel). Ce câblage est donc le PREMIER chemin réel, pas un
+# remplacement — signalé à Cyril, voir ROADMAP.md §5.25.
+# ⚠️ Le nom d'application doit suivre le verbe DE PRÈS (au plus un mot
+# d'écart — un article « le »/« la »/« l' », typiquement), pas n'importe
+# où dans la phrase. Trouvé en écrivant le test de non-déclenchement :
+# « lance une réflexion sur Chrome » contient à la fois un verbe et
+# « chrome » — un vrai risque de faux positif ici, contrairement au
+# calcul ou à la météo, puisque l'effet de bord est réel (un programme
+# démarre). Même famille de correctif que les modes AURA (§5.20) :
+# un mot déclencheur seul ne suffit pas, la proximité si.
+_AUTOMATION_VERB_PATTERN = r"(?:ouvre|ouvrir|lance|lancer|demarre|demarrer)"
+
+# Noms français courants pour une entrée de la liste blanche — même
+# application, même liste blanche, juste une meilleure reconnaissance de
+# la façon dont Cyril la nomme réellement. "notepad" est le nom du
+# programme (clé technique de WHITELISTED_APPS), mais un francophone dit
+# "bloc-notes" — sans cet alias, la phrase de validation suggérée par
+# Cyril lui-même ("ouvre le bloc-notes") ne déclencherait rien.
+_APP_NAME_ALIASES = {
+    "bloc-notes": "notepad",
+    "bloc notes": "notepad",
+    "explorateur": "explorer",
+    "explorateur de fichiers": "explorer",
+}
+
+
+def extract_app_name(text: str) -> str | None:
+    """
+    Cherche un nom d'application DE LA LISTE BLANCHE réelle (ou un alias
+    français courant du même nom), immédiatement précédé d'un verbe
+    d'ouverture — jamais un nom arbitraire : seul
+    modules.automation_manager.WHITELISTED_APPS peut être lancé, extraire
+    autre chose n'aurait aucun effet utile et ne ferait que remonter un
+    ActionDenied. Import paresseux, même motif que core.dates ailleurs
+    dans ce fichier (éviter la boucle d'import via core/lucas_core.py).
+    """
+    from core.text_utils import normalize
+    from modules.automation_manager import WHITELISTED_APPS
+
+    normalized = normalize(text)
+    candidates = {name: name for name in WHITELISTED_APPS}
+    candidates.update(
+        {alias: real for alias, real in _APP_NAME_ALIASES.items() if real in WHITELISTED_APPS}
+    )
+    for spoken_name, real_name in candidates.items():
+        pattern = rf"\b{_AUTOMATION_VERB_PATTERN}\b(?:\s+\w+){{0,1}}\s+{re.escape(spoken_name)}\b"
+        if re.search(pattern, normalized):
+            return real_name
+    return None
+
+
+def should_use_automation(text: str) -> bool:
+    """
+    Déterministe, comme should_use_calculator() : le verbe et le nom
+    d'application sont déjà liés par la proximité exigée dans
+    extract_app_name(), pas besoin d'un second test de mot-clé séparé.
+    """
+    return extract_app_name(text) is not None

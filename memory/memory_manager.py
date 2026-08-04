@@ -88,6 +88,23 @@ class MemoryManager:
         self._migrate_add_column("conversations", "agent_id", "TEXT NOT NULL DEFAULT 'orion_main'")
         self._migrate_add_column("system_events", "agent_id", "TEXT NOT NULL DEFAULT 'orion_main'")
 
+        # Journal des actions gouvernées par core/decision_engine.py (ajout
+        # 04/08/2026, premier câblage réel — voir ROADMAP.md §5.25). Table
+        # DÉDIÉE et distincte de system_events : celle-ci trace une DÉCISION
+        # de gouvernance (autorisée ou refusée, et par quoi déclenchée), pas
+        # un événement système quelconque — automation_manager.py continue
+        # par ailleurs de journaliser ses propres détails d'exécution
+        # (appli manquante, erreur OS...) dans system_events, sans changement.
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS action_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action TEXT NOT NULL,
+                source TEXT NOT NULL,
+                result TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         # Confiance & provenance (IDEAS.md #2bis, ajout 03/08/2026) : chaque
         # souvenir stocké porte désormais d'où il vient et à quel point on
         # peut encore s'y fier, pas seulement son contenu brut. Objectif de
@@ -280,6 +297,39 @@ class MemoryManager:
             "event_type", "details", "source", "confidence", "importance",
             "date", "last_validated", "expiration",
         )
+        return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+
+    # ── Journal des actions gouvernées (Decision Engine, nouveau) ────
+
+    def save_action(self, action: str, source: str, result: str) -> None:
+        """
+        Enregistre une décision de core/decision_engine.py — pas un
+        événement système générique. `result` typiquement "executed" ou
+        "denied" (voir core/decision_engine.py::ActionCategory), `source`
+        le déclencheur de la demande (ex. "chat").
+        """
+        self.cursor.execute(
+            "INSERT INTO action_log (action, source, result) VALUES (?, ?, ?)",
+            (action, source, result),
+        )
+        self.conn.commit()
+
+    def load_recent_actions(self, limit: int = 20) -> list[dict]:
+        """
+        Les N actions gouvernées les plus récentes — consultation future
+        par le panneau sécurité/API (pas construit ici, voir ROADMAP.md
+        §5.25 pour le périmètre exact de ce qui est câblé aujourd'hui).
+        """
+        self.cursor.execute(
+            """
+            SELECT action, source, result, created_at
+            FROM action_log
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        columns = ("action", "source", "result", "created_at")
         return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
 
     def close(self):
