@@ -1626,6 +1626,54 @@ Suite complète du projet : 898 passed (889 + 9 unitaires ; le test
 d'intégration synthétique est le 9e test marqué "integration", exclu du
 compte par défaut).
 
+## 5.13 Modes AURA — MVP réduit (Working + Deep Focus), détection seule, 04/08/2026
+
+Session autonome 8-10h, suite du 5.12 — dernière priorité de la liste,
+traitée dans le temps restant. `IDEAS.md` §3 catalogue 8 modes ; MVP
+volontairement réduit à 2, les moins ambigus à détecter sans LLM.
+
+**`core/aura_modes.py`** : `AuraModeEngine`, déterministe (comme
+`core/router.py` — du code Python qui décide, jamais un LLM, CLAUDE.md
+règle 12). `detect(active_window)` reconnaît Working par une liste de
+marqueurs d'app dans le titre de fenêtre (`core/world_model.py`,
+`get_snapshot()["active_window"]`) — VS Code, PyCharm, Excel, Word,
+PowerPoint, Outlook, terminal/PowerShell, Notepad++. Deep Focus, lui,
+n'est **jamais déduit d'une fenêtre** — seulement d'une commande
+explicite (`handle_command()`) : bloquer les notifications sur une
+inférence fragile serait pire que ne rien bloquer. Une fois activé,
+Deep Focus reste actif quelle que soit la fenêtre ensuite au premier
+plan, jusqu'à désactivation explicite — le seul mode "collant" des deux.
+
+⚠️ **Bug réel trouvé en testant, pas en relisant** : la phrase de
+désactivation « désactive le mode focus » contient littéralement la
+sous-chaîne « active le mode focus » — sans vérifier d'abord les phrases
+de désactivation, une commande pour ARRÊTER le mode l'aurait activé. Le
+test `test_an_explicit_command_deactivates_deep_focus` l'a immédiatement
+fait échouer ; corrigé en vérifiant OFF avant ON dans `handle_command()`.
+
+**Portée délibérément arrêtée à la détection** — comme `core/decision_engine.py`
+(§5.11) : les "comportements" de la table `IDEAS.md` (notifications
+filtrées, musique lo-fi, compte à rebours, raccourcis pro...) sont de
+vraies actions système qui n'existent pas encore dans le projet. Les
+construire dépasse un MVP et empièterait sur ce que Decision Engine est
+censé arbitrer une fois réellement câblé — non fait ici, à dessein.
+
+**Les 6 autres modes** (Creating, Meeting, Gaming, Entertainment,
+Learning, Social) restent catalogués dans `IDEAS.md`, prêts à suivre le
+même patron (liste de déclencheurs -> `AuraMode`), mais ne sont pas
+construits : chacun mérite sa propre liste d'apps/mots-clés vérifiée
+avec Cyril, pas une extrapolation en session autonome.
+
+**Validé** : 15 tests dans `test_aura_modes.py` (Working sur plusieurs
+apps réelles, insensible à la casse, jamais déduit pour Deep Focus,
+Deep Focus collant à travers un changement de fenêtre, activation ET
+désactivation explicites, phrase neutre sans effet). **Validation en
+conditions réelles** : moteur exécuté contre le VRAI `get_snapshot()` de
+cette machine, maintenant — fenêtre active réelle `"Claude"`, mode
+détecté `NONE` (correct, pas dans la liste des apps pro) ; après la
+commande réelle « active le mode focus », mode `DEEP_FOCUS`, reste actif
+sur la même fenêtre. Suite complète du projet : 913 passed.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

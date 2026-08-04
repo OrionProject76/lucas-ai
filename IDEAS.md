@@ -152,15 +152,25 @@ Visage low-poly stylisé, shaders néon cyan/bleu avec glow. Flottement organiqu
   - Mode "Debug Silencieux" : veille graphique totale pendant dev de Luca's elle-même
 
 ### Les 8 Modes AURA Luca's
+
+**MVP réduit construit et testé le 04/08/2026** (`core/aura_modes.py`,
+voir `ROADMAP.md` §5.13) : Working et Deep Focus, DÉTECTION uniquement —
+ni l'un ni l'autre n'a son "Comportement" câblé (notifications filtrées,
+musique lo-fi, compte à rebours...), ce sont de vraies actions système
+qui n'existent pas encore. Les 6 autres modes ci-dessous restent
+catalogués, prêts à suivre le même patron (une liste de déclencheurs ->
+un `AuraMode`), mais ne sont pas construits.
+
 | Mode | Déclencheur | Comportement |
 |---|---|---|
-| 🧑‍💻 Working | App pro ouverte | Focus max, notifs filtrées, raccourcis pro |
+| 🧑‍💻 Working | App pro ouverte | **Détection ✅ (04/08/2026)** — Focus max, notifs filtrées, raccourcis pro : non câblé |
 | 🎨 Creating | App créative | Mode inspiration, génération idées, mood board |
 | 🤝 Meeting | Calendrier/visio | Transcription auto, résumé, action items |
 | 🎮 Gaming | Jeu détecté | Perf boost, overlay compagnon, coaching |
 | 🎬 Entertainment | Netflix/YouTube | Recommandations, ambiance lumière |
 | 📚 Learning | Tutoriel/doc | Explications adaptatives, flashcards, quiz |
 | 💬 Social | Messages/réseaux | Réponses suggérées, résumé conversations |
+| 🧘 Deep Focus | Commande "focus" | **Détection ✅ (04/08/2026)** — Tout bloqué, musique lo-fi, compte à rebours : non câblé |
 | 🧘 Deep Focus | Commande "focus" | Tout bloqué, musique lo-fi, compte à rebours |
 
 ---
