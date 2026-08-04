@@ -288,3 +288,24 @@ def should_use_calculator(text: str) -> bool:
     déclencher un calcul halluciné faute de vraie expression à évaluer.
     """
     return contains_any(text, KEYWORDS_CALCULATOR) and extract_calculation(text) is not None
+
+
+# ── Recherche web (modules/web_search.py) — câblé le 04/08/2026 ────────
+#
+# ⚠️ Volontairement ÉTROIT et EXPLICITE, contrairement au RAG/vision.
+# Il n'existe aucun moyen fiable de distinguer par mots-clés une question
+# de connaissance générale d'une question ordinaire — toute question sans
+# rapport avec les documents de Cyril POURRAIT bénéficier d'une recherche
+# web. Plutôt que de sur-déclencher (et envoyer des questions à
+# DuckDuckGo sans demande claire, CLAUDE.md règle 3), ne se déclenche que
+# sur une demande EXPLICITE de recherche en ligne.
+KEYWORDS_WEB_SEARCH = [
+    "cherche sur internet", "cherche sur le web", "cherche sur le net",
+    "recherche sur internet", "recherche sur le web", "recherche sur le net",
+    "cherche en ligne", "recherche en ligne",
+]
+
+
+def should_use_websearch(text: str) -> bool:
+    """Déclenchement déterministe et étroit — voir le commentaire ci-dessus."""
+    return contains_any(text, KEYWORDS_WEB_SEARCH)

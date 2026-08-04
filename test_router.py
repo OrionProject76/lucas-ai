@@ -17,6 +17,7 @@ from core.router import (
     should_use_finance,
     should_use_rag,
     should_use_vision,
+    should_use_websearch,
 )
 
 # core.lucas_core tire chromadb (via modules/rag_manager). Les tests de routage
@@ -133,6 +134,38 @@ def test_extract_calculation_ignores_a_single_number() -> None:
 
 def test_extract_calculation_returns_none_without_an_operator() -> None:
     assert extract_calculation("2026") is None
+
+
+# ── should_use_websearch() (câblé 04/08/2026) ────────────────────────────
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "cherche sur internet la recette de la tarte tatin",
+        "recherche sur le web les horaires du musée",
+        "cherche en ligne qui a gagné le match hier",
+        "CHERCHE SUR LE WEB des infos sur ce sujet",
+    ],
+)
+def test_should_use_websearch_detects_explicit_requests(question: str) -> None:
+    assert should_use_websearch(question)
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "quelle heure est-il ?",
+        "qui a inventé la tour Eiffel",  # question générale, pas de demande explicite
+        "resume le document",
+    ],
+)
+def test_should_use_websearch_ignores_implicit_general_knowledge_questions(question: str) -> None:
+    """
+    Volontairement étroit : contrairement au RAG/vision, aucun mot-clé
+    fiable ne distingue une question de connaissance générale d'une
+    question ordinaire — seule une demande EXPLICITE déclenche la recherche.
+    """
+    assert not should_use_websearch(question)
 
 
 # ── Robustesse de la saisie réelle ────────────────────────────────────
@@ -358,6 +391,39 @@ def test_calculation_failure_says_so_explicitly(core_with_history: LucasCore, mo
 def test_calculation_context_absent_when_question_unrelated(core_with_history: LucasCore) -> None:
     messages = core_with_history._build_messages("bonjour", "local")
     assert not any("CALCUL RÉEL" in m["content"] for m in messages)
+
+
+# ── Recherche web (04/08/2026) ────────────────────────────────────────
+
+class _FakeWebSearch:
+    def __init__(self, log_event=None) -> None:
+        self.log_event = log_event
+
+    def get_summary(self, query: str, max_results: int = 3) -> str:
+        return f"Résultats pour « {query} » :\n1. Exemple - http://exemple.test\n   Un extrait réel."
+
+
+@requires_core
+def test_cloud_never_receives_websearch_context(core_with_history: LucasCore, monkeypatch) -> None:
+    monkeypatch.setattr("modules.web_search.WebSearch", _FakeWebSearch)
+    messages = core_with_history._build_messages("cherche sur internet la météo", "cloud")
+    assert not any("RECHERCHE WEB" in m["content"] for m in messages)
+
+
+@requires_core
+def test_local_receives_the_real_websearch_results(core_with_history: LucasCore, monkeypatch) -> None:
+    monkeypatch.setattr("modules.web_search.WebSearch", _FakeWebSearch)
+    messages = core_with_history._build_messages("cherche sur internet la météo", "local")
+    joined = " ".join(m["content"] for m in messages)
+    assert "Un extrait réel" in joined
+    assert "INTERDIT" in joined
+
+
+@requires_core
+def test_websearch_context_absent_when_question_unrelated(core_with_history: LucasCore, monkeypatch) -> None:
+    monkeypatch.setattr("modules.web_search.WebSearch", _FakeWebSearch)
+    messages = core_with_history._build_messages("bonjour", "local")
+    assert not any("RECHERCHE WEB" in m["content"] for m in messages)
 
 
 @requires_core

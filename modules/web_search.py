@@ -18,7 +18,12 @@
 import logging
 import re
 
-from duckduckgo_search import DDGS
+# ⚠️ Le paquet `duckduckgo_search` est déprécié et renommé `ddgs` — trouvé
+# le 04/08/2026 en câblant ce module dans le chat : `duckduckgo_search`
+# 8.1.1 tournait sans erreur mais ne renvoyait plus AUCUN résultat, même
+# sur la requête d'exemple de ce fichier (« intelligence artificielle »).
+# `ddgs` (même API, from ddgs import DDGS) renvoie de vrais résultats.
+from ddgs import DDGS
 
 from core.text_utils import contains_any
 

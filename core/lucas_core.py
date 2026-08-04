@@ -35,6 +35,7 @@ from core.router import (
     should_use_finance,
     should_use_rag,
     should_use_vision,
+    should_use_websearch,
 )
 from core.text_utils import normalize
 from core.world_model import (
@@ -452,6 +453,24 @@ class LucasCore:
                 )
                 _emit(on_activity, "calculated", f"calcul — expression invalide ({expression})")
 
+        # Recherche web (modules/web_search.py, câblé le 04/08/2026).
+        # Déclenchement volontairement étroit (voir should_use_websearch) :
+        # chaque requête part chez DuckDuckGo, la troisième surface par
+        # laquelle du texte quitte la machine (après le LLM cloud et
+        # edge_tts) — le filtre anti-fuite de WebSearch.search() refuse déjà
+        # toute donnée identifiante AVANT l'appel réseau.
+        websearch_context = ""
+        if not is_cloud and should_use_websearch(user_message):
+            from modules.web_search import WebSearch
+
+            summary = WebSearch(log_event=self.log_event).get_summary(user_message)
+            websearch_context = (
+                "RECHERCHE WEB RÉELLE (DuckDuckGo) :\n\n" + summary + "\n\n"
+                "Appuie-toi UNIQUEMENT sur ces résultats réels. INTERDIT : "
+                "inventer un résultat, un lien ou un fait absent de cette recherche."
+            )
+            _emit(on_activity, "websearch_performed", "recherche web — résultats reçus")
+
         # ⚠️ SECONDE MOITIÉ DU MÊME BUG, et elle vaut pour LES DEUX SOURCES.
         #
         # Remettre le bloc au bon endroit ne suffisait pas : avec 100
@@ -473,7 +492,8 @@ class LucasCore:
         # ajoutée ici devra passer par ce même plafond — la finance y
         # compris (03/08/2026) : même bloc, même risque de noyade.
         if not is_cloud and (
-            vision_context or rag_context or finance_context or calculation_context
+            vision_context or rag_context or finance_context
+            or calculation_context or websearch_context
         ):
             history = history[-SOURCE_HISTORY_MESSAGES:]
 
@@ -546,6 +566,9 @@ class LucasCore:
 
         if calculation_context:
             messages.append({"role": "system", "content": calculation_context})
+
+        if websearch_context:
+            messages.append({"role": "system", "content": websearch_context})
 
         if current_question is not None:
             messages.append(

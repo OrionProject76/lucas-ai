@@ -382,7 +382,8 @@ C:/OrionAI/
 │   ├── voice_manager.py + piper_engine.py             # TTS routé (edge_tts / Piper)
 │   ├── stt_engine.py + stt_manager.py                 # Speech-to-Text (Whisper)
 │   ├── automation_manager.py                          # Liste blanche : ouvrir une appli
-│   ├── web_search.py                                  # Recherche web, filtre anti-fuite
+│   ├── web_search.py                                  # Recherche web, filtre anti-fuite — câblé le 04/08/2026
+│   │                                                     (should_use_websearch, core/router.py)
 │   ├── weather_manager.py                             # Écrit, jamais branché ailleurs (voir ROADMAP §5.2)
 │   └── calculator.py                                   # Câblé le 04/08/2026 (should_use_calculator, core/router.py)
 ├── memory/                     # Mémoire de conversation + indexation RAG

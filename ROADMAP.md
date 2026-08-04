@@ -1942,6 +1942,39 @@ réel sur une base temporaire, question « combien font 45 + 32 ? » →
 bloc `CALCUL RÉEL EFFECTUÉ : 45 + 32 = 77` confirmé dans les messages
 construits. Suite complète : 973 passed.
 
+### `modules/web_search.py` — câblé, dépendance cassée trouvée et corrigée
+
+`core/router.py` : `should_use_websearch()`, volontairement ÉTROIT et
+EXPLICITE — contrairement au RAG/vision, aucun mot-clé fiable ne
+distingue une question de connaissance générale d'une question
+ordinaire. Ne se déclenche que sur une demande explicite ("cherche sur
+internet...", "recherche en ligne..."), pour ne pas envoyer de questions
+à DuckDuckGo sans demande claire (CLAUDE.md règle 3).
+
+`core/lucas_core.py::_build_messages()` : réutilise le filtre anti-fuite
+déjà construit dans `WebSearch.search()` (`is_identifying()`, refuse
+IBAN/numéro de carte/solde AVANT tout appel réseau) — rien de nouveau à
+construire côté sécurité. Ajouté à `SOURCE_HISTORY_MESSAGES`, gardé
+`not is_cloud` par cohérence architecturale.
+
+⚠️ **Dépendance cassée trouvée en validant en conditions réelles** : le
+paquet `duckduckgo-search` (8.1.1, celui déjà dans `requirements.txt`)
+tournait sans erreur mais ne renvoyait plus AUCUN résultat, même sur la
+requête d'exemple du fichier lui-même (« intelligence artificielle »).
+Le paquet est déprécié et renommé `ddgs` — testé, même API
+(`from ddgs import DDGS`), résultats réels confirmés. `requirements.txt`
+mis à jour, ancien paquet désinstallé. Sans cette vérification en
+conditions réelles (pas seulement les tests mockés, qui ne pouvaient pas
+détecter ce problème), le module aurait été "câblé" mais silencieusement
+inopérant.
+
+**Validé** : tests unitaires (`should_use_websearch`, +7 tests) et
+d'intégration (`_build_messages()`, +3 tests). **Validation réelle**,
+deux fois (avant et après la correction de dépendance) : recherche
+« intelligence artificielle » ne renvoyait rien avec l'ancien paquet,
+renvoie de vrais résultats (Wikipédia et autres) avec `ddgs`. Suite
+complète : 983 passed.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
