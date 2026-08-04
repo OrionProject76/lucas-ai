@@ -2262,6 +2262,74 @@ qu'ailleurs dans le projet, pas de valeur réelle à les forcer.
 
 Suite complète, tout fermé : **1031 passed** (1021 + 10 nouveaux tests).
 
+## 5.22 Finance CSV — premier vrai relevé de Cyril déposé, format INCOMPATIBLE trouvé
+
+Cyril dépose un premier export bancaire réel dans `data/finance/` (nom de
+fichier volontairement omis ici — jamais commité, `.gitignore` vérifié
+ligne 63, confirmé non suivi par `git check-ignore -v`). Validation demandée
+avec la même méthode que `weather_manager.py` cette nuit : comportement réel
+contre le vrai fichier, pas seulement "ça ne plante pas".
+
+⚠️ **Aucune vraie valeur (montant, solde, libellé, nom de commerçant) n'est
+reproduite ci-dessous — uniquement des faits structurels**, conformément à
+la consigne explicite de Cyril.
+
+**Faits structurels mesurés** :
+- 16 533 octets, 310 enregistrements CSV réels (pas seulement 310 lignes
+  physiques — comptés via `csv.reader`, qui respecte guillemets et retours
+  à la ligne internes aux champs).
+- Pas de BOM `utf-8-sig`. Encodage UTF-8 valide (aucun octet nul, donc pas
+  un problème d'UTF-16 mal interprété). Fins de ligne `\n` seules (pas de
+  `\r`, inhabituel pour un export Windows mais cohérent d'un bout à
+  l'autre du fichier).
+- `csv.Sniffer().sniff()` (celui utilisé par `import_csv()`) **échoue à
+  détecter un délimiteur** parmi `,;\t` — confirmé aussi en élargissant
+  la recherche à `|`/`:` en diagnostic, sans succès.
+- **Chaque enregistrement CSV contient exactement 1 champ** (jamais 2 ou
+  plus), toujours entouré d'une seule paire de guillemets. Distribution
+  sur les 310 enregistrements : 47 vides, 65 majoritairement composés
+  d'espaces (probables lignes de remplissage/mise en page), 99
+  majoritairement alphabétiques (probables libellés/en-têtes), 50
+  majoritairement numériques (probables dates/montants isolés), 49
+  mixtes (probables lignes combinant plusieurs informations). Un
+  enregistrement-type de forme "transaction" (~100-170 caractères)
+  contient environ 65% d'espaces, dont de nombreux doubles-espaces
+  consécutifs — signature typique d'un texte mis en page en colonnes
+  alignées par espacement (tableau imprimé), pas de colonnes CSV
+  délimitées par un caractère.
+
+**Conclusion honnête, pas un bug de `finance_manager.py`** : ce relevé
+n'est structurellement PAS un CSV multi-colonnes délimité — c'est un export
+à une seule colonne par ligne, dont le contenu ressemble à un relevé mis en
+forme pour impression (aplati en un champ texte unique par ligne) plutôt
+qu'à un tableau de transactions avec des colonnes Date/Libellé/Montant
+séparables par un délimiteur. Aucun format déjà géré par `COLUMN_ALIASES`/
+`_map_columns()` (déjà validés sur des formats français réels avec
+délimiteurs virgule/point-virgule, en-têtes accentués, débit/crédit
+séparés — voir `test_finance.py`) ne correspond à cette structure.
+
+**Comportement réel observé, correct** : `FinanceManager().import_csv()`
+lève `CSVFormatError` ("colonnes obligatoires absentes : date, libelle") —
+ni crash, ni import silencieux à moitié, ni transaction inventée. Le module
+reconnaît honnêtement qu'il ne sait pas lire ce format, exactement le
+comportement attendu face à un fichier qu'il ne comprend pas — même
+philosophie "ne jamais deviner" que RAG/finance sans résultat.
+
+**Décision requise, pas tranchée seul** : contrairement à `weather_manager.py`
+(un bug de code, corrigible sans ambigüité), ici le code fonctionne
+correctement — c'est le FORMAT du relevé qui est incompatible avec toute
+approche de parsing par délimiteur. Deux pistes existent, sans réponse
+évidente entre elles (cas 4 de l'autonomie, CLAUDE.md) : (1) Cyril
+ré-exporte depuis le site de sa banque dans un format CSV standard si son
+interface en propose un (souvent un choix distinct de celui utilisé ici) ;
+(2) construire un analyseur dédié à ce format spécifique (reconnaissance de
+lignes par position/motif plutôt que par délimiteur), plus fragile et
+plus coûteux à maintenir. Remonté à Cyril plutôt que construit seul.
+
+**Suite de tests inchangée** : aucun test ajouté sur ce fichier réel lui-même
+(conformément à la consigne — le fichier ne doit jamais être copié ni sa
+forme figée dans un fixture commis). 1031 passed, inchangé.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
