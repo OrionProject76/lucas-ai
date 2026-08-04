@@ -253,6 +253,19 @@ un `AuraMode`), mais ne sont pas construits.
 37. Digital Twin — Jumeau numérique 3D du PC (diagnostic, prédiction pannes)
 38. **Swarm Intelligence — Multi-Luca's parallèle : Principal, Analyste, Créatif, Veilleur, Apprenant.** *(Multi-agents LLM autonomes explicitement exclu de la v1, reporté v1.1+ — voir `CLAUDE.md` règle 12, clarifié le 01/08/2026 : c'est CETTE idée précisément qui est interdite, pas l'architecture modulaire du Pilier 2)*
 
+    **Point additionnel soulevé le 04/08 (inspiration Hermes) : sous-agents
+    isolés par tâche lourde** (terminal/script propre par tâche — OCR,
+    scraping — avec son propre historique, séparé du contexte principal).
+    Proche de la ligne déjà tranchée ici, sans s'y confondre forcément : le
+    critère qui décide, ce n'est pas l'idée en l'état mais l'implémentation —
+    un sous-agent avec son PROPRE raisonnement autonome penche du mauvais
+    côté (LLM qui fait agir un autre LLM, v1.1+) ; un sous-processus qui
+    exécute une tâche déterministe sans raisonner seul (lancer l'OCR dans un
+    processus séparé, par exemple) resterait probablement du bon côté
+    (code Python déterministe qui orchestre). **À trancher avec Cyril
+    si/quand ce chantier rouvre**, en vérifiant de quel côté du critère
+    l'implémentation retenue tombe réellement — avant toute construction.
+
 ### 💰 Module finance
 39. Import universel CSV/OFX/QIF toutes banques françaises
 40. Catégorisation auto par LLM
@@ -784,3 +797,77 @@ documents que l'idée initiale impliquait.
 **Statut** : prête à être développée quand ce chantier sera priorisé
 (voir `ROADMAP.md` §4) — aucun code écrit à ce jour, `security/` reste
 au niveau 1 (métadonnées seules) tant que ce n'est pas construit.
+
+---
+
+## Cognition avancée — inspiration Hermes Agent (Nous Research, ajout 04/08/2026)
+
+Quatre idées supplémentaires tirées de l'étude de Hermes Agent, comparées à
+l'existant par Cyril et cataloguées ici — **aucune construction maintenant**,
+même statut que le reste de ce fichier tant qu'un chantier n'est pas ouvert
+explicitement. Cohérent avec l'addendum "HERMES + JARVIS" du 03/08/2026
+(`VISION_LONG_TERME.md`) et `#2bis` déjà présent dans ce fichier — un
+cinquième point (sous-agents isolés) a été volontairement écarté de cette
+liste et posé comme question ouverte sous `#38` à la place (voir plus haut) :
+trop proche de la ligne déjà tranchée sur le multi-agents pour être catalogué
+sans plus de précision.
+
+### 85. Mémoire à deux couches — logs bruts vs "skills" consolidés
+
+Aujourd'hui, `memory/memory_manager.py` stocke tout au même niveau : chaque
+message de conversation et chaque événement système, un enregistrement à la
+fois. L'idée Hermes ajoute une deuxième couche au-dessus : quand un problème
+récurrent trouve une solution qui a fonctionné, cette solution est résumée,
+nommée, et indexée séparément (full-text search, SQLite FTS5) comme un
+"skill" réutilisable — pas rejoué mot pour mot depuis l'historique brut,
+retrouvé par recherche directe la prochaine fois qu'un problème similaire se
+présente.
+
+**Distinct de `core/memory_weighting.py`, pas redondant** : `memory_weighting.py`
+pondère la FIABILITÉ d'un souvenir existant (confiance, expiration) — il ne
+change rien à la NATURE de ce qui est stocké. Cette idée-ci ajoute une
+nature de souvenir différente (une solution consolidée, pas un log daté) à
+côté de ce qui existe, pas à la place.
+
+### 86. Boucle agent explicite type ReAct (Raisonner → Agir → Observer → corriger)
+
+Ce que fait aujourd'hui Luca's de façon éparpillée — `core/reasoning_engine.py`
+(plan avant réponse, désactivé par défaut) et `modules/automation_manager.py`
+(exécute une action) — ne sont pas reliés par une boucle explicite qui
+observe le résultat d'une action et ajuste la suite. L'idée Hermes formalise
+ce cycle : Raisonner (quoi faire), Agir (le faire), Observer (vérifier ce qui
+s'est réellement passé), corriger si besoin — avec un état persistant entre
+les étapes, pas juste un enchaînement de prompts.
+
+**Objectif : prévisibilité et debug, pas une nouvelle capacité.** Rien de ce
+qui existe déjà (Reasoning Engine, Decision Engine, automation_manager) ne
+serait remplacé — l'idée est de les relier par un cycle nommé et traçable,
+plutôt que de les laisser coexister sans relation formelle entre eux.
+
+### 87. Séparation littérale des chemins d'exécution sandboxée vs directe
+
+Le principe existe déjà : `core/decision_engine.py`/`ActionSpec` distinguent
+lecture (auto) / écriture / exécution (confirmation), et CLAUDE.md interdit
+tout code auto-généré exécuté hors sandbox. Mais ce n'est pas aujourd'hui DEUX
+chemins de code distincts et identifiables dans l'architecture — c'est une
+règle appliquée au même endroit, pas une séparation structurelle visible.
+
+**Raffinement d'architecture, pas un trou de sécurité actuel** : rien
+n'indique que le principe soit contourné aujourd'hui. L'idée est de rendre
+la séparation explicite dans le CODE (deux chemins nommés), pas de changer
+ce qui est permis ou interdit.
+
+### 88. Modules internes exposés comme serveurs MCP (Model Context Protocol)
+
+Aujourd'hui, `modules/finance_manager.py`, `modules/web_search.py`,
+`modules/automation_manager.py` sont branchés au chat par des intégrations
+ad hoc (`core/router.py` + blocs dédiés dans `core/lucas_core.py::_build_messages()`,
+voir `ROADMAP.md` §5.19). Les exposer comme des serveurs MCP standardisés
+permettrait, plus tard, de les connecter à d'autres clients compatibles
+(Claude Desktop, par exemple) sans réécrire une interface spécifique à
+chacun.
+
+**Aucune urgence, bénéfice à long terme uniquement** : le câblage ad hoc
+actuel fonctionne et est testé (voir `ROADMAP.md` §5.19/§5.20) ; cette idée
+ne corrige rien de cassé, elle ouvre une porte pour un usage futur au-delà
+du chat de Luca's lui-même.
