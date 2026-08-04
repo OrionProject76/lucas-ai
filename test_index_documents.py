@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import shutil
+from pathlib import Path
 
 import pytest
 
@@ -793,6 +794,131 @@ def test_le_contenu_des_documents_n_est_jamais_affiche(rag, dossier, capsys):
     assert "secret.txt" in sortie
     assert "IBAN" not in sortie
     assert "FR76" not in sortie
+
+
+# ── _extract_page() : le mode layout lui-même ──────────────────────────
+#
+# Tous les tests PDF ci-dessus utilisent une fausse Page dont extract_text()
+# n'accepte pas extraction_mode : ça bascule systématiquement sur le repli
+# pypdf<4 (page.extract_text() sans argument), et le post-traitement du
+# mode layout (compactage des espaces, lignes vides supprimées) n'était
+# donc jamais exercé. Trouvé via mesure de couverture réelle.
+
+def test_extract_page_compacts_wide_gaps_and_drops_blank_lines() -> None:
+    class _Page:
+        def extract_text(self, extraction_mode=None):
+            assert extraction_mode == "layout"
+            return (
+                "Cadre Net à payer     NET A PAYER    1647.68\n"
+                "\n"
+                "   \n"
+                "MONTANT NET SOCIAL   1625.68"
+            )
+
+    resultat = index_documents._extract_page(_Page())
+
+    assert resultat == (
+        "Cadre Net à payer | NET A PAYER | 1647.68\n"
+        "MONTANT NET SOCIAL | 1625.68"
+    )
+
+
+# ── _read_text() : les deux échecs jamais exercés ──────────────────────
+
+def test_read_text_returns_none_on_os_error(monkeypatch, tmp_path) -> None:
+    fichier = tmp_path / "verrouille.txt"
+    fichier.write_text("contenu", encoding="utf-8")
+
+    def _raise(self, encoding=None):
+        raise OSError("accès refusé")
+
+    monkeypatch.setattr(Path, "read_text", _raise)
+
+    assert index_documents._read_text(fichier) is None
+
+
+def test_read_text_returns_none_when_every_encoding_fails(monkeypatch, tmp_path) -> None:
+    """Défensif : latin-1 ne rate jamais en pratique, mais le code le prévoit."""
+    fichier = tmp_path / "mystere.txt"
+    fichier.write_bytes(b"\x00")
+
+    def _raise(self, encoding=None):
+        raise UnicodeDecodeError(encoding or "utf-8", b"\x00", 0, 1, "impossible")
+
+    monkeypatch.setattr(Path, "read_text", _raise)
+
+    assert index_documents._read_text(fichier) is None
+
+
+# ── _collect() : fichiers cachés et sous-dossiers ──────────────────────
+
+def test_collect_ignores_hidden_files_and_directories(tmp_path) -> None:
+    (tmp_path / ".cache.txt").write_text("cache", encoding="utf-8")
+    (tmp_path / "sous_dossier").mkdir()
+    (tmp_path / "notes.txt").write_text("Contenu normal.", encoding="utf-8")
+
+    indexable, _, _, _ = index_documents._collect(tmp_path)
+
+    assert [p.name for p in indexable] == ["notes.txt"]
+
+
+# ── index_directory() : ChromaDB indisponible ──────────────────────────
+
+def test_index_directory_reports_when_chromadb_is_unavailable(monkeypatch, tmp_path, capsys) -> None:
+    instance = RAGManager.__new__(RAGManager)
+    instance.use_chroma = False
+    instance.collection = None
+    monkeypatch.setattr(index_documents, "RAGManager", lambda *a, **k: instance)
+
+    code = index_directory(tmp_path)
+
+    assert code == 1
+    assert "ChromaDB indisponible" in capsys.readouterr().out
+
+
+# ── main() : jamais exercé, aucun test n'appelait la CLI ────────────────
+
+def test_main_parses_the_directory_and_reset_flag(monkeypatch, tmp_path) -> None:
+    captured: dict = {}
+    monkeypatch.setattr(
+        index_documents, "index_directory",
+        lambda directory, reset=False, allow_secrets=False: captured.update(
+            directory=directory, reset=reset, allow_secrets=allow_secrets
+        ) or 0,
+    )
+
+    code = index_documents.main([str(tmp_path), "--reset"])
+
+    assert code == 0
+    assert captured == {"directory": str(tmp_path), "reset": True, "allow_secrets": False}
+
+
+def test_main_parses_the_allow_secrets_flag(monkeypatch, tmp_path) -> None:
+    captured: dict = {}
+    monkeypatch.setattr(
+        index_documents, "index_directory",
+        lambda directory, reset=False, allow_secrets=False: captured.update(
+            allow_secrets=allow_secrets
+        ) or 0,
+    )
+
+    index_documents.main([str(tmp_path), "--autoriser-secrets"])
+
+    assert captured["allow_secrets"] is True
+
+
+def test_main_defaults_to_the_documents_dir_when_no_argument_given(monkeypatch) -> None:
+    from config import DOCUMENTS_DIR
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        index_documents, "index_directory",
+        lambda directory, reset=False, allow_secrets=False: captured.update(directory=directory) or 0,
+    )
+
+    index_documents.main([])
+
+    assert captured["directory"] == DOCUMENTS_DIR
 
 
 if __name__ == "__main__":
