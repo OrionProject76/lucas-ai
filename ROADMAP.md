@@ -1738,6 +1738,45 @@ expiration passée/future/absente/illisible, event_type jamais touché
 test bout en bout vérifiant qu'un souvenir à faible confiance atteint
 bien le prompt signalé). Suite complète : 926 passed.
 
+## 5.15 Decision Engine — la liste blanche formalisée reflète l'existant, 04/08/2026
+
+Session autonome, correction de l'écart trouvé et documenté la nuit
+précédente (§5.11) : aucune liste blanche catégorisée n'existait avant
+`core/decision_engine.py`, contrairement à ce qu'une instruction de
+session supposait. `DEFAULT_ACTIONS` mélangeait cinq exemples
+illustratifs (volume, luminosité, presse-papier, lancement d'appli,
+capture d'écran) sans étiquette distinguant le réel de l'aspirationnel.
+
+**Séparé en deux, sans rien câbler de nouveau** :
+- `automation_manager_actions()` — **réel**. Fonction (pas une
+  constante figée) qui lit `modules.automation_manager.WHITELISTED_APPS`
+  à CHAQUE APPEL et génère un `ActionSpec(EXECUTE)` par application
+  (`launch_chrome`, `launch_calculatrice`, `launch_notepad`,
+  `launch_explorer` aujourd'hui). Générée plutôt que recopiée à la main :
+  une copie figée aurait dérivé au premier ajout/retrait d'application —
+  exactement le problème corrigé ici. Testé : elle suit un changement de
+  `WHITELISTED_APPS` sans toucher au fichier de test
+  (`test_automation_manager_actions_cannot_silently_drift`).
+- `ILLUSTRATIVE_ACTIONS` — **aspirationnel**, renommé depuis
+  `DEFAULT_ACTIONS`, `launch_app` (générique) retiré car redondant avec
+  les actions réelles désormais nommées précisément. Reste volume,
+  luminosité, presse-papier, capture d'écran — aucun callable réel,
+  sert d'exemple pour un futur chantier OS Controller (S6).
+
+**Rien de nouveau câblé** : ni l'une ni l'autre n'est enregistrée
+automatiquement dans un `DecisionEngine` en cours d'exécution.
+`modules/automation_manager.py` n'a pas été modifié — toujours aucune
+confirmation avant de lancer une application, exactement comme avant ce
+commit. Documenté dans `CLAUDE.md` (nouvelle précision, section
+« Liberté conditionnée à la protection ») pour que la distinction
+réel/aspirationnel reste visible sans relire ce fichier.
+
+**Validé** : `test_decision_engine.py` passe de 24 à 27 tests (un cas
+`launch_app` retiré du paramétrage illustratif, 4 tests ajoutés pour
+`automation_manager_actions()` — dérivation correcte, catégorie EXECUTE,
+non-enregistrement automatique, résistance à la dérive). Suite
+complète : 929 passed.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

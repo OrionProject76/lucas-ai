@@ -303,6 +303,34 @@ un jour de les assouplir en connaissance de cause.
 
 Doctrine complète : `VISION_LONG_TERME.md` §4.1.
 
+### Précision : la liste blanche de `core/decision_engine.py` reflète l'existant, pas une aspiration (corrigé le 04/08/2026)
+
+Trouvé en session autonome (nuit du 03-04/08/2026) en construisant
+`core/decision_engine.py` : aucune liste blanche catégorisée
+("volume, luminosité, presse-papier, lancement d'appli, capture
+d'écran") n'existait avant ce module — recherche faite dans ce fichier,
+`VISION_LONG_TERME.md` et `ROADMAP.md`, aucune trace. Le **seul**
+mécanisme de liste blanche réel, avant comme après, reste
+`modules/automation_manager.py` (lancement d'appli, sans confirmation).
+
+**Corrigé le 04/08/2026** : `core/decision_engine.py` distingue
+maintenant explicitement deux choses qui étaient mélangées sans
+étiquette :
+- `automation_manager_actions()` — **réel**, généré à chaque appel
+  depuis `modules.automation_manager.WHITELISTED_APPS` (jamais recopié
+  à la main, pour ne pas pouvoir dériver au prochain ajout d'appli).
+  Décrit ce qui tourne effectivement aujourd'hui.
+- `ILLUSTRATIVE_ACTIONS` — **aspirationnel**, volume/luminosité/
+  presse-papier/capture d'écran : aucun callable réel derrière, aucune
+  de ces actions n'existe dans le projet. Sert d'exemple de
+  catégorisation pour un futur chantier OS Controller (`CLAUDE.md`
+  Priorités de Développement, S6), pas une liste de ce qui est construit.
+
+Aucune des deux n'est enregistrée automatiquement dans un
+`DecisionEngine` en cours d'exécution, et `modules/automation_manager.py`
+n'a pas été modifié : toujours aucune confirmation avant de lancer une
+appli — voir `ROADMAP.md` §5.15 pour le détail.
+
 ## 📁 Structure Dossiers
 
 **Corrigée le 03/08/2026** — l'arborescence ci-dessous reflète ce qui

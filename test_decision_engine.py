@@ -12,11 +12,12 @@ from __future__ import annotations
 import pytest
 
 from core.decision_engine import (
-    DEFAULT_ACTIONS,
     ActionCategory,
     ActionDenied,
     ActionSpec,
     DecisionEngine,
+    ILLUSTRATIVE_ACTIONS,
+    automation_manager_actions,
 )
 
 
@@ -198,14 +199,14 @@ def test_get_returns_the_registered_spec(engine) -> None:
     assert engine.get("get_volume") == spec
 
 
-# ── DEFAULT_ACTIONS : les exemples illustratifs du modèle attendu ─────────
+# ── ILLUSTRATIVE_ACTIONS : aspirationnel, aucun callable réel ───────────
 #
 # Aucun n'est câblé à une vraie action système (voir l'en-tête du module) —
 # ces tests vérifient seulement que la catégorisation elle-même est celle
 # annoncée : lecture pour consulter un réglage, écriture pour le changer,
-# exécution pour lancer une appli ou capturer l'écran.
+# exécution pour capturer l'écran.
 
-def test_default_actions_are_not_auto_registered() -> None:
+def test_illustrative_actions_are_not_auto_registered() -> None:
     """DecisionEngine() démarre vide : à un appelant futur d'enregistrer explicitement."""
     assert DecisionEngine().get("get_volume") is None
 
@@ -219,13 +220,50 @@ def test_default_actions_are_not_auto_registered() -> None:
         ("set_brightness", ActionCategory.WRITE),
         ("read_clipboard", ActionCategory.READ),
         ("write_clipboard", ActionCategory.WRITE),
-        ("launch_app", ActionCategory.EXECUTE),
         ("take_screenshot", ActionCategory.EXECUTE),
     ],
 )
-def test_default_actions_match_the_documented_model(name, expected_category) -> None:
-    by_name = {spec.name: spec for spec in DEFAULT_ACTIONS}
+def test_illustrative_actions_match_the_documented_model(name, expected_category) -> None:
+    by_name = {spec.name: spec for spec in ILLUSTRATIVE_ACTIONS}
     assert by_name[name].category == expected_category
+
+
+# ── automation_manager_actions() : RÉEL, dérivé de la vraie liste blanche ─
+#
+# Contrairement à ILLUSTRATIVE_ACTIONS ci-dessus, ceci décrit un mécanisme
+# qui existe et tourne aujourd'hui (modules/automation_manager.py) —
+# trouvé absent de toute doc avant le 04/08/2026, corrigé ici.
+
+def test_automation_manager_actions_reflects_the_real_whitelist() -> None:
+    from modules.automation_manager import WHITELISTED_APPS
+
+    names = {spec.name for spec in automation_manager_actions()}
+    assert names == {f"launch_{app}" for app in WHITELISTED_APPS}
+
+
+def test_automation_manager_actions_are_all_execute() -> None:
+    assert all(spec.category == ActionCategory.EXECUTE for spec in automation_manager_actions())
+
+
+def test_automation_manager_actions_are_not_auto_registered() -> None:
+    """Même prudence qu'ILLUSTRATIVE_ACTIONS : décrire n'est pas câbler."""
+    assert DecisionEngine().get("launch_chrome") is None
+
+
+def test_automation_manager_actions_cannot_silently_drift(monkeypatch) -> None:
+    """
+    Générée à CHAQUE APPEL, pas figée à l'import : ajouter une application
+    à la vraie liste blanche doit se refléter ici sans toucher à ce
+    fichier — une copie à la main aurait dérivé au premier changement.
+    """
+    import modules.automation_manager as automation_manager_module
+
+    monkeypatch.setattr(
+        automation_manager_module, "WHITELISTED_APPS", {"nouvelle_appli": ["C:\\fake.exe"]}
+    )
+
+    names = {spec.name for spec in automation_manager_actions()}
+    assert names == {"launch_nouvelle_appli"}
 
 
 if __name__ == "__main__":

@@ -76,19 +76,53 @@ class ActionSpec:
     description: str = ""
 
 
-# Exemples illustratifs du modèle attendu (volume, luminosité, presse-
-# papier, lancement d'appli, capture d'écran) — AUCUN n'est câblé à une
-# vraie action système ici, et DecisionEngine ne les enregistre pas tout
-# seul : à un appelant futur de les enregistrer explicitement au moment
-# où une vraie implémentation existera pour chacune.
-DEFAULT_ACTIONS: tuple[ActionSpec, ...] = (
+# ── RÉEL : dérivé de la seule liste blanche qui existe et tourne ────────
+#
+# ⚠️ Trouvé le 04/08/2026 (session autonome) : aucune liste blanche
+# catégorisée n'existait avant ce module — recherche faite dans
+# IDEAS.md/VISION_LONG_TERME.md/ROADMAP.md, aucune trace. Le SEUL
+# mécanisme réel, avant comme après, est modules/automation_manager.py
+# (lancement d'appli, sans confirmation). Voir CLAUDE.md, "Précision :
+# la liste blanche... reflète l'existant" et ROADMAP.md §5.15.
+
+
+def automation_manager_actions() -> tuple[ActionSpec, ...]:
+    """
+    ActionSpec réels, un par application de
+    modules.automation_manager.WHITELISTED_APPS — générés à CHAQUE APPEL,
+    jamais recopiés à la main : une copie figée aurait dérivé au premier
+    ajout ou retrait d'application dans automation_manager.py, exactement
+    le problème que ce module corrige.
+
+    Tous EXECUTE : lancer une application produit un effet externe réel.
+    Aucun n'est enregistré automatiquement dans un DecisionEngine, et
+    modules/automation_manager.py n'appelle jamais ce module — toujours
+    aucune confirmation avant de lancer une appli aujourd'hui.
+    """
+    from modules.automation_manager import WHITELISTED_APPS
+
+    return tuple(
+        ActionSpec(
+            name=f"launch_{app_name}",
+            category=ActionCategory.EXECUTE,
+            description=f"Lancer « {app_name} » (modules/automation_manager.py, liste blanche réelle)",
+        )
+        for app_name in sorted(WHITELISTED_APPS)
+    )
+
+
+# ── ASPIRATIONNEL : aucun callable réel derrière, aucun de ces noms ─────
+# n'existe dans le projet aujourd'hui. Sert d'exemple de catégorisation
+# pour un futur chantier OS Controller (CLAUDE.md, Priorités S6) — pas
+# une liste de ce qui est construit. Ne pas confondre avec
+# automation_manager_actions() ci-dessus.
+ILLUSTRATIVE_ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec("get_volume", ActionCategory.READ, "Lire le niveau sonore actuel"),
     ActionSpec("set_volume", ActionCategory.WRITE, "Changer le niveau sonore"),
     ActionSpec("get_brightness", ActionCategory.READ, "Lire la luminosité actuelle de l'écran"),
     ActionSpec("set_brightness", ActionCategory.WRITE, "Changer la luminosité de l'écran"),
     ActionSpec("read_clipboard", ActionCategory.READ, "Lire le contenu du presse-papier"),
     ActionSpec("write_clipboard", ActionCategory.WRITE, "Écrire dans le presse-papier"),
-    ActionSpec("launch_app", ActionCategory.EXECUTE, "Lancer une application de la liste blanche"),
     ActionSpec("take_screenshot", ActionCategory.EXECUTE, "Capturer l'écran"),
 )
 
