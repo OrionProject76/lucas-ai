@@ -30,7 +30,8 @@ HEADER_SCAN_LIMIT = 20
 # Noms de colonnes rencontrés dans les exports bancaires français.
 # Comparés en minuscules, sans accents ni espaces superflus.
 COLUMN_ALIASES: dict[str, list[str]] = {
-    "date": ["date", "date operation", "date de l'operation", "date valeur"],
+    "date": ["date", "date operation", "date de l'operation", "date valeur",
+             "date transaction"],
     "libelle": ["libelle", "libelle operation", "label", "description",
                 "nature", "intitule", "motif"],
     "montant": ["montant", "amount", "somme", "valeur", "montant de l'operation"],

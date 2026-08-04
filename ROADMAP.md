@@ -2439,7 +2439,56 @@ comme son propre chantier, pas une extension de celui-ci.
 
 **Fichier `GDB_04082026.csv`** (présent dans `data/finance/`, déposé lors
 d'un chantier précédent) : hors périmètre de cette instruction, non
-traité ici — Cyril ne l'a pas mentionné cette fois.
+traité ici — Cyril ne l'a pas mentionné cette fois. **Traité ensuite le
+même jour, voir §5.24.**
+
+## 5.24 Finance CSV — `GDB_04082026.csv` traité, même méthode, 1 nouvel alias
+
+Suite immédiate de §5.23, sur demande explicite de Cyril de traiter aussi
+ce fichier resté de côté.
+
+⚠️ **Méthode renforcée suite aux deux fuites signalées en §5.23** : toute
+identification de nom de colonne s'est faite par comparaison d'empreinte
+SHA-256 contre des candidats plausibles, ou par inspection de la FORME du
+champ (longueur, nombre de mots, présence d'apostrophe/chiffre) — jamais
+par affichage, même partiel. Aucune valeur, aucun nom de colonne réel
+n'apparaît ci-dessous ou dans le code.
+
+**Faits structurels** (aucune vraie valeur reproduite) : encodage
+Windows-1252 (même famille que §5.23, confirmé par la même méthode :
+`utf-8`/`utf-8-sig` échouent, `cp1252`/`latin-1` réussissent), délimité
+par points-virgules, 360 enregistrements CSV réels. Structure différente
+de §5.23 : **la ligne d'en-tête a 11 champs, les 359 lignes de
+transaction en ont 10** — un champ d'en-tête en trop en fin de ligne
+(vide), sans conséquence puisque les colonnes utiles (date, libellé,
+montant, catégorie) se trouvent toutes dans les 10 premières positions.
+Colonne "catégorie" présente et remplie sur cette totalité des lignes
+(contrairement à §5.23) — la catégorisation par règles n'a donc jamais
+été sollicitée pour ce fichier.
+
+⚠️ **1 nouvel alias de colonne, même famille que §5.23** :
+`"date transaction"` ajouté à `COLUMN_ALIASES["date"]` — identifié par
+inspection de forme (16 caractères, 2 mots de 4 et 11 lettres, pas
+d'apostrophe ni de chiffre) puis confirmé par empreinte SHA-256, jamais
+par affichage direct. Texte générique d'intitulé de colonne, pas propre
+à une banque en particulier — même esprit que `"montant de l'operation"`
+en §5.23.
+
+**Validé en conditions réelles** : `FinanceManager().import_csv()` sur ce
+second vrai fichier → 359 transactions importées (cohérent : 360
+enregistrements − 1 en-tête), **0 transaction non catégorisée** (la
+colonne catégorie du fichier est directement exploitée), 14 catégories
+distinctes, résumé texte généré non vide, solde un nombre flottant
+valide. **2 tests ajoutés sur des données synthétiques** (nouvel alias de
+date ; en-tête avec plus de colonnes que les lignes de données) — jamais
+une copie du fichier réel. `test_finance.py` : 58→60 tests. Suite
+complète : **1037 passed**.
+
+**Aucun code de production supplémentaire nécessaire au-delà de l'alias**
+— les deux correctifs de §5.23 (encodage, repli de délimiteur, détection
+d'en-tête après préambule) couvrent déjà ce second fichier sans
+modification, confirmant qu'il s'agissait bien de correctifs généraux et
+non d'un rafistolage propre au premier fichier.
 
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 

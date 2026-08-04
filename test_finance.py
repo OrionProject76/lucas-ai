@@ -262,6 +262,33 @@ def test_a_windows_1252_encoded_file_is_read_without_crashing(tmp_path) -> None:
     assert manager.transactions[0]["montant"] == pytest.approx(-4.50)
 
 
+def test_date_transaction_is_a_recognized_date_column(tmp_path) -> None:
+    """Alias ajouté le 04/08/2026, trouvé sur un second export réel — texte générique."""
+    path = _write_csv(
+        tmp_path, "date transaction;libelle;montant\n05/01/2026;Test;-10,00\n"
+    )
+    manager = FinanceManager()
+    added = manager.import_csv(path, use_llm=False)
+    assert added == 1
+
+
+def test_a_header_with_more_columns_than_the_data_rows_still_works(tmp_path) -> None:
+    """
+    Structure réelle trouvée le 04/08/2026 (voir ROADMAP.md §5.23) : l'en-tête
+    d'un second export a un champ vide en trop en fin de ligne (11 colonnes
+    contre 10 dans chaque ligne de transaction) — zip() aligne sur le plus
+    court, les colonnes utiles restant dans les premières positions.
+    """
+    path = _write_csv(
+        tmp_path,
+        "date transaction;libelle;montant;extra\n05/01/2026;Test;-10,00\n",
+    )
+    manager = FinanceManager()
+    added = manager.import_csv(path, use_llm=False)
+    assert added == 1
+    assert manager.transactions[0]["montant"] == pytest.approx(-10.0)
+
+
 def test_a_preamble_before_the_real_header_is_skipped(tmp_path) -> None:
     """
     Bug réel trouvé le 04/08/2026 (voir ROADMAP.md §5.23) : un export
