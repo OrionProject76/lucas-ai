@@ -188,6 +188,11 @@ def test_program_files_is_not_volatile() -> None:
     ) is None
 
 
+def test_an_empty_exe_path_is_not_volatile() -> None:
+    """Process système sans chemin résolu (droits insuffisants) : pas de faux signal."""
+    assert Guardian._check_volatile_location("svchost.exe", "") is None
+
+
 # ── Guardian : balayage complet ───────────────────────────────────────
 
 def test_scan_skips_inaccessible_processes(monkeypatch) -> None:
@@ -206,6 +211,14 @@ def test_scan_skips_inaccessible_processes(monkeypatch) -> None:
     findings = Guardian().scan()
     assert len(findings) == 1
     assert findings[0].evidence["pid"] == 1234
+
+
+def test_scan_skips_a_process_without_a_name(monkeypatch) -> None:
+    """Un process sans nom résolu ne doit déclencher aucun des trois contrôles."""
+    procs = [SimpleNamespace(info={"name": "", "exe": r"C:\Temp\x.exe", "pid": 1})]
+    monkeypatch.setattr(psutil, "process_iter", lambda attrs=None: procs)
+
+    assert Guardian().scan() == []
 
 
 def test_scan_logs_only_non_trivial_findings(monkeypatch) -> None:
@@ -544,6 +557,29 @@ def test_ordinary_files_raise_nothing(watched) -> None:
     assert RansomwareWatch().scan() == []
 
 
+def test_a_subdirectory_is_not_scanned_as_a_file(watched) -> None:
+    """rglob('*') rend aussi les sous-dossiers : is_file() les écarte, pas un crash."""
+    (watched / "sous_dossier").mkdir()
+    (watched / "rapport.docx").write_text("x")
+    assert RansomwareWatch().scan() == []
+
+
+def test_a_file_that_disappears_mid_scan_is_skipped(watched, monkeypatch) -> None:
+    """Course avec un autre process (fichier supprimé entre rglob et stat) : pas de crash."""
+    (watched / "rapport.docx").write_text("x")
+    import pathlib
+
+    original_stat = pathlib.Path.stat
+
+    def _flaky_stat(self, *args, **kwargs):
+        if self.name == "rapport.docx":
+            raise OSError("fichier disparu entre-temps")
+        return original_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(pathlib.Path, "stat", _flaky_stat)
+    assert RansomwareWatch().scan() == []
+
+
 def test_burst_of_modifications_is_a_warning_not_critical(watched, monkeypatch) -> None:
     """
     Une sauvegarde produit le même motif qu'un chiffrement. Crier au
@@ -679,6 +715,19 @@ def test_truncated_scan_says_so(watched, monkeypatch) -> None:
 
     findings = RansomwareWatch().scan()
     assert any(f.kind == "scan_truncated" for f in findings)
+
+
+def test_truncated_scan_info_is_not_logged(watched, monkeypatch) -> None:
+    """scan_truncated est INFO : visible dans les findings, jamais dans les événements."""
+    from security import ransomware_watch as rw
+
+    monkeypatch.setattr(rw, "RANSOMWARE_MAX_FILES_SCANNED", 3)
+    for i in range(10):
+        (watched / f"f{i}.txt").write_text("x")
+
+    events: list[tuple[str, str]] = []
+    RansomwareWatch(log_event=lambda t, d="": events.append((t, d))).scan()
+    assert events == []
 
 
 def test_findings_reach_the_event_log(watched) -> None:

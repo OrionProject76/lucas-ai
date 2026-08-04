@@ -57,6 +57,11 @@ def test_une_annee_collee_a_une_lettre_est_vue(nom: str) -> None:
     assert "2026" in extract_periods(nom)
 
 
+def test_une_annee_sur_deux_chiffres_est_bornee_au_siecle_courant() -> None:
+    """01/07/25 -> 2025, jamais 1925 (trou de couverture fermé le 04/08/2026)."""
+    assert "2025-07" in extract_periods("releve du 01/07/25")
+
+
 def test_les_mois_ecrits_en_toutes_lettres(self=None) -> None:
     assert "2025-07" in extract_periods("bulletin de juillet 2025")
     assert "2026-12" in extract_periods("versé en décembre 2026")

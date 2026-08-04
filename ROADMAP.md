@@ -2180,6 +2180,88 @@ puis fermé dans le temps restant après validation avec Cyril du seuil RAG
 (voir plus haut) — détail dans la sous-section Priorité 2 ci-dessus. Suite
 complète, tout fermé : **1021 passed**.
 
+## 5.21 Session autonome, suite du 04/08/2026 — clarification, état des lieux rafraîchi, résiduel fermé
+
+### Étape 0 — clarification demandée par Cyril
+
+Deux chantiers mentionnés dans `IDEAS.md`/`ROADMAP.md` mais jamais confirmés
+dans les rapports de CETTE conversation : vérifiés avant de continuer, pas de
+zèle inutile à les refaire.
+
+- **Confiance/provenance, exploitation** (`core/memory_weighting.py`) — **fait**,
+  mais dans une session ANTÉRIEURE à cette conversation (commit `0c584a4`,
+  04:23, avant le premier commit de cette conversation à 05:06). Câblé sur
+  l'historique de conversation et les événements système, **no-op aujourd'hui**
+  (personne n'écrit encore de confiance réduite) et **jamais étendu au RAG**
+  (schéma ChromaDB différent, explicitement noté comme chantier distinct non
+  entrepris à l'époque, toujours vrai).
+- **`ActionSpec` (Decision Engine)** — **fait**, même session antérieure
+  (commit `6f946df`, 04:27). `ActionSpec` existe comme dataclass dans
+  `core/decision_engine.py`, `automation_manager_actions()` génère les vrais
+  `ActionSpec` depuis `WHITELISTED_APPS`, `ILLUSTRATIVE_ACTIONS` séparé et
+  étiqueté comme aspirationnel.
+
+40 tests reconfirmés verts (`test_memory_weighting.py` + `test_decision_engine.py`).
+Aucun des deux n'était donc "omis d'un résumé" (comme TTS/OCR plus tôt cette
+nuit) — simplement jamais touché dans cette conversation, ils existaient déjà
+avant qu'elle commence.
+
+### Priorité 1 — État des lieux rafraîchi (pas recréé)
+
+`cowork_workspace/reports/Etat_des_lieux_LucasAI_2026-08-04.md` réécrit en
+place (structure inchangée : résumé exécutif, carte du projet, architecture vs
+`VISION_LONG_TERME.md`, dette technique, dépendances, question ouverte) pour
+intégrer tout ce qui a été fait depuis sa version initiale : câblage
+calcul/météo/web, Decision Engine (`ActionSpec`), Memory confiance/provenance,
+couverture UI 87%, modes AURA validés, tous les bugs réels trouvés cette nuit
+et la précédente. L'ancienne section "Mise à jour" en tête de document
+(patch minimal) a été remplacée par un résumé des changements suivi d'un corps
+de rapport intégralement à jour — plus une pile de rustines à recouper.
+`cowork_workspace/` reste hors suivi git (décision en attente de Cyril).
+
+### Priorité 2 — Qualité RAG en conditions réelles
+
+Déjà faite plus tôt cette même session (voir §5.20, "Priorité 1 — verdict par
+module", `modules/rag_manager.py`) — requêtes réelles contre la vraie
+collection ChromaDB (39 documents), pertinence vérifiée avec des exemples
+concrets (question → document retourné → pertinent ou rejeté), pas seulement
+la présence d'un résultat. Intégrée dans le rafraîchissement de la Priorité 1
+ci-dessus plutôt que refaite.
+
+### Priorité 3 — trous de couverture résiduels (partiellement fermés)
+
+12 lignes fermées sur les ~26 recensées il y a deux sessions, avec un vrai
+test à chaque fois (pas un test qui passe sans rien vérifier) :
+
+- `core/dates.py` (1 ligne) : année sur deux chiffres (`01/07/25`), bornée au
+  siècle courant.
+- `modules/finance_manager.py` (4 lignes) : date illisible signalée
+  explicitement (symétrique au montant illisible déjà testé) ; fichier à une
+  seule colonne (le `Sniffer` échoue à détecter un délimiteur, repli sur
+  `csv.excel`) ; ligne vide en fin de fichier ignorée sans transaction
+  fantôme.
+- `security/guardian.py` (2 lignes) : chemin d'exécutable vide (droits
+  insuffisants) traité comme non-volatile plutôt que comme un faux signal ;
+  process sans nom résolu ignoré par les trois contrôles.
+- `security/ransomware_watch.py` (3 lignes) : sous-dossier rencontré par
+  `rglob("*")` écarté par `is_file()` plutôt que scanné comme un fichier ;
+  fichier disparu entre l'énumération et le `stat()` (course avec un autre
+  process) ignoré sans crash ; le signal INFO "balayage tronqué" confirmé
+  absent des événements journalisés (visible dans les résultats, jamais dans
+  la base).
+- `core/lucas_core.py` (1 ligne) : liste des fichiers CSV ignorés
+  effectivement signalée dans le bloc finance injecté (pas seulement les
+  transactions valides).
+
+**Non poursuivi, rendements décroissants confirmés** (le reste, ~14 lignes) :
+branches de construction VLM/OCR en échec dupliquées entre le chemin écran et
+le chemin caméra (`core/lucas_core.py`, lignes 680-682/761/780-782 —
+symétriques à des branches déjà testées côté écran) ; imports de compatibilité
+ChromaDB (`modules/rag_manager.py`) ; blocs `__main__`. Même catégorie
+qu'ailleurs dans le projet, pas de valeur réelle à les forcer.
+
+Suite complète, tout fermé : **1031 passed** (1021 + 10 nouveaux tests).
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

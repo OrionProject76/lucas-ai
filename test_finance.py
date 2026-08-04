@@ -189,6 +189,12 @@ def test_unreadable_amount_is_reported_clearly() -> None:
         _parse_amount("douze euros")
 
 
+def test_unreadable_date_is_reported_clearly() -> None:
+    """Trou de couverture fermé le 04/08/2026 : symétrique au montant illisible."""
+    with pytest.raises(CSVFormatError, match="Format de date non reconnu"):
+        _parse_date("le douze janvier")
+
+
 # ── Import CSV ────────────────────────────────────────────────────────
 
 def _write_csv(tmp_path, content: str, name: str = "releve.csv"):
@@ -265,6 +271,28 @@ def test_missing_file_is_reported() -> None:
     manager = FinanceManager()
     with pytest.raises(CSVFormatError, match="introuvable"):
         manager.import_csv("data/n_existe_pas.csv")
+
+
+def test_a_single_column_file_falls_back_to_the_default_dialect(tmp_path) -> None:
+    """
+    Trou de couverture fermé le 04/08/2026 : sans délimiteur du tout,
+    csv.Sniffer().sniff() lève csv.Error — repli sur csv.excel. Le fichier
+    reste malgré tout invalide (une seule colonne), mais pour la bonne
+    raison (colonne manquante), pas un crash sur le Sniffer.
+    """
+    path = _write_csv(tmp_path, "Date\n02/01/2026\n")
+    manager = FinanceManager()
+    with pytest.raises(CSVFormatError, match="libelle"):
+        manager.import_csv(path, use_llm=False)
+
+
+def test_a_trailing_blank_line_is_ignored(tmp_path) -> None:
+    """Une ligne vide en fin de fichier ne doit pas devenir une transaction fantôme."""
+    path = _write_csv(tmp_path, "date,libelle,montant\n2026-01-05,CARREFOUR,-84.30\n\n")
+    manager = FinanceManager()
+    added = manager.import_csv(path, use_llm=False)
+    assert added == 1
+    assert len(manager.transactions) == 1
 
 
 def test_importing_twice_accumulates(tmp_path) -> None:

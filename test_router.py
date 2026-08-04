@@ -400,6 +400,25 @@ def test_finance_context_absent_when_question_unrelated(core_with_history: Lucas
     assert not any("AUCUNE TRANSACTION" in m["content"] for m in messages)
 
 
+@requires_core
+def test_finance_context_signals_skipped_files(core_with_history: LucasCore, monkeypatch) -> None:
+    """
+    Un CSV mal formé écarté silencieusement serait aussi trompeur qu'un solde
+    inventé — trou de couverture fermé le 04/08/2026.
+    """
+    monkeypatch.setattr(
+        "modules.finance_manager.load_directory",
+        lambda: (
+            _FakeFinanceManager([{"montant": -10.0}], "[FINANCE] solde réel"),
+            ["vieux_relevé.csv (colonnes illisibles)"],
+        ),
+    )
+    messages = core_with_history._build_messages("quel est mon solde ?", "local")
+    joined = " ".join(m["content"] for m in messages)
+    assert "vieux_relevé.csv" in joined
+    assert "ignoré" in joined.lower()
+
+
 # ── Calculatrice (04/08/2026) ─────────────────────────────────────────
 
 @requires_core
