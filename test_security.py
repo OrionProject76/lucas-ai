@@ -359,6 +359,160 @@ def test_summarize_exposure_survives_access_denied(monkeypatch) -> None:
     assert summarize_exposure() == {"disponible": False}
 
 
+def test_summarize_exposure_counts_external_connections(monkeypatch) -> None:
+    """
+    Chemin normal, jamais exercé jusqu'ici (seul l'échec AccessDenied
+    l'était) : trouvé via mesure de couverture réelle.
+    """
+    established = SimpleNamespace(
+        raddr=SimpleNamespace(ip="8.8.8.8", port=443),
+        status=psutil.CONN_ESTABLISHED,
+        pid=123,
+    )
+    internal = SimpleNamespace(
+        raddr=SimpleNamespace(ip="192.168.1.1", port=443),
+        status=psutil.CONN_ESTABLISHED,
+        pid=124,
+    )
+    listening = SimpleNamespace(raddr=None, status=psutil.CONN_LISTEN, pid=125)
+
+    monkeypatch.setattr(
+        psutil, "net_connections",
+        lambda kind=None: [established, internal, listening],
+    )
+
+    assert summarize_exposure() == {
+        "disponible": True,
+        "sockets_total": 3,
+        "connexions_externes": 1,
+        "processus_concernes": 1,
+    }
+
+
+# ── Privacy Shield : scan() de bout en bout ────────────────────────────
+#
+# Les tests ci-dessus vérifient les heuristiques unitairement ; ceux-ci
+# passent par scan() lui-même — jamais exercé avec une vraie connexion
+# externe (conn.pid None, process disparu, _describe_process réel,
+# évènements journalisés, history.save()). Trouvé via mesure de
+# couverture réelle, même motif que ransomware_watch.py.
+
+def test_scan_skips_a_connection_without_a_pid(monkeypatch) -> None:
+    """Une socket sans PID (visible mais non attribuable) est ignorée."""
+    conn = SimpleNamespace(pid=None, status=psutil.CONN_ESTABLISHED, raddr=None)
+    monkeypatch.setattr(psutil, "net_connections", lambda kind=None: [conn])
+    assert PrivacyShield().scan() == []
+
+
+def test_scan_skips_a_vanished_process(monkeypatch) -> None:
+    """_describe_process renvoie (None, '') : le process a disparu entre-temps."""
+    conn = SimpleNamespace(
+        pid=555,
+        status=psutil.CONN_ESTABLISHED,
+        raddr=SimpleNamespace(ip="8.8.8.8", port=443),
+    )
+    monkeypatch.setattr(psutil, "net_connections", lambda kind=None: [conn])
+    monkeypatch.setattr(PrivacyShield, "_describe_process", staticmethod(lambda pid: (None, "")))
+    assert PrivacyShield().scan() == []
+
+
+def test_describe_process_reads_the_real_process(monkeypatch) -> None:
+    fake_proc = SimpleNamespace(name=lambda: "chrome.exe", exe=lambda: r"C:\Chrome\chrome.exe")
+    monkeypatch.setattr(psutil, "Process", lambda pid: fake_proc)
+    assert PrivacyShield._describe_process(123) == ("chrome.exe", r"C:\Chrome\chrome.exe")
+
+
+def test_describe_process_returns_none_for_a_vanished_process(monkeypatch) -> None:
+    def _raise(pid):
+        raise psutil.NoSuchProcess(pid)
+
+    monkeypatch.setattr(psutil, "Process", _raise)
+    assert PrivacyShield._describe_process(123) == (None, "")
+
+
+def test_describe_process_returns_none_when_access_denied(monkeypatch) -> None:
+    def _raise(pid):
+        raise psutil.AccessDenied(pid)
+
+    monkeypatch.setattr(psutil, "Process", _raise)
+    assert PrivacyShield._describe_process(123) == (None, "")
+
+
+def test_scan_flags_a_volatile_process_talking_outside(monkeypatch) -> None:
+    """Bout en bout : conn externe -> heuristique -> pid ajouté -> findings."""
+    conn = SimpleNamespace(
+        pid=777,
+        status=psutil.CONN_ESTABLISHED,
+        raddr=SimpleNamespace(ip="8.8.8.8", port=443),
+        laddr=None,
+    )
+    monkeypatch.setattr(psutil, "net_connections", lambda kind=None: [conn])
+    monkeypatch.setattr(
+        PrivacyShield, "_describe_process",
+        staticmethod(lambda pid: ("x.exe", r"C:\Users\PC\AppData\Local\Temp\x.exe")),
+    )
+
+    findings = PrivacyShield().scan()
+
+    assert len(findings) == 1
+    assert findings[0].kind == "volatile_process_online"
+    assert findings[0].evidence["pid"] == 777
+
+
+def test_scan_ignores_an_internal_connection(monkeypatch) -> None:
+    """Une connexion vers une IP privée n'est jamais un signal réseau."""
+    conn = SimpleNamespace(
+        pid=888,
+        status=psutil.CONN_ESTABLISHED,
+        raddr=SimpleNamespace(ip="192.168.1.1", port=443),
+        laddr=None,
+    )
+    monkeypatch.setattr(psutil, "net_connections", lambda kind=None: [conn])
+    monkeypatch.setattr(
+        PrivacyShield, "_describe_process",
+        staticmethod(lambda pid: ("x.exe", r"C:\Users\PC\AppData\Local\Temp\x.exe")),
+    )
+    assert PrivacyShield().scan() == []
+
+
+def test_scan_logs_findings_but_never_info_severity(monkeypatch) -> None:
+    conn_warning = SimpleNamespace(
+        pid=1, status=psutil.CONN_ESTABLISHED,
+        raddr=SimpleNamespace(ip="8.8.8.8", port=443), laddr=None,
+    )
+    conn_info = SimpleNamespace(
+        pid=2, status=psutil.CONN_LISTEN,
+        laddr=SimpleNamespace(ip="0.0.0.0", port=4444), raddr=None,
+    )
+    monkeypatch.setattr(psutil, "net_connections", lambda kind=None: [conn_warning, conn_info])
+
+    def _describe(pid):
+        if pid == 1:
+            return "x.exe", r"C:\Users\PC\AppData\Local\Temp\x.exe"
+        return "inconnu.exe", r"C:\Users\PC\Downloads\inconnu.exe"
+
+    monkeypatch.setattr(PrivacyShield, "_describe_process", staticmethod(_describe))
+
+    logged: list[tuple[str, str]] = []
+    findings = PrivacyShield(log_event=lambda t, d="": logged.append((t, d))).scan()
+
+    assert len(findings) == 2, "les deux signaux (WARNING et INFO) sont retournés"
+    assert len(logged) == 1, "seul le WARNING est journalisé, l'INFO reste silencieux"
+    assert "volatile_process_online" in logged[0][0]
+
+
+def test_scan_saves_the_history_when_injected(monkeypatch, history) -> None:
+    """history.save() doit être appelé même quand aucune connexion externe n'existe."""
+    monkeypatch.setattr(psutil, "net_connections", lambda kind=None: [])
+
+    saved = []
+    monkeypatch.setattr(history, "save", lambda: saved.append(1))
+
+    PrivacyShield(history=history).scan()
+
+    assert saved == [1]
+
+
 # ── Rançongiciel ──────────────────────────────────────────────────────
 
 @pytest.fixture
