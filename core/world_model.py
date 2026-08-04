@@ -47,11 +47,6 @@ def get_snapshot() -> dict:
     }
 
 
-_WEEKDAYS_FR = (
-    "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche",
-)
-
-
 def _get_gpu_load() -> float:
     """
     Charge GPU en pourcentage, 0.0 si illisible.
