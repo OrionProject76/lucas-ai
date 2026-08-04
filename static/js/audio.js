@@ -21,8 +21,61 @@ window.Lucas = window.Lucas || {};
             this.mediaRecorder = null;
             this.chunks = [];
             this.recording = false;
+            // ⚠️ Flux mis en cache et RÉUTILISÉ — voir _getStream() plus bas,
+            // corrigé le 05/08/2026 (cause probable du micro qui perd le
+            // tout début d'une phrase, confirmée en conditions réelles).
+            this._stream = null;
 
             this.button.addEventListener("click", () => this._toggle());
+
+            // Confidentialité : un flux gardé ouvert doit se refermer si
+            // l'onglet passe en arrière-plan — jamais un micro "chaud" en
+            // silence pendant que Cyril fait autre chose (même principe
+            // que le flux de surveillance du barge-in, qui ne s'ouvre que
+            // pendant que Luca's parle).
+            document.addEventListener("visibilitychange", () => {
+                if (document.hidden) this._releaseStream();
+            });
+        }
+
+        async _getStream() {
+            if (this._stream && this._stream.active) return this._stream;
+
+            // ⚠️ Bug réel confirmé le 05/08/2026 (Cyril, premier vrai test
+            // audio) : "qu'est-ce que tu vois sur mon écran ?" transcrit en
+            // "c'est ce que tu vois sur mon écran" — cohérent avec la perte
+            // de la toute première syllabe ("Qu'-"). getUserMedia() peut
+            // prendre plusieurs centaines de ms à initialiser le matériel
+            // audio (surtout sur Android), pendant lesquelles Cyril a déjà
+            // commencé à parler. Avant ce correctif, le flux était redemandé
+            // ET entièrement refermé à CHAQUE enregistrement (aucune
+            // réutilisation) — chaque prise de parole repayait ce délai en
+            // entier. Mis en cache : seul le tout premier enregistrement
+            // d'une session paie ce coût, les suivants démarrent sur un
+            // flux déjà chaud.
+            this._stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    // Rendu explicite le 05/08/2026 : {audio: true} nu
+                    // laissait le navigateur choisir, variable d'un
+                    // appareil à l'autre. Alignement sur le flux de
+                    // surveillance du barge-in (voice_output.js), déjà
+                    // validé. autoGainControl reste à sa valeur par défaut
+                    // (généralement activé) — contrairement au barge-in
+                    // (explicitement désactivé) : la dictée profite d'une
+                    // voix normalisée, le barge-in a besoin d'un gain
+                    // stable pour comparer à un seuil RMS fixe — besoins
+                    // opposés, pas un oubli.
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                },
+            });
+            return this._stream;
+        }
+
+        _releaseStream() {
+            if (!this._stream) return;
+            this._stream.getTracks().forEach((track) => track.stop());
+            this._stream = null;
         }
 
         async _toggle() {
@@ -39,40 +92,7 @@ window.Lucas = window.Lucas || {};
             }
 
             try {
-                // ⚠️ Rendu explicite le 05/08/2026 (bug remonté par Cyril :
-                // le micro "n'entend qu'une partie, ou mal", premier vrai
-                // test audio du projet). `{audio: true}` seul laisse le
-                // navigateur choisir ses réglages par défaut — variables
-                // d'un appareil à l'autre. Alignement sur le flux de
-                // surveillance du barge-in (voice_output.js), déjà validé :
-                // echoCancellation/noiseSuppression explicites. Contrairement
-                // au barge-in, autoGainControl reste ACTIVÉ ici (pas de
-                // valeur explicite = comportement par défaut du navigateur,
-                // généralement activé) : la dictée profite d'une voix
-                // normalisée, alors que le barge-in a besoin d'un gain
-                // stable pour comparer à un seuil RMS fixe — les deux flux
-                // ont des besoins opposés sur ce point précis, volontaire.
-                //
-                // ⚠️ Cause racine du bug non confirmée à ce stade — cette
-                // config ne le corrige pas forcément à elle seule. Testé et
-                // écarté : décalage d'extension de fichier (.wav envoyé
-                // alors que le navigateur enregistre en webm/opus) —
-                // reproduit avec un vrai fichier webm/opus encodé, transcrit
-                // à l'identique quel que soit le suffixe (ffmpeg détecte le
-                // format réel par le contenu). Testé et écarté aussi :
-                // aucune détection de fin de parole automatique n'existe
-                // côté client (le micro ne s'arrête que sur un second clic
-                // explicite). Instrumentation ajoutée ci-dessous et côté
-                // serveur (api/server.py) pour comparer, au prochain test
-                // réel, la durée réellement enregistrée à la durée détectée
-                // par Whisper — sans cette donnée, corriger à l'aveugle
-                // risquerait de masquer la vraie cause.
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    audio: {
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                    },
-                });
+                const stream = await this._getStream();
                 this._start(stream);
             } catch (err) {
                 this.onError(`Micro refusé ou indisponible : ${err.message || err}`);
@@ -87,10 +107,14 @@ window.Lucas = window.Lucas || {};
                 if (e.data && e.data.size > 0) this.chunks.push(e.data);
             });
             this.mediaRecorder.addEventListener("stop", () => {
-                stream.getTracks().forEach((track) => track.stop());
-                // Diagnostic (bug micro du 05/08/2026, cause non confirmée) :
-                // durée et taille réelles côté client, à comparer à la durée
-                // détectée par Whisper côté serveur (voir api/server.py).
+                // ⚠️ Le flux n'est PLUS arrêté ici (corrigé le 05/08/2026) :
+                // il est réutilisé au prochain enregistrement — voir
+                // _getStream(). Il se referme uniquement si l'onglet passe
+                // en arrière-plan (visibilitychange ci-dessus).
+                //
+                // Diagnostic (bug micro du 05/08/2026) : durée et taille
+                // réelles côté client, à comparer à la durée détectée par
+                // Whisper côté serveur (voir api/server.py).
                 const elapsedMs = performance.now() - this._recordingStartedAt;
                 const totalBytes = this.chunks.reduce((sum, c) => sum + c.size, 0);
                 console.debug(

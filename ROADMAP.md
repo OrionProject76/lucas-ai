@@ -2714,6 +2714,56 @@ contenu littéral de `SYSTEM_PROMPT` (vérifié avant modification,
 `test_history_budget.py`/`test_integration.py` ne vérifient que sa
 position dans les messages) — suite complète rejouée, sans régression.
 
+## 5.28 Micro — cause probable identifiée en conditions réelles, tentative de correctif
+
+Suite directe de §5.26. Deux faits nouveaux trouvés en testant en réel
+avec Cyril, avant d'écrire quoi que ce soit :
+
+⚠️ **§5.26 pas encore vraiment testé** : le serveur tournait sur du code
+vieux de plus d'une heure au moment du premier retest (même symptôme que
+§5.25 — code non rechargé, pas un nouveau bug). Redémarré avec la même
+procédure documentée (PID réel en écoute via `netstat`, parent-enfant
+vérifié, arrêt des deux ensemble, port confirmé libre avant relance, un
+seul process en écoute après). Les deux clients (PC et téléphone) se
+sont reconnectés seuls.
+
+**Preuve concrète pour le micro** : Cyril confirme avoir dit
+« qu'est-ce que tu vois sur mon écran ? », transcrit « **c'est ce que**
+tu vois sur mon écran » — la perte de la seule première syllabe
+(« Qu'- ») rend les deux phrases quasi identiques à l'oreille. Cohérent
+avec l'hypothèse déjà posée en §5.26 (délai entre le clic et le vrai
+début de capture) — cette fois avec une preuve, pas seulement un
+raisonnement.
+
+**Cause la plus probable, pas prouvée à 100%** : `getUserMedia()` était
+redemandé ET le flux entièrement refermé (`stream.getTracks().forEach(track => track.stop())`)
+à CHAQUE enregistrement — aucune réutilisation. Sur Android en
+particulier, l'initialisation matérielle du micro peut prendre plusieurs
+centaines de ms ; Cyril ayant déjà utilisé le micro plusieurs fois cette
+session, chaque nouvelle prise de parole repayait ce délai en entier au
+lieu de bénéficier d'un flux déjà chaud.
+
+**Corrigé** (`static/js/audio.js`) : le flux micro est mis en cache après
+la première acquisition et RÉUTILISÉ pour les enregistrements suivants
+— seul le tout premier enregistrement d'une session paie encore le délai
+d'initialisation, les suivants démarrent sur un flux déjà actif.
+Confidentialité : le flux se referme si l'onglet passe en arrière-plan
+(`visibilitychange`) — jamais un micro qui reste "chaud" en silence
+pendant que Cyril fait autre chose, même principe que le flux de
+surveillance du barge-in.
+
+⚠️ **Non prouvé de façon définitive** : la toute première prise de
+parole d'une session neuve garde le délai d'origine (impossible de
+demander l'accès au micro avant un vrai geste de Cyril, ce serait à la
+fois présomptueux et probablement refusé par le navigateur). Aucun cadre
+de test JavaScript n'existe dans ce projet pour valider ce correctif de
+façon automatisée (comme pour le reste du code JS de la PWA) — validation
+en conditions réelles par Cyril nécessaire, en particulier sur plusieurs
+prises de parole consécutives dans la même session.
+
+Aucun test Python affecté (fichier JS seul) ; suite complète rejouée par
+prudence, 1061 passed, sans régression.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
