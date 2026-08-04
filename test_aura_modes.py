@@ -49,6 +49,29 @@ def test_detection_is_case_insensitive(engine) -> None:
     assert engine.detect("BUDGET.XLSX - EXCEL") == AuraMode.WORKING
 
 
+# ── Faux positifs — trouvés le 04/08/2026 sur des titres réels et
+# courants sans rapport avec du travail (audit "validation contre le
+# vrai service" étendu aux modes AURA). "excel"/"word"/"terminal" en
+# sous-chaîne nue matchaient des titres de jeux, d'articles et de sites
+# web réels, pas seulement des cas construits pour l'occasion.
+@pytest.mark.parametrize(
+    "window_title",
+    [
+        "Wordle - The New York Times - Mozilla Firefox",
+        "Word Search Puzzle - jeu gratuit - Google Chrome",
+        "Terminal illness support group - Reddit",
+        "Excel dans la vie - blog motivation - Google Chrome",
+    ],
+)
+def test_single_word_markers_do_not_false_positive_on_real_titles(engine, window_title) -> None:
+    assert engine.detect(window_title) == AuraMode.NONE
+
+
+def test_windows_terminal_app_is_still_detected(engine) -> None:
+    """Le retrait de "terminal" nu ne doit pas perdre la vraie appli moderne."""
+    assert engine.detect("Windows Terminal") == AuraMode.WORKING
+
+
 # ── Deep Focus : uniquement sur commande explicite ───────────────────
 
 def test_deep_focus_is_never_inferred_from_a_window(engine) -> None:

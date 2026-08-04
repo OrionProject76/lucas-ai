@@ -32,9 +32,21 @@ class AuraMode(Enum):
 # Reconnus par leur présence dans le titre de la fenêtre active
 # (core/world_model.py::get_snapshot()["active_window"]) — pas une liste
 # exhaustive, un point de départ vérifiable et extensible.
+#
+# ⚠️ Bug réel trouvé le 04/08/2026 (audit "validation contre le vrai
+# service" étendu aux modes AURA) : "excel", "word" et "terminal" en
+# sous-chaîne nue déclenchaient WORKING sur des titres de fenêtre réels
+# et courants sans aucun rapport avec du travail — « Wordle - The New
+# York Times », « Word Search Puzzle », « Terminal illness support
+# group »… Les vrais titres Office se terminent de façon stable par
+# « - Excel »/« - Word » (mêmes fenêtres testées : « Classeur1 - Excel »,
+# « Document1 - Word ») — même technique de désambiguïsation que
+# « - code » déjà en place pour Visual Studio Code. « terminal » nu est
+# retiré : "powershell"/"command prompt" couvrent déjà les cas réels
+# usuels, "windows terminal" ajouté pour l'appli moderne du même nom.
 WORKING_APP_MARKERS = (
-    "visual studio code", " - code", "pycharm", "excel", "word",
-    "powerpoint", "outlook", "terminal", "powershell",
+    "visual studio code", " - code", "pycharm", " - excel", " - word",
+    "powerpoint", "outlook", "windows terminal", "powershell",
     "command prompt", "notepad++",
 )
 

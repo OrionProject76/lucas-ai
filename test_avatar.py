@@ -37,6 +37,19 @@ def app():
 @pytest.fixture
 def avatar(app):
     widget = AvatarWidget()
+    # ⚠️ Bug réel trouvé le 04/08/2026 (audit "validation contre le vrai
+    # service" étendu à l'UI) : sous QT_QPA_PLATFORM=offscreen, repaint()
+    # est un NO-OP silencieux tant que le widget n'a jamais été montré au
+    # moins une fois — aucune exception, paintEvent() n'est simplement
+    # jamais appelé. Les 45 tests de ce fichier appelaient déjà repaint()
+    # en le croyant réel (voir ROADMAP.md §5.17, qui l'affirmait à tort) ;
+    # la couverture de paintEvent() était 0% malgré ça. show() + un aller
+    # dans la boucle d'événements suffit à "armer" le widget une fois :
+    # tous les repaint() qui suivent redeviennent synchrones et réels
+    # (vérifié directement : sans ceci, 0 appel réel à paintEvent malgré
+    # des dizaines de repaint() ; avec, chaque repaint() en déclenche un).
+    widget.show()
+    app.processEvents()
     yield widget
     widget.anim_timer.stop()
     widget.blink_timer_obj.stop()
@@ -148,6 +161,51 @@ def test_paint_survives_a_direct_state_write(avatar) -> None:
     """Filet de sécurité : écriture directe sans passer par set_state."""
     avatar.state = "N_IMPORTE_QUOI"
     avatar.repaint()  # ne doit pas lever
+
+
+# ── Clignement ────────────────────────────────────────────────────────
+#
+# Jamais exercé avant l'audit du 04/08/2026 : blink_timer_obj (timer réel)
+# appelle trigger_blink() en continu en production, quel que soit l'état —
+# c'est la garde `if self.state == IDLE` qui décide si ça clignote vraiment.
+
+
+def test_trigger_blink_sets_eye_blink_when_idle(avatar) -> None:
+    avatar.set_state(IDLE)
+    avatar.trigger_blink()
+    assert avatar.eye_blink is True
+    assert avatar.blink_timer == 3
+
+
+def test_trigger_blink_does_nothing_outside_idle(avatar) -> None:
+    """Cligner en pleine réponse (SPEAKING) donnerait un air absent."""
+    avatar.set_state(SPEAKING)
+    avatar.trigger_blink()
+    assert avatar.eye_blink is False
+
+
+def test_end_blink_reopens_the_eyes(avatar) -> None:
+    avatar.set_state(IDLE)
+    avatar.trigger_blink()
+    avatar.end_blink()
+    assert avatar.eye_blink is False
+
+
+def test_paint_renders_closed_eyes_without_error(avatar) -> None:
+    """Écriture directe : la branche yeux fermés de paintEvent() ne lève pas."""
+    avatar.eye_blink = True
+    avatar.repaint()
+
+
+def test_paint_renders_thinking_particles_without_error(avatar) -> None:
+    """
+    update_animation() ne fait apparaître une particule qu'avec ~30% de
+    chances (random.random() > 0.7) — measuré en couverture flaky d'un
+    run à l'autre. Écriture directe pour un passage déterministe.
+    """
+    avatar.set_state(THINKING)
+    avatar.particles = [{"x": 70, "y": 70, "size": 3, "life": 1.0, "speed": 1.0}]
+    avatar.repaint()
 
 
 # ── WATCHING : le témoin de capture ───────────────────────────────────
