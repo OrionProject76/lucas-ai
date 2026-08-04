@@ -243,6 +243,82 @@ def test_debit_credit_columns_are_converted_to_signed_amounts(tmp_path) -> None:
     assert manager.transactions[1]["montant"] == pytest.approx(-1000.0)
 
 
+def test_a_windows_1252_encoded_file_is_read_without_crashing(tmp_path) -> None:
+    """
+    Bug réel trouvé le 04/08/2026 sur un premier export réel de Cyril
+    (voir ROADMAP.md §5.23) : encodage codé en dur en utf-8-sig, levait
+    UnicodeDecodeError NON RATTRAPÉE (un crash, pas même un
+    CSVFormatError propre) sur un export Windows-1252 — encodage courant
+    des exports bancaires français plus anciens, aucun rapport avec une
+    banque en particulier. Contenu ici entièrement fabriqué.
+    """
+    content = "date;libelle;montant\n02/01/2026;Café du Commerce;-4,50\n"
+    path = tmp_path / "releve.csv"
+    path.write_bytes(content.encode("cp1252"))
+
+    manager = FinanceManager()
+    added = manager.import_csv(path, use_llm=False)
+    assert added == 1
+    assert manager.transactions[0]["montant"] == pytest.approx(-4.50)
+
+
+def test_a_preamble_before_the_real_header_is_skipped(tmp_path) -> None:
+    """
+    Bug réel trouvé le 04/08/2026 (voir ROADMAP.md §5.23) : un export
+    "comptable" réel fait précéder le tableau de transactions d'un
+    résumé de compte (numéro, période, solde) sur une seule ligne, séparé
+    du vrai en-tête par une ligne vide — la ligne 0 n'est donc pas
+    toujours l'en-tête. Structure REPRODUITE ici (forme du préambule),
+    aucun contenu réel de Cyril.
+    """
+    content = (
+        'RESUME;01/01/2026;31/01/2026;2;31/01/2026;"1000,00 EUR"\n'
+        "\n"
+        "date;libelle;montant\n"
+        "02/01/2026;Fournisseur Test;-50,00\n"
+        "15/01/2026;Fournisseur Test Deux;-25,00\n"
+    )
+    path = _write_csv(tmp_path, content)
+
+    manager = FinanceManager()
+    added = manager.import_csv(path, use_llm=False)
+    assert added == 2
+    assert manager.transactions[0]["montant"] == pytest.approx(-50.0)
+    assert manager.transactions[1]["montant"] == pytest.approx(-25.0)
+
+
+def test_semicolon_is_tried_when_the_sniffer_cannot_decide(tmp_path) -> None:
+    """
+    Bug réel trouvé le 04/08/2026 (voir ROADMAP.md §5.23) : le préambule
+    ci-dessus fait échouer csv.Sniffer() (formes de ligne trop
+    différentes) — le repli fixe sur la virgule était une supposition
+    fausse pour un fichier réellement délimité par des points-virgules.
+    Corrigé : virgule PUIS point-virgule essayés avant d'abandonner.
+    """
+    content = (
+        'RESUME;01/01/2026;31/01/2026;2;31/01/2026;"1000,00 EUR"\n'
+        "\n"
+        "date;libelle;montant de l'operation\n"
+        "02/01/2026;Fournisseur Trois, Quatre;-12,34\n"
+    )
+    path = _write_csv(tmp_path, content)
+
+    manager = FinanceManager()
+    added = manager.import_csv(path, use_llm=False)
+    assert added == 1
+    assert manager.transactions[0]["montant"] == pytest.approx(-12.34)
+
+
+def test_montant_de_l_operation_is_a_recognized_amount_column(tmp_path) -> None:
+    """Alias ajouté le 04/08/2026, trouvé sur un export réel — texte générique, pas propre à une banque."""
+    path = _write_csv(
+        tmp_path, "date,libelle,montant de l'operation\n05/01/2026,Test,-10,00\n"
+    )
+    manager = FinanceManager()
+    added = manager.import_csv(path, use_llm=False)
+    assert added == 1
+
+
 def test_semicolon_and_accented_headers_are_supported(tmp_path) -> None:
     path = _write_csv(
         tmp_path,

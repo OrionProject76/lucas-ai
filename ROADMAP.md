@@ -2330,6 +2330,117 @@ plus coûteux à maintenir. Remonté à Cyril plutôt que construit seul.
 (conformément à la consigne — le fichier ne doit jamais être copié ni sa
 forme figée dans un fixture commis). 1031 passed, inchangé.
 
+## 5.23 Finance CSV — nouvel export réel (comptable) exploitable, 2 bugs réels corrigés + évaluation PDF
+
+Cyril dépose deux nouveaux fichiers réels dans `data/finance/` : un export
+"comptable" au format CSV (`.gitignore` vérifié — `git check-ignore -v` sur
+les deux fichiers, tous deux confirmés ignorés) et un relevé PDF standard.
+Objectif : que `finance_manager.py` sache lire les deux si c'est
+raisonnable, avec la même évaluation effort/fragilité qu'exigée pour
+`weather_manager.py`/le premier fichier (§5.22).
+
+⚠️ **Incident de méthode, signalé par transparence** : au cours de ce
+diagnostic, deux commandes de vérification ont laissé passer du contenu
+réel (compte, dates, montant) dans la sortie du terminal — une fois en
+supposant à tort qu'une ligne 0 était un en-tête, une fois en laissant
+remonter le message d'une `CSVFormatError` (qui embarque les noms de
+colonnes trouvés). Signalé immédiatement à Cyril les deux fois ; rien
+n'a été écrit dans un fichier, un test ou ce document. Nouvelle règle
+actée par Cyril suite au premier incident : vérifier la nature d'une
+ligne (longueur, position, forme) avant tout affichage, même partiel,
+même à des fins de diagnostic — appliquée pour le reste de ce chantier
+(comparaison par empreinte SHA-256 plutôt qu'affichage direct pour
+identifier le nom exact d'une colonne, voir plus bas).
+
+### CSV comptable — exploitable, 2 bugs réels corrigés
+
+**Faits structurels** (aucune vraie valeur reproduite) : fichier
+délimité par points-virgules, 71 enregistrements CSV réels. Structure en
+trois parties : une ligne de résumé de compte (6 champs, formes
+mixtes — texte au format Excel `="..."`, dates, un nombre, un montant),
+une ligne vide, puis un en-tête réel (5 champs texte), puis 68 lignes de
+transaction (5 champs chacune : date, code fixe 18 caractères, libellé de
+longueur variable, montant, devise).
+
+⚠️ **Bug réel n°1 — encodage codé en dur** : `import_csv()` ouvrait
+systématiquement en `utf-8-sig`, levant `UnicodeDecodeError` **non
+rattrapée** (un crash, pas même un `CSVFormatError` propre) sur ce
+fichier, réellement encodé en Windows-1252 (confirmé : `utf-8`/`utf-8-sig`
+échouent au décodage, `cp1252`/`latin-1`/`iso-8859-15` réussissent tous —
+un encodage courant des exports bancaires français, aucun rapport avec
+une banque en particulier). Corrigé (`_read_csv_text()`) : tentative
+`utf-8-sig`, repli sur `cp1252` en cas d'échec.
+
+⚠️ **Bug réel n°2 — repli de délimiteur erroné** : une fois l'encodage
+corrigé, `csv.Sniffer().sniff()` échoue à détecter un délimiteur sur ce
+fichier (la ligne de résumé et les lignes de transaction n'ont pas la
+même forme, ce qui perturbe l'heuristique) — le repli fixe existant sur
+la virgule (`csv.excel`) était une supposition, pas une déduction, fausse
+ici : le fichier est réellement délimité par des points-virgules.
+Corrigé : virgule PUIS point-virgule essayés avant d'abandonner (les deux
+délimiteurs déjà couverts par `test_finance.py` sur des formats que le
+Sniffer devine correctement).
+
+**Correctif supplémentaire, même chantier** : la ligne 0 n'est pas
+toujours l'en-tête — `import_csv()` explore maintenant les premières
+lignes non vides (plafond `HEADER_SCAN_LIMIT`, 20) jusqu'à en trouver une
+qui fournit les colonnes obligatoires (date + libellé + montant/débit-
+crédit), au lieu de supposer que la toute première ligne l'est
+forcément. Diagnostic d'erreur inchangé (basé sur la première ligne) si
+aucune ligne exploitable n'est trouvée — comportement historique
+préservé pour un fichier qui n'a réellement pas d'en-tête (voir §5.22).
+
+**Nouvel alias de colonne** : `"montant de l'operation"` ajouté à
+`COLUMN_ALIASES["montant"]` — trouvé via comparaison d'empreinte SHA-256
+entre le nom de colonne réel (jamais affiché) et une liste de candidats
+plausibles, pas par lecture directe. Texte générique d'intitulé de
+colonne bancaire, pas propre à une banque en particulier.
+
+**Validé en conditions réelles** : `FinanceManager().import_csv()` sur le
+vrai fichier → 68 transactions importées (cohérent : 71 enregistrements −
+1 résumé − 1 en-tête − 1 ligne vide non comptée = 68), résumé texte généré
+non vide, solde un nombre flottant valide. **4 tests ajoutés sur des
+données synthétiques** reproduisant la structure observée (encodage
+Windows-1252, préambule + ligne vide + en-tête, délimiteur non détecté
+par le Sniffer, nouvel alias) — jamais une copie du fichier réel de
+Cyril. `test_finance.py` : 54→58 tests, tous passent. Suite complète :
+**1035 passed**.
+
+### PDF — évalué, jugé trop fragile pour être construit maintenant
+
+**Faits structurels** (aucun texte extrait reproduit) : 5 pages, 11 010
+caractères de texte extrait via `pypdf` (déjà une dépendance du projet,
+utilisée pour le RAG). 66 lignes sur 338 commencent par une forme de
+date. Mais **0 bloc de 2+ espaces consécutifs** sur ces 66 lignes — la
+mise en colonnes visuelle du PDF n'est PAS préservée par l'extraction de
+texte linéaire : date, libellé et montant se retrouvent collés sans
+séparateur fiable. Seules 20 des 66 lignes-date (30%) se terminent par un
+motif reconnaissable de montant — la majorité n'a même pas cette
+ancre minimale.
+
+**Deuxième essai, plus prometteur mais toujours jugé insuffisant** :
+`pymupdf` (déjà une dépendance du projet) expose la position (x,y) de
+chaque mot extrait, ce qui permettrait en théorie de reconstruire les
+colonnes par regroupement de position plutôt que par le texte linéaire
+(confirmé : les mots d'une même ligne ont des positions x distinctes et
+mesurables). Mais cette reconstruction resterait entièrement dépendante
+du gabarit de mise en page de CETTE banque précise — un changement de
+mise en forme (nombre de colonnes, largeur, pagination) casserait le
+positionnement sans avertissement, contrairement à un CSV délimité dont
+la structure logique ne dépend d'aucune mise en page.
+
+**Décision** : PDF non implémenté. Le CSV comptable de la même banque/du
+même compte fonctionne de façon fiable et générale (2 correctifs qui
+profitent à n'importe quel export mal encodé ou mal délimité, pas
+seulement à celui-ci) — aucune raison pratique de construire, en plus,
+un analyseur PDF nettement plus fragile pour la même donnée. Reste ouvert
+si un jour seul un PDF est disponible pour un compte donné : à évaluer
+comme son propre chantier, pas une extension de celui-ci.
+
+**Fichier `GDB_04082026.csv`** (présent dans `data/finance/`, déposé lors
+d'un chantier précédent) : hors périmètre de cette instruction, non
+traité ici — Cyril ne l'a pas mentionné cette fois.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

@@ -11,11 +11,21 @@
 # Les exports au format débit/crédit séparés sont convertis à l'import.
 
 import csv
+import io
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
 from modules.finance_categorizer import UNCATEGORIZED, categorize
+
+# Nombre de lignes explorées avant de renoncer à trouver un en-tête
+# exploitable — un export réel peut faire précéder le tableau de
+# transactions d'un résumé de compte (numéro, période, solde), mais ce
+# préambule ne s'étend jamais sur des centaines de lignes. Une valeur
+# raisonnable évite de scanner un fichier entier qui n'a de toute façon
+# aucun en-tête reconnaissable (voir ROADMAP.md §5.22, format à une
+# seule colonne par ligne).
+HEADER_SCAN_LIMIT = 20
 
 # Noms de colonnes rencontrés dans les exports bancaires français.
 # Comparés en minuscules, sans accents ni espaces superflus.
@@ -23,7 +33,7 @@ COLUMN_ALIASES: dict[str, list[str]] = {
     "date": ["date", "date operation", "date de l'operation", "date valeur"],
     "libelle": ["libelle", "libelle operation", "label", "description",
                 "nature", "intitule", "motif"],
-    "montant": ["montant", "amount", "somme", "valeur"],
+    "montant": ["montant", "amount", "somme", "valeur", "montant de l'operation"],
     "debit": ["debit", "retrait", "sortie"],
     "credit": ["credit", "depot", "entree"],
     "categorie": ["categorie", "category", "type"],
@@ -40,6 +50,24 @@ class CSVFormatError(Exception):
 # jamais celui du dépôt (data/sample_transactions.csv, données fictives,
 # suivi par git pour les tests).
 DEFAULT_FINANCE_DIR = Path("data/finance")
+
+
+def _read_csv_text(path: Path) -> str:
+    """
+    Lit le fichier en texte, avec repli d'encodage.
+
+    ⚠️ Bug réel trouvé le 04/08/2026 (premier export réel exploitable
+    déposé par Cyril, format "export comptable" — voir ROADMAP.md §5.23) :
+    `utf-8-sig` codé en dur levait `UnicodeDecodeError` (non rattrapée,
+    donc un crash, pas même un `CSVFormatError` propre) sur un export
+    encodé en Windows-1252 — encodage courant des exports bancaires
+    français plus anciens, aucun rapport avec une banque en particulier.
+    """
+    raw = path.read_bytes()
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw.decode("cp1252")
 
 
 def _normalize_header(name: str) -> str:
@@ -117,34 +145,88 @@ class FinanceManager:
         if not path.is_file():
             raise CSVFormatError(f"Fichier introuvable : {path}")
 
-        with path.open(newline="", encoding="utf-8-sig") as f:
-            sample = f.read(4096)
-            f.seek(0)
-            try:
-                dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
-            except csv.Error:
-                dialect = csv.excel  # défaut raisonnable : virgule
+        text = _read_csv_text(path)
+        sample = text[:4096]
+        try:
+            sniffed = csv.Sniffer().sniff(sample, delimiters=",;\t").delimiter
+        except csv.Error:
+            sniffed = None
 
-            reader = csv.DictReader(f, dialect=dialect)
-            columns = _map_columns(reader.fieldnames)
+        # ⚠️ Deuxième bug réel trouvé le même jour, sur le même export
+        # (voir ROADMAP.md §5.23) : quand le Sniffer échoue, le repli fixe
+        # sur la virgule était une supposition, pas une déduction — ce
+        # fichier est en réalité délimité par des points-virgules. Le
+        # Sniffer échoue précisément parce que le résumé de compte qui
+        # précède le tableau n'a pas la même forme que les lignes de
+        # transaction ; une fois qu'on écarte cette hypothèse, essayer
+        # virgule PUIS point-virgule (les deux délimiteurs déjà couverts
+        # par test_finance.py sur des formats qui, eux, se laissent
+        # deviner par le Sniffer) reste une déduction bornée, pas un
+        # essai au hasard.
+        candidates = [d for d in (sniffed, ",", ";") if d]
+        seen: set[str] = set()
+        delimiters_to_try = [d for d in candidates if not (d in seen or seen.add(d))]
 
-            missing = [c for c in ("date", "libelle") if c not in columns]
+        header_row: list[str] | None = None
+        columns: dict[str, str] = {}
+        first_candidate: list[str] | None = None
+        chosen_delimiter = delimiters_to_try[0]
+        # Nombre de lignes NON VIDES à sauter avant la première ligne de
+        # transaction — position, pas contenu, pour ne jamais reconfondre
+        # l'en-tête avec une ligne de donnée qui lui ressemblerait plus
+        # loin dans un export multi-pages (en-têtes répétés par page).
+        rows_before_data = 0
+
+        for delimiter in delimiters_to_try:
+            reader = csv.reader(io.StringIO(text), delimiter=delimiter)
+            local_first: list[str] | None = None
+            non_empty_seen = 0
+            for candidate in reader:
+                if not candidate:
+                    continue
+                non_empty_seen += 1
+                if local_first is None:
+                    local_first = candidate
+                mapped = _map_columns(candidate)
+                missing = [c for c in ("date", "libelle") if c not in mapped]
+                has_amount = "montant" in mapped or bool({"debit", "credit"} & mapped.keys())
+                if not missing and has_amount:
+                    header_row, columns, chosen_delimiter = candidate, mapped, delimiter
+                    rows_before_data = non_empty_seen
+                    break
+                if non_empty_seen >= HEADER_SCAN_LIMIT:
+                    break
+            if first_candidate is None:
+                first_candidate = local_first
+            if header_row is not None:
+                break
+
+        if header_row is None:
+            mapped = _map_columns(first_candidate)
+            missing = [c for c in ("date", "libelle") if c not in mapped]
             if missing:
                 raise CSVFormatError(
                     f"Colonnes obligatoires absentes : {', '.join(missing)}. "
-                    f"Colonnes trouvées : {reader.fieldnames}"
+                    f"Colonnes trouvées : {first_candidate}"
                 )
-            if "montant" not in columns and not {"debit", "credit"} & columns.keys():
-                raise CSVFormatError(
-                    "Aucune colonne de montant (ni « montant », ni « débit »/« crédit »)."
-                )
+            raise CSVFormatError(
+                "Aucune colonne de montant (ni « montant », ni « débit »/« crédit »)."
+            )
 
-            added = 0
-            for row in reader:
-                transaction = self._parse_row(row, columns, use_llm, ask)
-                if transaction is not None:
-                    self.transactions.append(transaction)
-                    added += 1
+        reader = csv.reader(io.StringIO(text), delimiter=chosen_delimiter)
+        added = 0
+        non_empty_seen = 0
+        for row_values in reader:
+            if not row_values:
+                continue
+            non_empty_seen += 1
+            if non_empty_seen <= rows_before_data:
+                continue
+            row = dict(zip(header_row, row_values))
+            transaction = self._parse_row(row, columns, use_llm, ask)
+            if transaction is not None:
+                self.transactions.append(transaction)
+                added += 1
 
         return added
 
