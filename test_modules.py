@@ -9,7 +9,7 @@ import pytest
 
 from modules import vision_manager as vm_module
 from modules import web_search as ws_module
-from modules.vision_manager import VisionManager
+from modules.vision_manager import DEFAULT_PROMPT, VisionManager
 from modules.web_search import WebSearch
 
 # ── VisionManager ─────────────────────────────────────────────────────
@@ -96,6 +96,45 @@ def test_screenshot_never_leaves_the_machine() -> None:
     source = inspect.getsource(vm_module)
     for forbidden in ("openai", "requests.post", "https://", "ask_cloud"):
         assert forbidden not in source
+
+
+def test_capture_uses_the_default_path_when_none_given(monkeypatch) -> None:
+    """
+    Seul le chemin explicite était testé jusqu'ici (trouvé via mesure de
+    couverture réelle) : sans argument, capture_screen() doit utiliser
+    self.screenshot_path plutôt qu'échouer ou écrire ailleurs.
+    """
+    monkeypatch.setattr(vm_module.ImageGrab, "grab", lambda: _FakeImage())
+
+    manager = VisionManager()
+    result = manager.capture_screen()
+
+    assert result == manager.screenshot_path
+
+
+def test_see_and_describe_chains_capture_then_analyze(monkeypatch, tmp_path) -> None:
+    """
+    see_and_describe() n'était exercé que par un test d'intégration lent
+    (vrai Ollama, marqueur "integration", exclu du run par défaut) — son
+    propre enchaînement capture -> analyse n'était jamais vérifié seul.
+    """
+    calls: list[str] = []
+
+    def _fake_capture(output_path=None):
+        calls.append("capture")
+        return str(tmp_path / "shot.png")
+
+    def _fake_analyze(path, prompt=DEFAULT_PROMPT):
+        calls.append("analyze")
+        assert path == str(tmp_path / "shot.png")
+        return "un bureau avec du code"
+
+    manager = VisionManager()
+    monkeypatch.setattr(manager, "capture_screen", _fake_capture)
+    monkeypatch.setattr(manager, "analyze_image", _fake_analyze)
+
+    assert manager.see_and_describe() == "un bureau avec du code"
+    assert calls == ["capture", "analyze"]
 
 
 # ── WebSearch ─────────────────────────────────────────────────────────
