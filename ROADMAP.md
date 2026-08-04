@@ -1431,6 +1431,64 @@ socket avant de toucher à quoi que ce soit, et ne jamais tuer le PID
 « lanceur » seul en le croyant inoffensif — voir CLAUDE.md, principe
 ajouté dans « Leçons d'infrastructure ».
 
+## 5.9 Campagne de couverture Priorité 3 (qualité/fiabilité du socle) — close le 04/08/2026
+
+Contrairement aux passes de tests précédentes (ad hoc, module par module
+suite à un bug ou un manque remarqué), celle-ci part d'une mesure réelle :
+`pytest-cov` sur `core/`, `modules/`, `security/`, `api/`, `memory/`
+(l'UI PySide6 est restée hors périmètre — nécessiterait une stratégie de
+test Qt à part entière). Point de départ : **86 % de couverture globale**.
+Point d'arrivée, après cette campagne : **96 %**.
+
+**Discipline suivie sur chaque module**, sans exception : mocker
+uniquement la frontière d'E/S externe (registre Windows, réseau, modèle
+sur disque, ChromaDB/psutil/GPUtil/win32gui) — jamais la logique réelle
+sous test. Pour `security/`, contrainte supplémentaire systématiquement
+vérifiée : aucun test n'accorde de nouvelle capacité d'action à un
+capteur — observation seule, comme le reste du paquet. Chaque module a
+suivi le même cycle : tests isolés → fichier complet → suite complète en
+arrière-plan → commit avec message détaillé → push, jamais groupés.
+
+**Modules amenés de trous réels à quasi-complet, dans l'ordre** :
+
+| Module | Avant | Après |
+|---|---|---|
+| `core/llm_worker.py` | aucun test | quasi complet |
+| `core/local_llm.py` | 27 % | quasi complet |
+| `security/persistence_watch.py` | 50 % | quasi complet |
+| `modules/rag_manager.py` (`OllamaEmbeddingFunction`) | jamais testée | couverte |
+| `modules/piper_engine.py` | aucun test direct | couvert |
+| `core/lucas_core.py` (`ask()`/`_emit()`) | testé seulement en intégration | couvert en unitaire |
+| `security/ransomware_watch.py` | résolution des dossiers non testée | 96 % |
+| `security/privacy_shield.py` | `scan()` jamais testé de bout en bout | 98 % |
+| `modules/vision_manager.py` | chemin par défaut + `see_and_describe()` non testés | 80 % (résiduel : garde import `ollama`) |
+| `core/world_model.py` | GPU/fenêtre active jamais mockés | 100 % |
+| `modules/stt_engine.py` | sélection de backend jamais testée | 98 % |
+| `modules/rag_manager.py` (`RAGManager` lui-même) | **65 %** — le plus gros trou du projet | **97 %** |
+| `modules/ocr_engine.py` | 75 % | **100 %** |
+| `memory/index_documents.py` | 91 % | 99 % |
+| `memory/memory_manager.py` (nouveau fichier de test) | 88 % | **100 %** |
+| `security/status.py` | 88 % | **100 %** |
+
+Trois modules atteignent maintenant 100 % ; `modules/rag_manager.py` —
+qui contient la logique de recherche hybride par date, déjà source de
+deux bugs réels corrigés — passe de 65 % à 97 %, en construisant
+`RAGManager` réellement (jamais fait ailleurs : tous les autres tests du
+projet le construisent via `__new__()`, court-circuitant `__init__()`).
+
+**Ce qui reste, volontairement** : `core/cloud_llm.py` (40 %) est un
+stub intentionnel confirmé (clé API cloud vide dans `.env` de Cyril),
+pas un trou. Une dizaine de modules gardent un résiduel de 3 à 12 lignes
+(`api/server.py`, `modules/voice_manager.py`, `security/history.py`,
+`security/monitor.py`, `core/intent.py`, `modules/stt_manager.py`,
+`modules/semantic_desktop.py`, `modules/calculator.py`,
+`modules/finance_categorizer.py`) — rendements décroissants, pas
+poursuivis ici. L'UI PySide6 (`ui/avatar_widget.py` 48 %,
+`ui/chat_widget.py` 0 %, `ui/main_window.py` 65 %) reste entièrement
+hors périmètre.
+
+**Campagne close ici.** Suite complète : 859 tests, tous verts.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
