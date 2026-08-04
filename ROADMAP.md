@@ -1905,6 +1905,43 @@ n'est instancié nulle part hors de son propre bloc `__main__`. Jamais
 signalé comme tel jusqu'ici malgré 98% de couverture ; un module bien
 testé n'est pas nécessairement un module branché.
 
+## 5.19 Traitement des modules orphelins — décision de Cyril, 04/08/2026
+
+Suite directe de §5.17/§5.18 : Cyril tranche explicitement le sort des 4
+éléments listés dans l'état des lieux — `ui/chat_widget.py` retiré
+(§ commit dédié), les 3 modules orphelins câblés (pas supprimés :
+fonctionnels, testés, il ne leur manquait qu'un appelant).
+
+### `modules/calculator.py` — câblé
+
+`core/router.py` : `should_use_calculator()` (mots-clés + expression
+extractible via `extract_calculation()`) — déterministe, comme
+`should_use_finance()`. Exige les DEUX (mot-clé ET expression réelle) :
+« combien font mes économies » ne doit pas déclencher un calcul
+halluciné faute de vraie expression.
+
+`core/lucas_core.py::_build_messages()` : le calcul est fait en Python
+(`Calculator().calculate()`), jamais deviné par le LLM — même principe
+que RAG/finance sans résultat, "NE PAS SE TAIRE" : une expression qui
+échoue à s'évaluer (syntaxe invalide, division par zéro) le dit
+explicitement plutôt que de laisser un vide à combler. Ajouté à la
+condition `SOURCE_HISTORY_MESSAGES` (toute source externe doit y
+passer, règle déjà posée le 03/08/2026 pour la finance).
+
+Gardé `not is_cloud`, comme RAG/finance : pas par sensibilité (un calcul
+n'a rien de personnel) mais par cohérence architecturale — un seul
+principe pour "ce qui est ajouté à une requête cloud reste réduit",
+pas un cas particulier de plus à retenir.
+
+**Validé** : tests unitaires (`test_router.py`, `should_use_calculator`/
+`extract_calculation`, +9 tests) et d'intégration (`_build_messages()`,
++4 tests : jamais vers le cloud, résultat réel injecté, échec signalé
+explicitement, silence sur une question sans rapport). **Validation
+réelle** (pas seulement mockée) : `LucasCore` réel + `MemoryManager`
+réel sur une base temporaire, question « combien font 45 + 32 ? » →
+bloc `CALCUL RÉEL EFFECTUÉ : 45 + 32 = 77` confirmé dans les messages
+construits. Suite complète : 973 passed.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

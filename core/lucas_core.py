@@ -28,8 +28,10 @@ from core.local_llm import ask_local
 from core.memory_weighting import annotate_uncertain_events, annotate_uncertain_history
 from core.reasoning_engine import ReasoningEngine
 from core.router import (
+    extract_calculation,
     mentions_pc_explicitly,
     route,
+    should_use_calculator,
     should_use_finance,
     should_use_rag,
     should_use_vision,
@@ -164,7 +166,8 @@ class LucasCore:
         Construit la liste de messages envoyée au LLM.
         Ordre : prompt système → contexte système (World Model) →
         événements récents → contexte documents (RAG, si pertinent) →
-        historique de conversation.
+        historique de conversation → vision/RAG/finance/calcul (dans cet
+        ordre, juste avant la question — voir plus bas).
 
         `destination` ("local" ou "cloud") restreint ce qui est joint quand la
         requête sort de la machine : pas de contexte RAG, pas d'événements
@@ -421,6 +424,34 @@ class LucasCore:
                     "en ce moment."
                 )
 
+        # Calculatrice (modules/calculator.py, câblé le 04/08/2026) : un LLM
+        # est notoirement mauvais en arithmétique exacte — le calcul RÉEL
+        # est fait ici, en Python, jamais deviné par le modèle.
+        # ⚠️ Même famille de bug que le RAG/la finance sans résultat : une
+        # expression qui échoue à s'évaluer doit le DIRE, pas se taire et
+        # laisser le modèle inventer un chiffre plausible.
+        calculation_context = ""
+        if not is_cloud and should_use_calculator(user_message):
+            from modules.calculator import Calculator
+
+            expression = extract_calculation(user_message)
+            result = Calculator().calculate(expression)
+            if result is not None:
+                calculation_context = (
+                    f"CALCUL RÉEL EFFECTUÉ : {expression} = {result}\n\n"
+                    "Utilise EXACTEMENT ce résultat. INTERDIT : recalculer, "
+                    "arrondir différemment, ou corriger ce nombre — même s'il "
+                    "te semble étrange, c'est le résultat réel."
+                )
+                _emit(on_activity, "calculated", f"calcul — {expression} = {result}")
+            else:
+                calculation_context = (
+                    f"UNE EXPRESSION A ÉTÉ DÉTECTÉE ({expression!r}) MAIS N'A "
+                    "PAS PU ÊTRE ÉVALUÉE (syntaxe invalide ou division par "
+                    "zéro).\n\nDis-le à Cyril plutôt que d'inventer un résultat."
+                )
+                _emit(on_activity, "calculated", f"calcul — expression invalide ({expression})")
+
         # ⚠️ SECONDE MOITIÉ DU MÊME BUG, et elle vaut pour LES DEUX SOURCES.
         #
         # Remettre le bloc au bon endroit ne suffisait pas : avec 100
@@ -441,7 +472,9 @@ class LucasCore:
         # demandait à Cyril de lui dicter son CV. Toute source externe
         # ajoutée ici devra passer par ce même plafond — la finance y
         # compris (03/08/2026) : même bloc, même risque de noyade.
-        if not is_cloud and (vision_context or rag_context or finance_context):
+        if not is_cloud and (
+            vision_context or rag_context or finance_context or calculation_context
+        ):
             history = history[-SOURCE_HISTORY_MESSAGES:]
 
         # ⚠️ AUTO-IMITATION DE REFUS DE VISION — trouvé en conditions
@@ -510,6 +543,9 @@ class LucasCore:
 
         if finance_context:
             messages.append({"role": "system", "content": finance_context})
+
+        if calculation_context:
+            messages.append({"role": "system", "content": calculation_context})
 
         if current_question is not None:
             messages.append(

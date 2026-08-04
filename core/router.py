@@ -3,6 +3,8 @@
 # Architecture hybride : local par défaut, cloud pour les questions complexes,
 # jamais de donnée sensible vers le cloud (CLAUDE.md règle 3).
 
+import re
+
 from core.text_utils import contains_any
 
 KEYWORDS_CLOUD = [
@@ -237,3 +239,52 @@ def matches_rag_keywords(text: str) -> bool:
     utiliser should_use_rag().
     """
     return contains_any(text, KEYWORDS_RAG)
+
+
+# ── Calculatrice (modules/calculator.py) — câblé le 04/08/2026 ──────────
+#
+# Mots-clés qui signalent une demande de calcul explicite. Ne suffit pas
+# seul : la question doit AUSSI contenir une expression extractible
+# (extract_calculation()) — un message qui dit juste « calcule » sans
+# rien à calculer ne doit déclencher aucun bloc de contexte.
+KEYWORDS_CALCULATOR = [
+    "combien font", "combien fait", "combien ca fait", "ca fait combien",
+    "calcule", "calcul de", "quel est le resultat",
+]
+
+# Une expression arithmétique symbolique : chiffres, opérateurs, parenthèses,
+# espaces. Volontairement restreint aux SYMBOLES (« 45 + 32 »), pas aux mots
+# (« quarante-cinq plus trente-deux ») — portée délibérément réduite, voir
+# ROADMAP.md pour la justification.
+_EXPRESSION_CHARS = re.compile(r"[0-9+\-*/%().\s]+")
+
+
+def extract_calculation(text: str) -> str | None:
+    """
+    Cherche la plus longue sous-chaîne qui ressemble à une expression
+    arithmétique réelle (au moins deux nombres et un opérateur) — pas les
+    mots qui l'entourent (« combien font », « ? »). None si rien de tel
+    n'est trouvé.
+    """
+    candidates = _EXPRESSION_CHARS.findall(text)
+    best = max(candidates, key=len, default="").strip()
+    if not best:
+        return None
+    if not any(op in best for op in "+-*/%"):
+        return None
+    if len(re.findall(r"\d+", best)) < 2:
+        return None
+    return best
+
+
+def should_use_calculator(text: str) -> bool:
+    """
+    Décide si la question demande un calcul réel — déterministe, comme
+    should_use_finance() : le domaine est étroit et les formulations
+    prévisibles, pas besoin du classifieur core/intent.py.
+
+    Exige À LA FOIS un mot-clé de calcul ET une expression extractible :
+    « combien font 45 et 32 ? » (pas d'opérateur symbolique) ne doit pas
+    déclencher un calcul halluciné faute de vraie expression à évaluer.
+    """
+    return contains_any(text, KEYWORDS_CALCULATOR) and extract_calculation(text) is not None

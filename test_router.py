@@ -9,9 +9,11 @@ import pytest
 
 from config import CLOUD_HISTORY_MESSAGES
 from core.router import (
+    extract_calculation,
     is_sensitive,
     mentions_pc_explicitly,
     route,
+    should_use_calculator,
     should_use_finance,
     should_use_rag,
     should_use_vision,
@@ -91,6 +93,46 @@ def test_should_use_finance_detects_finance_questions(question: str) -> None:
 )
 def test_should_use_finance_ignores_unrelated_questions(question: str) -> None:
     assert not should_use_finance(question)
+
+
+# ── should_use_calculator() / extract_calculation() (câblé 04/08/2026) ──
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "combien font 45 + 32 ?",
+        "combien fait 10 * (3 + 2)",
+        "calcule 100 / 4",
+        "quel est le resultat de 7 - 2 ?",
+    ],
+)
+def test_should_use_calculator_detects_real_expressions(question: str) -> None:
+    assert should_use_calculator(question)
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "quelle heure est-il ?",
+        "combien font mes economies",  # mot-clé présent, aucune expression
+        "resume le document",
+    ],
+)
+def test_should_use_calculator_ignores_unrelated_or_expressionless_questions(question: str) -> None:
+    assert not should_use_calculator(question)
+
+
+def test_extract_calculation_finds_the_expression_in_natural_language() -> None:
+    assert extract_calculation("combien font 45 + 32 ?") == "45 + 32"
+
+
+def test_extract_calculation_ignores_a_single_number() -> None:
+    """Un seul nombre n'est pas une expression — rien à calculer."""
+    assert extract_calculation("il est 15h") is None
+
+
+def test_extract_calculation_returns_none_without_an_operator() -> None:
+    assert extract_calculation("2026") is None
 
 
 # ── Robustesse de la saisie réelle ────────────────────────────────────
@@ -283,6 +325,39 @@ def test_finance_context_absent_when_question_unrelated(core_with_history: Lucas
     messages = core_with_history._build_messages("bonjour", "local")
     assert not any("RELEVÉS BANCAIRES" in m["content"] for m in messages)
     assert not any("AUCUNE TRANSACTION" in m["content"] for m in messages)
+
+
+# ── Calculatrice (04/08/2026) ─────────────────────────────────────────
+
+@requires_core
+def test_cloud_never_receives_calculation_context(core_with_history: LucasCore) -> None:
+    messages = core_with_history._build_messages("combien font 45 + 32 ?", "cloud")
+    assert not any("CALCUL RÉEL" in m["content"] for m in messages)
+
+
+@requires_core
+def test_local_receives_the_real_calculation_result(core_with_history: LucasCore) -> None:
+    """Le résultat est calculé en Python, jamais deviné par le LLM."""
+    messages = core_with_history._build_messages("combien font 45 + 32 ?", "local")
+    joined = " ".join(m["content"] for m in messages)
+    assert "45 + 32 = 77" in joined
+    assert "INTERDIT" in joined
+
+
+@requires_core
+def test_calculation_failure_says_so_explicitly(core_with_history: LucasCore, monkeypatch) -> None:
+    """Une expression qui échoue à s'évaluer (ex. division par zéro) doit le dire, pas se taire."""
+    monkeypatch.setattr("modules.calculator.Calculator.calculate", lambda self, expr: None)
+    messages = core_with_history._build_messages("combien font 10 / 0 ?", "local")
+    joined = " ".join(m["content"] for m in messages)
+    assert "N'A PAS PU ÊTRE ÉVALUÉE" in joined
+    assert "10 / 0" in joined
+
+
+@requires_core
+def test_calculation_context_absent_when_question_unrelated(core_with_history: LucasCore) -> None:
+    messages = core_with_history._build_messages("bonjour", "local")
+    assert not any("CALCUL RÉEL" in m["content"] for m in messages)
 
 
 @requires_core
