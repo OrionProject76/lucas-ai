@@ -384,7 +384,8 @@ C:/OrionAI/
 │   ├── automation_manager.py                          # Liste blanche : ouvrir une appli
 │   ├── web_search.py                                  # Recherche web, filtre anti-fuite — câblé le 04/08/2026
 │   │                                                     (should_use_websearch, core/router.py)
-│   ├── weather_manager.py                             # Écrit, jamais branché ailleurs (voir ROADMAP §5.2)
+│   ├── weather_manager.py                             # Câblé le 04/08/2026 (should_use_weather,
+│   │                                                     core/router.py) — bug réel de parsing corrigé au passage
 │   └── calculator.py                                   # Câblé le 04/08/2026 (should_use_calculator, core/router.py)
 ├── memory/                     # Mémoire de conversation + indexation RAG
 │   ├── memory_manager.py       # Historique SQLite (memory/lucas_memory.db)

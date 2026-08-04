@@ -309,3 +309,35 @@ KEYWORDS_WEB_SEARCH = [
 def should_use_websearch(text: str) -> bool:
     """Déclenchement déterministe et étroit — voir le commentaire ci-dessus."""
     return contains_any(text, KEYWORDS_WEB_SEARCH)
+
+
+# ── Météo (modules/weather_manager.py) — câblé le 04/08/2026 ───────────
+
+KEYWORDS_WEATHER = [
+    "quel temps fait-il", "quel temps fait il", "quel temps fait-il a",
+    "quelle est la meteo", "quelle est la météo", "meteo a ", "météo à ",
+    "meteo de ", "météo de ", "va-t-il pleuvoir", "va t il pleuvoir",
+    "fait-il beau", "fait il beau",
+]
+
+# Une ville nommée après une préposition (« à Paris », « météo de Lyon »).
+# Majuscule initiale exigée : un nom de ville s'écrit avec, et ça évite de
+# capturer un mot ordinaire qui suivrait la même préposition par hasard.
+_CITY_PATTERN = re.compile(
+    r"(?:à|a|de|d'|pour)\s+([A-ZÀ-Ü][\wÀ-ÿ'-]*(?:[\s-][A-ZÀ-Ü][\wÀ-ÿ'-]*)*)"
+)
+
+
+def extract_city(text: str) -> str | None:
+    """
+    Cherche un nom de ville dans la question. None si aucune ville n'est
+    nommée — le code appelant ne doit JAMAIS deviner une ville par défaut
+    (voir core/lucas_core.py) : mieux vaut demander à Cyril de préciser.
+    """
+    match = _CITY_PATTERN.search(text)
+    return match.group(1).strip() if match else None
+
+
+def should_use_weather(text: str) -> bool:
+    """Déclenchement déterministe — même raisonnement que should_use_finance()."""
+    return contains_any(text, KEYWORDS_WEATHER)

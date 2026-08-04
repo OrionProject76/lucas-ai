@@ -29,12 +29,14 @@ from core.memory_weighting import annotate_uncertain_events, annotate_uncertain_
 from core.reasoning_engine import ReasoningEngine
 from core.router import (
     extract_calculation,
+    extract_city,
     mentions_pc_explicitly,
     route,
     should_use_calculator,
     should_use_finance,
     should_use_rag,
     should_use_vision,
+    should_use_weather,
     should_use_websearch,
 )
 from core.text_utils import normalize
@@ -471,6 +473,41 @@ class LucasCore:
             )
             _emit(on_activity, "websearch_performed", "recherche web — résultats reçus")
 
+        # Météo (modules/weather_manager.py, câblé le 04/08/2026). Jamais
+        # deviner une ville absente de la question — même principe que le
+        # RAG/la finance sans résultat : demander plutôt qu'inventer.
+        weather_context = ""
+        if not is_cloud and should_use_weather(user_message):
+            city = extract_city(user_message)
+            if city is None:
+                weather_context = (
+                    "MÉTÉO DEMANDÉE MAIS AUCUNE VILLE NOMMÉE DANS LA QUESTION.\n\n"
+                    "Demande à Cyril de préciser la ville — ne devine JAMAIS "
+                    "laquelle, même s'il en a mentionné une plus tôt dans la "
+                    "conversation."
+                )
+                _emit(on_activity, "weather_checked", "météo — aucune ville nommée")
+            else:
+                from modules.weather_manager import WeatherManager
+
+                weather = WeatherManager()
+                data = weather.get_current(city)
+                if data is not None:
+                    weather_context = (
+                        f"MÉTÉO RÉELLE (wttr.in) : {weather.format_for_display(data)}\n\n"
+                        "Utilise UNIQUEMENT ces données réelles. INTERDIT : inventer "
+                        "une température, une condition ou changer ces chiffres."
+                    )
+                    _emit(on_activity, "weather_checked", f"météo — {city}")
+                else:
+                    weather_context = (
+                        f"MÉTÉO DEMANDÉE POUR « {city} » MAIS INDISPONIBLE (ville "
+                        "invalide ou service injoignable).\n\n"
+                        "Dis-le clairement à Cyril. INTERDIT : inventer une "
+                        "température ou une condition météo."
+                    )
+                    _emit(on_activity, "weather_checked", f"météo — {city} indisponible")
+
         # ⚠️ SECONDE MOITIÉ DU MÊME BUG, et elle vaut pour LES DEUX SOURCES.
         #
         # Remettre le bloc au bon endroit ne suffisait pas : avec 100
@@ -493,7 +530,7 @@ class LucasCore:
         # compris (03/08/2026) : même bloc, même risque de noyade.
         if not is_cloud and (
             vision_context or rag_context or finance_context
-            or calculation_context or websearch_context
+            or calculation_context or websearch_context or weather_context
         ):
             history = history[-SOURCE_HISTORY_MESSAGES:]
 
@@ -569,6 +606,9 @@ class LucasCore:
 
         if websearch_context:
             messages.append({"role": "system", "content": websearch_context})
+
+        if weather_context:
+            messages.append({"role": "system", "content": weather_context})
 
         if current_question is not None:
             messages.append(

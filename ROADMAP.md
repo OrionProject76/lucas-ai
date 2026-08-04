@@ -1975,6 +1975,54 @@ deux fois (avant et après la correction de dépendance) : recherche
 renvoie de vrais résultats (Wikipédia et autres) avec `ddgs`. Suite
 complète : 983 passed.
 
+### `modules/weather_manager.py` — câblé, bug réel de parsing trouvé et corrigé
+
+`core/router.py` : `should_use_weather()` (mots-clés) + `extract_city()`
+(regex sur les tournures "à/de/pour <Ville>") — même schéma que le
+calcul : mot-clé météo ET ville extractible avant tout appel réseau.
+Aucune ville nommée → Luca's le dit et demande de préciser, ne devine
+JAMAIS laquelle même si une ville a été mentionnée plus tôt dans la
+conversation (même principe RAG/finance sans résultat).
+
+`core/lucas_core.py::_build_messages()` : `WeatherManager().get_current()`
+appelé en Python, résultat injecté tel quel avec consigne explicite
+"INTERDIT : inventer une température, une condition ou changer ces
+chiffres." Ajouté à `SOURCE_HISTORY_MESSAGES`, gardé `not is_cloud` par
+la même cohérence architecturale que calcul/recherche web.
+
+⚠️ **Bug réel trouvé en validant contre le vrai service** (le fichier de
+test lui-même flaggait "vérification contre le vrai service reste à
+faire" — jamais faite avant ce câblage) : `modules/weather_manager.py`
+utilisait `?format=3`, qui rend en réalité UNE SEULE ligne
+(`"Paris: ☀️  +23°C"`), pas quatre comme le supposait le parsing
+(`response.text.splitlines()`). `len(data) <= 1` était donc TOUJOURS vrai
+— ce module n'avait JAMAIS renvoyé de météo réelle, malgré des tests
+unitaires tous verts (ils ne mockaient que la forme supposée, jamais la
+vraie). Remplacé par le format personnalisé wttr.in `%l|%C|%t|%w|%h`
+(délimité par des barres, 5 champs à position fixe, bien plus fiable à
+analyser qu'un format pensé pour l'affichage humain) et une détection
+d'erreur par code HTTP (`wttr.in` rend un vrai statut 500 sur une ville
+invalide, confirmé en réel : `"location not found: upstream error..."`).
+URL corrigée `http://`→`https://` au passage (le nom de ville partait en
+clair). Second bug, plus mineur, trouvé dans la foulée :
+`format_for_display()` réaccolait `°C`/`%` à des valeurs qui les
+embarquaient déjà (`temperature`/`humidity`), doublant l'unité
+(`+23°C°C`) — corrigé en retirant le suffixe redondant.
+
+**Validé** : `test_weather_manager.py` entièrement réécrit sur les vraies
+réponses observées (7 tests, dont les 2 nouveaux cas HTTP 500/réponse
+incomplète) ; `test_router.py` (+13 tests : `should_use_weather`/
+`extract_city` unitaires, +5 `_build_messages()` : jamais vers le cloud,
+donnée réelle injectée, ville absente demandée plutôt que devinée, échec
+signalé explicitement, silence si question sans rapport). **Validation
+réelle** en deux temps : (1) `WeatherManager` réel appelé directement
+contre `wttr.in` — Paris → `{'temperature': '+23°C', 'condition':
+'Clear', 'wind': '↗13km/h', 'humidity': '70%'}`, ville invalide → `None` ;
+(2) chemin complet réel `LucasCore.prepare()` + `MemoryManager` réel sur
+base temporaire, question « quel temps fait-il à Paris ? » → bloc
+`MÉTÉO RÉELLE (wttr.in) : ...+23°C, Clear, vent ↗13km/h, humidité 70%`
+confirmé dans les messages construits. Suite complète : 1000 passed.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

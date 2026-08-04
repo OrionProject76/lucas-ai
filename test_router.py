@@ -10,6 +10,7 @@ import pytest
 from config import CLOUD_HISTORY_MESSAGES
 from core.router import (
     extract_calculation,
+    extract_city,
     is_sensitive,
     mentions_pc_explicitly,
     route,
@@ -17,6 +18,7 @@ from core.router import (
     should_use_finance,
     should_use_rag,
     should_use_vision,
+    should_use_weather,
     should_use_websearch,
 )
 
@@ -166,6 +168,44 @@ def test_should_use_websearch_ignores_implicit_general_knowledge_questions(quest
     question ordinaire — seule une demande EXPLICITE déclenche la recherche.
     """
     assert not should_use_websearch(question)
+
+
+# ── should_use_weather() / extract_city() (câblé 04/08/2026) ────────────
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "quel temps fait-il à Paris ?",
+        "météo à Lyon",
+        "quelle est la météo de Marseille",
+        "va-t-il pleuvoir a New York",
+        "fait-il beau à Nice",
+    ],
+)
+def test_should_use_weather_detects_weather_questions(question: str) -> None:
+    assert should_use_weather(question)
+
+
+@pytest.mark.parametrize(
+    "question",
+    ["quelle heure est-il ?", "resume le document", "combien font 45 + 32"],
+)
+def test_should_use_weather_ignores_unrelated_questions(question: str) -> None:
+    assert not should_use_weather(question)
+
+
+def test_extract_city_finds_a_named_city() -> None:
+    assert extract_city("quel temps fait-il à Paris ?") == "Paris"
+
+
+def test_extract_city_handles_a_hyphenated_or_multi_word_city() -> None:
+    assert extract_city("météo de Marseille-en-Provence") == "Marseille-en-Provence"
+    assert extract_city("va-t-il pleuvoir a New York") == "New York"
+
+
+def test_extract_city_returns_none_when_no_city_is_named() -> None:
+    """Jamais deviner : mieux vaut demander à Cyril de préciser."""
+    assert extract_city("quel temps fait-il ?") is None
 
 
 # ── Robustesse de la saisie réelle ────────────────────────────────────
@@ -424,6 +464,59 @@ def test_websearch_context_absent_when_question_unrelated(core_with_history: Luc
     monkeypatch.setattr("modules.web_search.WebSearch", _FakeWebSearch)
     messages = core_with_history._build_messages("bonjour", "local")
     assert not any("RECHERCHE WEB" in m["content"] for m in messages)
+
+
+# ── Météo (04/08/2026) ──────────────────────────────────────────────────
+
+class _FakeWeatherManager:
+    def get_current(self, city: str):
+        return None if city == "VilleInconnue" else {
+            "temperature": "+18°C", "condition": "Clear", "wind": "10km/h", "humidity": "50%",
+        }
+
+    def format_for_display(self, data) -> str:
+        return f"Météo actuelle : {data['temperature']}, {data['condition']}"
+
+
+@requires_core
+def test_cloud_never_receives_weather_context(core_with_history: LucasCore, monkeypatch) -> None:
+    monkeypatch.setattr("modules.weather_manager.WeatherManager", _FakeWeatherManager)
+    messages = core_with_history._build_messages("quel temps fait-il à Paris ?", "cloud")
+    assert not any("MÉTÉO" in m["content"] for m in messages)
+
+
+@requires_core
+def test_local_receives_the_real_weather(core_with_history: LucasCore, monkeypatch) -> None:
+    monkeypatch.setattr("modules.weather_manager.WeatherManager", _FakeWeatherManager)
+    messages = core_with_history._build_messages("quel temps fait-il à Paris ?", "local")
+    joined = " ".join(m["content"] for m in messages)
+    assert "+18°C" in joined
+    assert "INTERDIT" in joined
+
+
+@requires_core
+def test_weather_asks_for_a_city_rather_than_guessing(core_with_history: LucasCore, monkeypatch) -> None:
+    """Aucune ville nommée : Luca's doit demander, jamais deviner."""
+    monkeypatch.setattr("modules.weather_manager.WeatherManager", _FakeWeatherManager)
+    messages = core_with_history._build_messages("quel temps fait-il ?", "local")
+    joined = " ".join(m["content"] for m in messages)
+    assert "AUCUNE VILLE NOMMÉE" in joined
+    assert "ne devine JAMAIS" in joined
+
+
+@requires_core
+def test_weather_failure_says_so_explicitly(core_with_history: LucasCore, monkeypatch) -> None:
+    monkeypatch.setattr("modules.weather_manager.WeatherManager", _FakeWeatherManager)
+    messages = core_with_history._build_messages("météo à VilleInconnue", "local")
+    joined = " ".join(m["content"] for m in messages)
+    assert "INDISPONIBLE" in joined
+
+
+@requires_core
+def test_weather_context_absent_when_question_unrelated(core_with_history: LucasCore, monkeypatch) -> None:
+    monkeypatch.setattr("modules.weather_manager.WeatherManager", _FakeWeatherManager)
+    messages = core_with_history._build_messages("bonjour", "local")
+    assert not any("MÉTÉO" in m["content"] for m in messages)
 
 
 @requires_core
