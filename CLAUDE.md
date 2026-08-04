@@ -573,3 +573,20 @@ rattache.
    Avant de lancer une nouvelle tâche, je vérifie aussi si
    `cowork_workspace\reports\` contient un résultat récent pertinent
    pour la session en cours, pour ne pas dupliquer un travail déjà fait.
+
+10. Skills/Plugins : feu vert pour installer une skill officielle
+    Anthropic (via `/plugin`, marketplace par défaut) si elle apporte une
+    réelle valeur à une tâche en cours — pas besoin de demander à chaque
+    fois. Installation en scope PROJET (`.claude/skills/`, pas
+    `~/.claude/skills/`) pour que ce soit visible dans le dépôt Git et
+    traçable, comme le reste.
+
+    Marketplaces tierces/communautaires : PAS de feu vert automatique —
+    une skill externe peut appeler des outils, lire des fichiers du
+    projet, ou générer du code exécuté. Même logique que la liste
+    blanche déjà en place pour les actions système : je propose, je
+    n'installe pas seul depuis une source non-Anthropic sans validation
+    explicite de Cyril.
+
+    Je signale en début de réponse toute skill installée dans la
+    session, avec la raison.
