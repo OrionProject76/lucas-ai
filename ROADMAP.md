@@ -1889,6 +1889,22 @@ au-delà de ce qui existe déjà. Aucun des deux n'a semblé disproportionné
 en soi, mais le temps restant a été priorisé sur la Priorité 5
 (obligatoire), conformément à la consigne de session.
 
+## 5.18 État des lieux complet pour Cyril — dernière tâche, 04/08/2026
+
+Session autonome, Priorité 5 (dernière, obligatoire quel que soit le
+temps restant). Document déposé dans
+`cowork_workspace/reports/Etat_des_lieux_LucasAI_2026-08-04.md`
+(non committé — `cowork_workspace/` reste hors suivi git, comme les
+rapports précédents du 03/08) : carte du projet fichier par fichier,
+architecture actuelle vs `VISION_LONG_TERME.md`, dette technique, points
+de couplage entre modules, une question ouverte.
+
+Trouvé en le rédigeant, à corriger : **`modules/web_search.py` est
+orphelin**, comme `calculator.py`/`weather_manager.py` — `WebSearch`
+n'est instancié nulle part hors de son propre bloc `__main__`. Jamais
+signalé comme tel jusqu'ici malgré 98% de couverture ; un module bien
+testé n'est pas nécessairement un module branché.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
