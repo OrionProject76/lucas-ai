@@ -2059,8 +2059,14 @@ déjà validée le 01/08) passe. `demos/calibrate_rag.py` rejoué sur la collect
 actuelle : recommande toujours ~0,33, aucune dérive du seuil. Pas corrigé : élargir
 le seuil pour rattraper les requêtes courtes réintroduirait des faux positifs
 ailleurs (compromis déjà documenté le 02/08, precision/rappel) — décision de
-tuning, pas un bug de code, à trancher avec Cyril si les requêtes courtes
-deviennent un usage fréquent.
+tuning, pas un bug de code, remontée à Cyril plutôt que tranchée seul.
+
+**Décision de Cyril (04/08/2026)** : `RAG_MAX_DISTANCE` reste à 0,34, inchangé.
+Une requête courte comme « mon CV » sans résultat est un compromis assumé, pas un
+défaut à corriger — le seuil continue de garder 100% des questions hors sujet au
+prix de 12% des extraits pertinents. Ne pas rouvrir cette valeur sans un nouveau
+signal concret (ex. Cyril se plaignant en usage réel que des requêtes courtes
+échouent souvent).
 
 **`modules/voice_manager.py` (TTS) — déjà solide, reconfirmé, aucun bug.** edge_tts
 et Piper appelés en vrai (pas de mock) : MP3 réel 25920 octets (sync word MPEG
