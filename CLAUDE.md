@@ -257,6 +257,18 @@ La section précédente autorise Claude Code à minimiser des fenêtres pour un 
 
 Contexte : incident du 04/08/2026 — une tentative de forcer une fenêtre Notepad de test au premier plan via `Add-Type`/`SetForegroundWindow` a (1) capturé par accident une fenêtre imprévue (l'appli Claude, titres de conversation réels de Cyril, supprimée immédiatement) et (2) été bloquée par Bitdefender avant toute exécution ("script contenu malveillant"). Le motif — `Add-Type` compilant des `P/Invoke` vers `user32.dll` pour manipuler des fenêtres — est précisément le genre de signature heuristique qu'un antivirus est censé bloquer, intention malveillante ou non. Contourner ce blocage n'a jamais été envisagé ; la bonne réponse est de ne pas emprunter ce chemin du tout.
 
+### Précision : jamais afficher le contenu réel d'un fichier de données personnelles, même en diagnostic (acté le 04/08/2026)
+
+**Règle de base** : devant un fichier de données personnelles (finance, mémoire, tout export contenant des informations de Cyril), ne jamais afficher son contenu brut en supposant qu'une ligne donnée est un en-tête ou un exemple sûr — vérifier D'ABORD sa nature (longueur, position, structure) avant tout affichage, même partiel, même à des fins de diagnostic. En cas de doute, lire la structure uniquement (types de caractères, longueurs, comptages), jamais le contenu.
+
+**Complément, trouvé en l'appliquant (§5.23-5.24 de `ROADMAP.md`) : les messages d'exception et les tracebacks contournent cette règle aussi facilement qu'un affichage direct.** Un `CSVFormatError` qui embarque `reader.fieldnames` ou la ligne fautive dans son message, laissé remonter sans être rattrapé, transporte du contenu réel (valeurs de champs, noms de colonnes) jusqu'au terminal — deux fuites réelles se sont produites exactement ainsi le même jour, l'une en affichant une ligne prise à tort pour un en-tête, l'autre en laissant `str(exc)` s'afficher tel quel.
+
+**Ce que ça change concrètement** :
+- Toute exception levée en diagnostiquant un fichier de données personnelles doit être **rattrapée**, jamais laissée remonter telle quelle — et ce qui en est rapporté ne contient que des faits structurels (catégorie de l'échec, position, longueur, type), jamais `str(exc)` in extenso si ce message peut embarquer du contenu du fichier.
+- Tout diagnostic d'un fichier sensible (identifier un nom de colonne, une forme de ligne) se fait par **empreinte** (hash, ex. SHA-256 comparé à des candidats plausibles) ou par **forme** (longueur, nombre de mots, présence d'apostrophe/chiffre) — jamais par affichage, même dans un message d'erreur, même tronqué.
+
+Contexte : deux incidents le 04/08/2026 en validant `finance_manager.py` contre de vrais relevés bancaires — signalés immédiatement à Cyril les deux fois, rien écrit dans un fichier ou un commit. La méthode par empreinte/forme, utilisée pour le reste de ce chantier, a permis d'identifier plusieurs noms de colonnes réels sans jamais les afficher.
+
 ### Précision : toute action manuelle côté client se demande explicitement (acté le 02/08/2026)
 
 La section précédente couvre ce que Claude Code peut faire **lui-même** sur le
