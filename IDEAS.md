@@ -697,25 +697,31 @@ phénomène qui se reproduit.
 ## 80. Cartes d'approbation (ALLOW/DENY) — UX de confirmation Self-Decision
 
 Pour toute action de la future liste blanche Self-Decision (le composant
-`core/decision_engine.py` prévu dans la structure de `CLAUDE.md` mais
-**pas encore construit** — voir #38, le seul mécanisme d'action-sur-liste-
-blanche qui existe réellement aujourd'hui est `modules/automation_manager.py`,
-au périmètre plus étroit : lancer une appli). Une carte explicite (action
-proposée, contexte, boutons Autoriser/Refuser) plutôt qu'une boîte de
-dialogue générique — rend visible CE qui va être fait et POURQUOI, pas
-seulement qu'une confirmation est demandée.
+`core/decision_engine.py` prévu dans la structure de `CLAUDE.md`). Une
+carte explicite (action proposée, contexte, boutons Autoriser/Refuser)
+plutôt qu'une boîte de dialogue générique — rend visible CE qui va être
+fait et POURQUOI, pas seulement qu'une confirmation est demandée.
 
-Prématuré tant que Decision Engine n'existe pas : cataloguée comme
-exigence UX à respecter quand ce chantier s'ouvrira, pas une action à
-mener maintenant.
+**Mise à jour 04/08/2026** : le mécanisme `core/decision_engine.py`
+existe désormais (session autonome, voir `ROADMAP.md` §5.11) — sa
+méthode `confirm` est un callable injectable, prêt à recevoir une future
+UI. **Reste prématuré** : aucune carte d'approbation n'est construite,
+aucune action réelle n'est câblée sur le moteur (`modules/automation_manager.py`
+reste le seul mécanisme d'action réel aujourd'hui, inchangé, toujours sans
+confirmation). Cataloguée comme exigence UX à respecter quand ce chantier
+UI s'ouvrira réellement, avec Cyril — pas une action menée seule.
 
 ## 81. STOP mid-tool-call — interruption immédiate d'une action en cours
 
 Raccourci dédié (ex. Échap) pour interrompre une action Self-Decision
 **en cours d'exécution**, sans attendre sa fin naturelle. Même principe
 de contrôle immédiat que le barge-in (#83 ci-dessous) mais côté action
-système plutôt que côté voix — dépend, comme #80, d'un Decision Engine
-qui n'existe pas encore.
+système plutôt que côté voix.
+
+**Mise à jour 04/08/2026** : comme #80, dépend maintenant d'une UI et
+d'une intégration réelle, pas de l'existence du mécanisme de décision
+lui-même (voir #80) — toujours pas construit, toujours prématuré tant que
+Cyril n'a pas validé le chantier UI en direct.
 
 ## 82. Session unifiée voix+texte — mémoire commune aux deux canaux
 

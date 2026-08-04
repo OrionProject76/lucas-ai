@@ -343,8 +343,9 @@ C:/OrionAI/
 │   ├── world_model.py          # Snapshot système (CPU/RAM/fenêtre active/heure)
 │   ├── dates.py                 # Extraction de périodes (RAG daté)
 │   ├── local_llm.py / cloud_llm.py / ollama_client.py / llm_worker.py / text_utils.py
-│   └── decision_engine.py      # PAS ENCORE CONSTRUIT — liste blanche d'actions OS,
-│                                 planifié, voir ROADMAP.md « Hors tableau »
+│   └── decision_engine.py      # Mécanisme construit le 04/08/2026 (lecture=auto,
+│                                 écriture/exécution=confirmation) — AUCUNE action
+│                                 réelle câblée dessus, voir ROADMAP.md §5.11
 ├── modules/                   # Un fichier par domaine — voir condition ci-dessus
 │   ├── finance_manager.py + finance_categorizer.py   # Import CSV, catégorisation LLM
 │   ├── rag_manager.py                                 # RAG (ChromaDB, ancré core.dates)

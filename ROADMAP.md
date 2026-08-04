@@ -1528,6 +1528,56 @@ avant/après, premier message identique bit à bit, toutes les colonnes
 créées et rétro-remplies (`date`/`last_validated` = `created_at` d'origine,
 ex. `2026-08-02 20:06:58`). Suite complète du projet : 865 passed.
 
+## 5.11 Decision Engine — mécanisme construit le 04/08/2026, AUCUNE action câblée
+
+Session autonome 8-10h, suite du 5.10. `core/decision_engine.py`
+n'existait pas (voir §3, « Hors tableau — Decision Engine »). Construit
+avec un garde-fou explicite posé par l'instruction de session : construire
+et tester le mécanisme, ne câbler aucune nouvelle action système réelle
+dessus.
+
+**Modèle** : trois catégories par CONSÉQUENCE, pas par nature technique —
+`READ` (jamais de confirmation), `WRITE` (confirmation exigée, pas
+journalisée — un volume ou une luminosité changés ne laissent pas de
+trace utile), `EXECUTE` (confirmation exigée ET journalisée — un effet
+externe en laisse une). `DecisionEngine.request(name, run)` n'appelle
+`run` QUE si l'action est passée ; sinon lève `ActionDenied`, jamais une
+valeur "refusé" retournée en silence. Sans callback `confirm` injecté :
+refus systématique par défaut — même principe que `is_sensitive()`
+(CLAUDE.md) qui ne consulte jamais un classifieur, un mécanisme absent ne
+doit jamais avoir pour effet d'AUTORISER.
+
+⚠️ **Écart trouvé par rapport à l'instruction de session, documenté plutôt
+que corrigé en silence** : elle demandait de suivre « la liste blanche
+déjà documentée (volume, luminosité, presse-papier, lancement d'appli,
+capture d'écran) » — recherche faite dans `IDEAS.md`/`VISION_LONG_TERME.md`/
+`ROADMAP.md`, **aucune liste catégorisée de ce type n'existe** ; le seul
+mécanisme de liste blanche réel reste `modules/automation_manager.py`
+(lancement d'appli uniquement, sans catégorie read/write/execute). Les
+cinq exemples cités dans l'instruction ont servi de base pour
+`DEFAULT_ACTIONS` — un jeu d'`ActionSpec` illustratif, catégorisé, **non
+enregistré automatiquement** dans le moteur (`DecisionEngine()` démarre
+toujours vide) et sans aucun callable réel derrière : aucun n'ajuste le
+volume, la luminosité ou le presse-papier de la machine de Cyril.
+
+**Ce qui n'a PAS été touché, comme demandé** : `modules/automation_manager.py`
+reste exactement tel quel — lancement d'appli sans confirmation, jamais
+reroutée par ce moteur. Semantic Desktop reste lecture seule. Aucune
+carte d'approbation UI (`IDEAS.md` #80), aucun STOP mid-tool-call (#81) —
+les deux restent gatées sur une session où Cyril valide l'UI en direct,
+`confirm`/`log_event` restent de simples callables injectables en
+attendant.
+
+**Validé** : 24 tests dans `test_decision_engine.py` — lecture jamais
+confirmée (avec et sans callback), écriture refusée par défaut puis
+acceptée sur confirmation (jamais journalisée), exécution refusée par
+défaut puis acceptée ET journalisée sur confirmation (refus aussi
+journalisé), action inconnue refusée, `ActionSpec` complet transmis à
+`confirm` (nom + description, pour une future carte d'approbation), les
+8 `DEFAULT_ACTIONS` catégorisés comme annoncé. `run` n'est jamais appelé
+quand l'action est refusée (compteur d'appels vérifié à chaque cas de
+refus). Suite complète du projet : 889 passed.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
