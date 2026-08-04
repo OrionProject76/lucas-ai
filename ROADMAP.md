@@ -1840,6 +1840,55 @@ lignes à 1-8 par fichier sur `core/dates.py`, `core/lucas_core.py`,
 `ollama`), `modules/weather_manager.py`, `modules/web_search.py`,
 `security/guardian.py`, `security/ransomware_watch.py`.
 
+## 5.17 Stratégie de test UI PySide6 — écart trouvé, fondations déjà là, 04/08/2026
+
+Session autonome, Priorité 4 ("si le temps le permet"). L'instruction de
+session partait de « seule zone jamais couverte du projet
+(`ui/avatar_widget.py` 48%, `ui/chat_widget.py` 0%, `ui/main_window.py`
+65%) » — vérifié avant de construire quoi que ce soit, comme pour les
+écarts trouvés précédemment (§5.11, §5.15).
+
+⚠️ **Écart confirmé, documenté plutôt que corrigé en silence** :
+
+- **Une vraie stratégie existe déjà**, et fonctionne : `test_avatar.py`
+  (43 tests avant cette session), `test_ui_workers.py` (25+ tests). Le
+  patron — `QT_QPA_PLATFORM=offscreen` + vraie `QApplication` + widgets
+  construits pour de vrai + `repaint()` qui déclenche un VRAI
+  `paintEvent()` — n'a pas besoin de `pytest-qt` (non installé, non
+  nécessaire) : les méthodes (`set_state()`, `update_animation()`,
+  handlers d'événements) s'appellent directement, sans boucle
+  d'événements Qt à simuler. Ce n'était donc pas à construire, seulement
+  à étendre — la vraie tâche n'était pas "poser des fondations" mais
+  fermer les quelques trous réels qui restaient dans une stratégie déjà
+  mature.
+- **`ui/chat_widget.py` (0%) est du CODE MORT**, pas un trou de
+  test : `grep` sur tout le dépôt ne trouve `ChatWidget` nulle part en
+  dehors de sa propre définition et de son bloc `__main__`.
+  `ui/main_window.py` construit son propre `QTextEdit` directement
+  (ligne 319) sans jamais importer cette classe. Écrire des tests pour
+  du code qu'aucun chemin réel n'exécute n'aurait rien prouvé — signalé
+  ici pour `cowork_workspace`/Priorité 5, pas testé.
+
+**Fait** : 2 tests ajoutés à `test_avatar.py` (43 → 45) pour la seule
+vraie lacune trouvée en lisant `ui/avatar_widget.py` — `mouseMoveEvent()`
+n'était exercé par aucun test (le suivi du regard par la souris, hors du
+mode WATCHING). Repéré au passage, non corrigé (hors périmètre d'une
+extension de tests) : `event.pos()` (ligne 278) et le constructeur
+`QMouseEvent(type, pos, button, buttons, modifiers)` utilisés dans le
+test sont tous deux dépréciés par PySide6 — `event.position()` est le
+remplaçant actuel. Sans effet aujourd'hui (avertissement, pas erreur),
+à corriger lors d'un futur passage sur `ui/`.
+
+**Non fait, par manque de temps face au reste de la liste** : mesure de
+couverture exacte fraîche pour `ui/` — l'outillage `pytest-cov` a
+recommencé à échouer de façon reproductible sur ce processus Python en
+cours de session (même symptôme numpy/chromadb documenté §5.9, mais
+cette fois non résolu en relançant ni en vidant `.coverage`) ; extension
+de `ui/main_window.py` (65%, déjà bien couvert par `test_ui_workers.py`)
+au-delà de ce qui existe déjà. Aucun des deux n'a semblé disproportionné
+en soi, mais le temps restant a été priorisé sur la Priorité 5
+(obligatoire), conformément à la consigne de session.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

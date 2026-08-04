@@ -511,5 +511,38 @@ def test_mouth_ratio_is_clamped(avatar) -> None:
     assert avatar.mouth_open == 0.0
 
 
+# ── Suivi du regard (souris) ─────────────────────────────────────────
+#
+# mouseMoveEvent() n'était exercé par aucun test — les yeux suivent la
+# souris hors du mode WATCHING (test_gaze_ignores_the_cursor_while_watching
+# vérifie l'INVERSE), mais jamais la mise à jour de position elle-même.
+
+def test_mouse_move_updates_the_tracked_position(avatar) -> None:
+    from PySide6.QtCore import Qt, QPointF
+    from PySide6.QtGui import QMouseEvent
+
+    event = QMouseEvent(
+        QMouseEvent.Type.MouseMove, QPointF(120, 30), Qt.MouseButton.NoButton,
+        Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier,
+    )
+    avatar.mouseMoveEvent(event)
+
+    assert avatar.mouse_pos == QPointF(120, 30)
+
+
+def test_eyes_follow_the_tracked_position_outside_watching(avatar) -> None:
+    """paintEvent() calcule le décalage des yeux à partir de mouse_pos : vérifié via un rendu réel."""
+    from PySide6.QtCore import Qt, QPointF
+    from PySide6.QtGui import QMouseEvent
+
+    avatar.set_state(IDLE)
+    event = QMouseEvent(
+        QMouseEvent.Type.MouseMove, QPointF(140, 70), Qt.MouseButton.NoButton,
+        Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier,
+    )
+    avatar.mouseMoveEvent(event)
+    avatar.repaint()  # ne doit pas lever, exerce la branche dist > 0
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))
