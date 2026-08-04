@@ -2764,6 +2764,95 @@ prises de parole consécutives dans la même session.
 Aucun test Python affecté (fichier JS seul) ; suite complète rejouée par
 prudence, 1061 passed, sans régression.
 
+## 5.29 Démarrage automatique du serveur à la connexion Windows — changement de posture, 05/08/2026
+
+⚠️ **Changement de posture, pas juste une commande de plus.** Jusqu'ici, le
+serveur FastAPI/uvicorn (`api.server:app`, port 8000) ne tournait que si
+quelqu'un le relançait manuellement (Cyril ou moi, en session). Désormais il
+démarre **tout seul, en continu, dès l'ouverture de session Windows de
+Cyril** — la PWA mobile et l'app PySide6 peuvent s'y connecter sans qu'il
+ait jamais tapé la commande. C'est le socle qui rend le pont mobile fiable
+dans la durée (jusqu'ici, un redémarrage de PC coupait le service jusqu'à
+relance manuelle — ce qui aurait été le cas au prochain redémarrage de
+Cyril sans ce chantier).
+
+**Demande explicite de Cyril**, suite à la vérification de propreté du dépôt
+avant un redémarrage prévu pour mise à jour Windows — il a préféré construire
+le démarrage automatique plutôt que continuer à relancer à la main.
+
+### Ce qui a été créé
+
+- **`C:\OrionAI\start_server_hidden.vbs`** — script de lancement, commité au
+  dépôt. Un `.vbs` est nécessaire (pas juste `pythonw.exe` en action directe
+  de tâche planifiée) parce que le Planificateur de tâches n'a pas de réglage
+  natif "fenêtre cachée" pour une action arbitraire, et que la redirection
+  de sortie (`>>`) exige un interpréteur shell. `WScript.Shell.Run(cmd, 0,
+  False)` lance `cmd.exe` avec le style de fenêtre 0 (caché) sans attendre sa
+  fin — ni `cmd.exe` ni `python.exe` n'affichent quoi que ce soit, contrairement
+  à `start /min` qui reste visible dans la barre des tâches.
+- **Tâche planifiée `LucasAPIServer`** (Planificateur de tâches Windows) :
+  - Déclencheur : **à la connexion** de l'utilisateur `lucas-project\pc`
+    (`AtLogOn`), explicitement pas "au démarrage du système" — évite les
+    problèmes de droits/PATH avant l'ouverture de session.
+  - Action : `wscript.exe "C:\OrionAI\start_server_hidden.vbs"`, qui lance la
+    commande manuelle exacte déjà utilisée (`venv\Scripts\python.exe -m
+    uvicorn api.server:app --host 0.0.0.0 --port 8000 --ssl-certfile
+    data/cert.pem --ssl-keyfile data/key.pem`) depuis `C:\OrionAI`.
+  - Sortie standard/erreur redirigée vers **`data/logs/server_startup.log`**
+    (déjà dans `.gitignore`, dossier existant) — sans ça, un échec de
+    démarrage serait invisible puisqu'il n'y a plus de fenêtre à regarder.
+
+### Validation faite, et ce qui ne l'a délibérément PAS été
+
+Validé en conditions réelles, pas seulement en lisant la config de la tâche :
+1. Process manuel existant (PID 40832, en écoute sur le port 8000, connexion
+   `Established` avec le téléphone) arrêté proprement — arbre parent-enfant
+   complet identifié et stoppé ensemble (`nohup.exe` → stub `venv` → vrai
+   interpréteur en écoute), suivant la procédure déjà documentée après les
+   incidents du 03-04/08/2026. Port confirmé libre avant la suite.
+2. Tâche déclenchée manuellement (`schtasks /run /tn "LucasAPIServer"`) —
+   déclenche exactement la même action qu'un vrai logon, sans avoir besoin
+   d'un logon réel pour la valider.
+3. Confirmé : **aucune fenêtre visible**, arbre de process exact
+   `cmd.exe (caché) → venv\Scripts\python.exe → python.exe réel`, port 8000
+   de nouveau en écoute, `data/logs/server_startup.log` montre la séquence de
+   démarrage propre attendue (`Uvicorn running on https://0.0.0.0:8000`), et
+   le téléphone de Cyril s'est reconnecté seul (`WebSocket /ws?token=...
+   [accepted]` dans le log, quelques secondes après le déclenchement).
+
+⚠️ **Non fait délibérément** : une vraie déconnexion/reconnexion de la
+session Windows, alors que Cyril l'avait demandée explicitement. Raison :
+mon exécution (les commandes que je lance) tourne à l'intérieur de sa
+session interactive actuelle — une vraie déconnexion risquerait de couper
+mon propre processus immédiatement, avant d'avoir pu confirmer le résultat
+ou continuer si quelque chose se passait mal. Le déclenchement manuel
+ci-dessus exerce la même action que la tâche planifiée exécuterait à la
+connexion (le Planificateur ne différencie pas l'action selon le
+déclencheur qui l'a appelée) — mais ne prouve pas à 100% que le
+déclencheur `AtLogOn` lui-même se déclenche correctement. Cyril peut
+compléter cette validation-là lui-même, à sa convenance (une vraie
+déconnexion/reconnexion, ou le redémarrage déjà prévu pour la mise à jour
+Windows suffira aussi).
+
+### Comment désactiver ou revenir en arrière (Cyril, sans moi)
+
+- **Désactiver temporairement** (garder la tâche, arrêter l'auto-démarrage) :
+  Planificateur de tâches → Bibliothèque → `LucasAPIServer` → clic droit →
+  Désactiver. Ou en PowerShell : `Disable-ScheduledTask -TaskName
+  "LucasAPIServer"`.
+- **Supprimer complètement** : `Unregister-ScheduledTask -TaskName
+  "LucasAPIServer" -Confirm:$false` (PowerShell), ou clic droit → Supprimer
+  dans l'interface graphique. Le fichier `start_server_hidden.vbs` peut
+  rester sur le disque sans effet si la tâche est supprimée.
+- **Revenir au lancement manuel seul** : supprimer la tâche (ci-dessus) —
+  la commande manuelle habituelle continue de fonctionner à l'identique,
+  rien dans le serveur lui-même n'a changé.
+
+Aucun test Python affecté (configuration système, pas de code applicatif) ;
+`start_server_hidden.vbs` commité au dépôt, `data/logs/server_startup.log`
+reste non versionné (déjà couvert par `.gitignore`, contenu qui grossit à
+chaque démarrage).
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
