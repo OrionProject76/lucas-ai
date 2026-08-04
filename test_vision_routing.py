@@ -96,7 +96,16 @@ class _FakeMemory:
     def load_history(self):
         return list(self._history)
 
+    def load_history_with_metadata(self):
+        return [
+            {"role": r, "message": m, "confidence": 1.0, "importance": 0.5, "expiration": None}
+            for r, m in self._history
+        ]
+
     def load_recent_events(self, limit=5):
+        return []
+
+    def load_recent_events_with_metadata(self, limit=5):
         return []
 
     def save_event(self, event_type, details=""):

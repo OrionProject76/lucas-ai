@@ -379,6 +379,15 @@ CLOUD_HISTORY_MESSAGES: int = 6
 # requête cloud — voir LucasCore._build_messages().
 RECENT_EVENTS_IN_PROMPT: int = 5
 
+# Seuil sous lequel un souvenir (message ou événement, colonne `confidence`
+# — IDEAS.md #2bis) est signalé comme incertain dans le prompt plutôt que
+# traité comme un fait établi. Même valeur que TranscriptResult.is_confident
+# (modules/stt_engine.py) — pas une coïncidence recherchée, juste le même
+# ordre de grandeur raisonnable pour "assez sûr pour agir dessus" en
+# l'absence, pour l'un comme pour l'autre, de mesure réelle qui justifierait
+# une valeur différente. Voir core/memory_weighting.py.
+MEMORY_CONFIDENCE_THRESHOLD: float = 0.6
+
 # Historique joint quand une SOURCE EXTERNE est injectée — écran (vision)
 # ou documents personnels (RAG). Les deux ont exactement le même problème,
 # et c'est pour l'avoir oublié que le RAG est resté cassé après la

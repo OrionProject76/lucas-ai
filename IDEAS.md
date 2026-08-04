@@ -91,9 +91,18 @@ doit porter ces métadonnées, pas juste le contenu brut :
 voir `ROADMAP.md` §5.10) : les six colonnes existent sur `conversations`
 et `system_events`, migration additive (bases existantes rétro-remplies
 depuis `created_at`), `save_message()`/`save_event()` les acceptent en
-paramètres optionnels avec des valeurs par défaut sûres. **L'exploitation
-reste future** : rien ne repondère aujourd'hui le Reasoning Engine ou le
-RAG sur ces valeurs — c'est le chantier suivant, pas celui-ci.
+paramètres optionnels avec des valeurs par défaut sûres.
+
+**Première exploitation faite le 04/08/2026** (`core/memory_weighting.py`,
+voir `ROADMAP.md` §5.14) : un souvenir à faible confiance ou expiré est
+signalé explicitement dans le prompt (annotation du contenu, pas une
+pondération numérique — un message de chat n'en a pas). Branché sur
+l'historique de conversation et les événements système
+(`core/lucas_core.py::_build_messages()`). **PAS branché sur le RAG**
+(ChromaDB a un schéma de métadonnées différent, sans confidence) ni sur
+Reasoning Engine (`REASONING_ENGINE_ENABLED` reste `False`, non touché).
+No-op aujourd'hui sur la vraie base de Cyril : personne n'écrit encore de
+confiance réduite.
 
 Pourquoi : évite qu'une info fausse ou périmée devienne une vérité figée dans
 la mémoire de Luca's juste parce qu'elle a été écrite une fois. Ajoute ces

@@ -25,6 +25,7 @@ from config import (
 )
 from core.cloud_llm import ask_cloud
 from core.local_llm import ask_local
+from core.memory_weighting import annotate_uncertain_events, annotate_uncertain_history
 from core.reasoning_engine import ReasoningEngine
 from core.router import (
     mentions_pc_explicitly,
@@ -210,7 +211,13 @@ class LucasCore:
         # system_events contient des extraits de contenu sensible (voir
         # voice_manager._log), qui n'ont aucune raison de sortir.
         if not is_cloud:
-            events = self.memory.load_recent_events(limit=RECENT_EVENTS_IN_PROMPT)
+            # annotate_uncertain_events() rend la même forme (event_type,
+            # details, date) que load_recent_events() — voir
+            # core/memory_weighting.py pour ce qui change (rien tant que
+            # rien n'écrit une confiance réduite ou une expiration).
+            events = annotate_uncertain_events(
+                self.memory.load_recent_events_with_metadata(limit=RECENT_EVENTS_IN_PROMPT)
+            )
             events_context = format_events_for_prompt(events)
             if events_context:
                 messages.append({"role": "system", "content": events_context})
@@ -285,7 +292,11 @@ class LucasCore:
                         "sans confirmation que Cyril est devant ce PC",
                     )
 
-        history = self.memory.load_history()
+        # annotate_uncertain_history() rend la même forme (role, content)
+        # que load_history() — voir core/memory_weighting.py. Tout ce qui
+        # suit (troncatures, filtre vision, fit_history_to_budget) opère
+        # sur des tuples (role, content) ordinaires, strictement inchangé.
+        history = annotate_uncertain_history(self.memory.load_history_with_metadata())
         if is_cloud:
             history = history[-CLOUD_HISTORY_MESSAGES:]
 

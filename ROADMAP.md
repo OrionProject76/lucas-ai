@@ -1674,6 +1674,70 @@ détecté `NONE` (correct, pas dans la liste des apps pro) ; après la
 commande réelle « active le mode focus », mode `DEEP_FOCUS`, reste actif
 sur la même fenêtre. Suite complète du projet : 913 passed.
 
+## 5.14 Memory Palace — première exploitation réelle de confiance/provenance, 04/08/2026
+
+Session autonome, suite directe de la nuit du 03-04/08 (§5.10 posait le
+socle, non exploité). `core/memory_weighting.py` (nouveau) :
+`annotate_uncertain_history()` / `annotate_uncertain_events()`.
+
+**Portée, posée en tête du module** : un message envoyé à un LLM n'a pas
+de poids numérique réglable — la seule façon réelle de le faire "peser
+moins" est de le DIRE au modèle. `UNCERTAIN_MARKER` est préfixé au
+contenu d'un souvenir dont `confidence < MEMORY_CONFIDENCE_THRESHOLD`
+(0.6, `config.py` — même ordre de grandeur que `TranscriptResult.is_confident`,
+`modules/stt_engine.py`) ou dont `expiration` est passée. Une date
+d'expiration illisible n'est JAMAIS traitée comme expirée — même
+principe que `security/status.py::_is_active()`.
+
+**Branché** : `core/lucas_core.py::_build_messages()`, à la toute
+première étape — `history = annotate_uncertain_history(self.memory.load_history_with_metadata())`
+remplace l'ancien `self.memory.load_history()`, et le même geste pour
+les événements système. Choix délibéré : les DEUX fonctions rendent
+EXACTEMENT la même forme de tuples que les méthodes qu'elles
+remplacent — tout le reste de `_build_messages()` (troncatures
+`SOURCE_HISTORY_MESSAGES`/`CLOUD_HISTORY_MESSAGES`, filtre
+`is_vision_refusal()`, `fit_history_to_budget()`) continue d'opérer sur
+des tuples ordinaires, strictement inchangé. Cette prudence n'était pas
+optionnelle : `_build_messages()` porte plusieurs correctifs mesurés en
+conditions réelles (0/9 → 9/9 sur des sondes précises, voir §5.5/§5.6) —
+le risque de régression y est plus élevé que partout ailleurs dans le
+projet.
+
+**PAS branché** sur le RAG (`modules/rag_manager.py`) : les documents
+RAG vivent dans ChromaDB avec un schéma de métadonnées différent
+(source, chunk, sha, periods) qui n'a jamais eu de colonne
+confidence/expiration — IDEAS.md #2bis parlait explicitement de "la
+table memories/events SQLite existante", pas de ChromaDB. Étendre le
+RAG serait un chantier différent, non demandé ici. **PAS branché** sur
+Reasoning Engine — `REASONING_ENGINE_ENABLED` reste `False`, non touché.
+
+⚠️ **Effet secondaire découvert en réparant les tests, pas en codant** :
+brancher `load_history_with_metadata()`/`load_recent_events_with_metadata()`
+dans `_build_messages()` a cassé 66 tests dans 6 fichiers
+(`test_lucas_core.py`, `test_memory_context.py`, `test_history_budget.py`,
+`test_vision_routing.py`, `test_router.py`, `test_dates.py`) — chacun
+définit sa propre fausse mémoire (`_FakeMemory`/`_Memoire`) qui
+n'implémentait que `load_history()`/`load_recent_events()`. Les 6
+classes ont reçu les deux méthodes enrichies manquantes (dérivées de
+leurs méthodes existantes, confiance 1.0 par défaut — aucun changement
+de comportement testé). Résolu avant de continuer, pas laissé de côté.
+
+**Pourquoi c'est un no-op aujourd'hui, et c'est le résultat attendu** :
+aucun appelant du projet n'écrit une confiance réduite ou une
+expiration. **Validé sur une copie de la vraie base de Cyril** :
+100 messages, une seule valeur de confiance trouvée (`1.0`), aucune
+expiration — `annotate_uncertain_history()`/`annotate_uncertain_events()`
+rendent des résultats identiques bit à bit à `load_history()`/
+`load_recent_events()`. Le socle est prêt pour le jour où une source
+moins fiable écrira avec une confiance réduite ; rien ne le fait encore.
+
+**Validé** : 13 tests dans `test_memory_weighting.py` (message/événement
+pleinement fiable inchangé, seuil configurable et comparaison stricte,
+expiration passée/future/absente/illisible, event_type jamais touché
+— `format_events_for_prompt()` en dépend pour filtrer `tts_*` —, et un
+test bout en bout vérifiant qu'un souvenir à faible confiance atteint
+bien le prompt signalé). Suite complète : 926 passed.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

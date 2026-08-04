@@ -273,7 +273,16 @@ def test_une_recherche_infructueuse_est_annoncee_au_modele(monkeypatch):
         def load_history(self):
             return [("user", "mon salaire de juillet 2024")]
 
+        def load_history_with_metadata(self):
+            return [
+                {"role": r, "message": m, "confidence": 1.0, "importance": 0.5, "expiration": None}
+                for r, m in self.load_history()
+            ]
+
         def load_recent_events(self, limit=5):
+            return []
+
+        def load_recent_events_with_metadata(self, limit=5):
             return []
 
         def save_event(self, *a, **k):
