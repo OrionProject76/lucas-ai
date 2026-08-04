@@ -891,6 +891,142 @@ def test_one_broken_sensor_does_not_hide_the_others(monkeypatch, tmp_path) -> No
     assert "ransom_extension" in kinds, "le signal du rançongiciel doit survivre"
 
 
+# ── Persistance : internes du registre (04/08/2026) ────────────────────
+#
+# Tous les tests ci-dessus remplacent _read_registry_autostarts() et
+# _read_startup_folder() par de FAUSSES fonctions entières — utile pour
+# tester scan(), mais ça laisse leur vrai contenu (parcours des ruches,
+# arrêt sur OSError, résolution du dossier Démarrage) jamais exécuté.
+# Trouvé via mesure de couverture réelle (pytest-cov) : ces deux
+# fonctions étaient les moins couvertes de tout le paquet security/.
+# winreg est un vrai module Windows ici (pas un stub) — ses fonctions
+# sont mockées individuellement pour exercer le vrai corps des fonctions.
+
+class _FakeRegistryKey:
+    """Imite un handle winreg utilisable en `with ... as key:`."""
+
+    def __init__(self, entries: list[tuple[str, str]] | None = None) -> None:
+        self.entries = entries or []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info) -> bool:
+        return False
+
+
+def test_read_registry_autostarts_parses_multiple_hives(monkeypatch) -> None:
+    import winreg
+
+    from security.persistence_watch import _read_registry_autostarts
+
+    run_key_hkcu = _FakeRegistryKey([("AppA", r"C:\Program Files\a.exe")])
+    run_key_hklm = _FakeRegistryKey([("AppB", r"C:\Windows\b.exe")])
+
+    monkeypatch.setattr(winreg, "HKEY_CURRENT_USER", "HKCU_SENTINEL")
+    monkeypatch.setattr(winreg, "HKEY_LOCAL_MACHINE", "HKLM_SENTINEL")
+
+    def fake_open_key(hive, subkey):
+        if hive == "HKCU_SENTINEL" and subkey.endswith(r"\Run"):
+            return run_key_hkcu
+        if hive == "HKLM_SENTINEL" and subkey.endswith(r"\Run"):
+            return run_key_hklm
+        raise OSError("clé absente (RunOnce, non peuplée dans ce test)")
+
+    def fake_enum_value(key, index):
+        if index >= len(key.entries):
+            raise OSError("plus d'entrées")
+        name, value = key.entries[index]
+        return name, value, 1  # REG_SZ
+
+    monkeypatch.setattr(winreg, "OpenKey", fake_open_key)
+    monkeypatch.setattr(winreg, "EnumValue", fake_enum_value)
+
+    entries = _read_registry_autostarts()
+
+    names = {name for _source, name, _command in entries}
+    assert names == {"AppA", "AppB"}, (
+        "les deux ruches (HKCU et HKLM) doivent être parcourues, "
+        "RunOnce absent doit être ignoré sans faire échouer le reste"
+    )
+
+
+def test_read_registry_autostarts_returns_empty_without_winreg(monkeypatch) -> None:
+    """Hors Windows (ou winreg indisponible), un capteur muet plutôt qu'une exception."""
+    import builtins
+
+    from security import persistence_watch as pw
+
+    real_import = builtins.__import__
+
+    def _blocked_import(name, *args, **kwargs):
+        if name == "winreg":
+            raise ImportError("pas de winreg ici")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _blocked_import)
+
+    assert pw._read_registry_autostarts() == []
+    assert pw._read_startup_folder() == []
+
+
+def test_read_startup_folder_lists_files_but_not_subdirectories(monkeypatch, tmp_path) -> None:
+    import winreg
+
+    from security.persistence_watch import _read_startup_folder
+
+    (tmp_path / "raccourci.lnk").write_text("contenu")
+    (tmp_path / "sous_dossier").mkdir()
+
+    monkeypatch.setattr(winreg, "OpenKey", lambda *a, **k: _FakeRegistryKey())
+    monkeypatch.setattr(winreg, "QueryValueEx", lambda key, name: (str(tmp_path), None))
+
+    names = {name for _source, name, _command in _read_startup_folder()}
+    assert names == {"raccourci.lnk"}, "un sous-dossier n'est pas un raccourci de démarrage"
+
+
+def test_read_startup_folder_empty_when_registry_key_missing(monkeypatch) -> None:
+    import winreg
+
+    from security.persistence_watch import _read_startup_folder
+
+    def _raise(*a, **k):
+        raise OSError("clé absente")
+
+    monkeypatch.setattr(winreg, "OpenKey", _raise)
+
+    assert _read_startup_folder() == []
+
+
+def test_read_startup_folder_empty_when_path_does_not_exist(monkeypatch, tmp_path) -> None:
+    import winreg
+
+    from security.persistence_watch import _read_startup_folder
+
+    missing = tmp_path / "n_existe_pas"
+    monkeypatch.setattr(winreg, "OpenKey", lambda *a, **k: _FakeRegistryKey())
+    monkeypatch.setattr(winreg, "QueryValueEx", lambda key, name: (str(missing), None))
+
+    assert _read_startup_folder() == []
+
+
+def test_persistence_watch_logs_non_info_findings_only(history) -> None:
+    logged: list[tuple[str, str]] = []
+    watch = PersistenceWatch(
+        log_event=lambda t, d="": logged.append((t, d)), history=history
+    )
+    findings = [
+        Finding(CRITICAL, "autostart_volatile", "danger", {"entree": "x"}),
+        Finding(INFO, "autostart_inventory", "juste un inventaire", {"total": 1}),
+    ]
+
+    watch._log(findings)
+
+    assert len(logged) == 1 and "autostart_volatile" in logged[0][0], (
+        "un INFO ne doit jamais atteindre system_events — trop bruyant pour un simple inventaire"
+    )
+
+
 # ── Rapport ───────────────────────────────────────────────────────────
 
 def test_empty_report_is_reassuring_not_empty() -> None:
