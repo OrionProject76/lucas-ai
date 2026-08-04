@@ -591,3 +591,30 @@ rattache.
 
     Je signale en début de réponse toute skill installée dans la
     session, avec la raison.
+
+11. Effort (profondeur de raisonnement) : feu vert pour ajuster
+    `effortLevel` dans `.claude/settings.json` (scope PROJET, committé,
+    traçable — pas `.claude/settings.local.json`) selon la tâche en
+    cours. Contrairement à `/model`, ceci ne demande aucune interaction
+    humaine — pas besoin de demander à chaque fois.
+
+    - `"high"` par défaut pour : tout ce qui touche `security/*`, une
+      décision d'architecture, un bug qui résiste à un premier passage,
+      toute synthèse/audit destinée à être lue par Cyril (comme le
+      rapport de fin de session ou l'état des lieux).
+    - `"medium"` acceptable pour : ajout de tests suivant un patron déjà
+      établi, correctifs mineurs, refactor mécanique sans ambiguïté.
+    - Jamais en dessous de `"medium"` seul — `"low"` reste réservé à une
+      demande explicite de Cyril.
+
+    Je signale en début de réponse tout changement de niveau et
+    pourquoi — même traçabilité que le signalement d'une tâche plus
+    complexe que prévu.
+
+    ⚠️ Correction en écrivant cette règle : le texte transmis renvoyait
+    à « règle 9 » pour la traçabilité Opus — rule 9 de ce fichier parle
+    de `cowork_workspace/`, sans rapport. Aucune règle numérotée
+    n'existe pour ce signalement Opus (c'est une consigne de méthode de
+    session, pas une règle de ce fichier) ; la référence erronée n'a pas
+    été recopiée pour ne pas enraciner une fausse piste dans un document
+    de référence.
