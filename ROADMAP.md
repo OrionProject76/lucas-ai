@@ -2598,6 +2598,102 @@ sur base temporaire, question « ouvre le bloc-notes » →
 enregistrée dans un DecisionEngine en cours d'exécution" ne vaut plus
 depuis ce chantier — gardé pour l'historique, précisé plutôt que réécrit.
 
+## 5.26 Premier vrai test audio (PWA mobile) — 2 bugs réels confirmés et corrigés, 1 non élucidé
+
+Cyril fait le tout premier test audio réel du projet sur son S25 Ultra
+(jusqu'ici tout le pont audio n'avait été validé qu'avec des mocks, faute
+de micro/haut-parleur sur le PC) et remonte trois symptômes. Diagnostic
+fait avant tout correctif, comme d'habitude.
+
+### 1. Réponse vocale tronquée ("2026" au lieu de la phrase complète) — corrigé
+
+**Cause confirmée** : `modules/voice_manager.py` écrivait toujours sur un
+chemin FIXE partagé (`data/output.mp3` / `data/output_piper.wav`) — et
+`_voice_manager` (`api/server.py`) est une instance UNIQUE partagée entre
+TOUTES les connexions WebSocket (confirmé : deux connexions actives, PC
+et téléphone, au moment du redémarrage du serveur §5.25). Deux synthèses
+qui se chevauchent dans le temps (edge_tts prend plusieurs secondes,
+largement de quoi se chevaucher entre deux messages ou deux clients)
+écrivent alors sur le MÊME fichier — la seconde écriture tronque/écrase
+le début du fichier de la première pendant que le serveur est encore en
+train de le lire, un décodeur audio ne retrouvant une trame valide que
+vers la fin (cohérent avec "seule la fin est entendue").
+
+**Corrigé** : chaque synthèse (`_synthesize_edge()`/`_synthesize_piper()`)
+génère désormais un chemin UNIQUE (`data/tts_<uuid>.<ext>`), éliminant la
+course entièrement quel que soit le nombre de synthèses simultanées.
+Nettoyage ajouté après lecture (`api/server.py`) et après lecture locale
+(`speak()`, UI PySide6) — les anciens chemins fixes étaient aussi, par
+construction, auto-limités à 2 fichiers ; des chemins uniques doivent
+être nettoyés explicitement pour ne pas s'accumuler dans `data/`.
+
+**Validé en conditions réelles** : deux synthèses edge_tts réelles
+lancées en parallèle (threads) — chemins distincts confirmés, les deux
+fichiers ont un en-tête MP3 valide, tailles cohérentes avec la longueur
+de leur texte respectif (36144 et 30384 octets). Le texte affiché
+lui-même n'a jamais été en cause (`protocol.chat(answer)` envoie toujours
+la réponse complète, indépendamment de la synthèse audio) — vérifié en
+lisant le chemin de code, pas supposé. 2 tests ajoutés
+(`test_voice_router.py`) confirmant l'unicité du chemin à chaque appel.
+
+### 2. Bouton mute non fiable ("parfois oui, parfois non") — corrigé
+
+**Cause confirmée** : le drapeau d'activation de la voix est capturé au
+moment de l'ENVOI du message (`sendChat(text, voiceOutput.enabled)`,
+`static/js/app.js`) et transmis au serveur, qui décide DE SYNTHÉTISER (ou
+non) sur cette base. Mais `onSpeech` (`static/js/app.js`) appelait
+`voiceOutput.play()` sans jamais revérifier l'état ACTUEL de
+`voiceOutput.enabled` au moment où l'audio arrive réellement — edge_tts
+prenant plusieurs secondes, un mute cliqué APRÈS l'envoi mais AVANT
+l'arrivée de la réponse vocale ne changeait rien : l'audio jouait quand
+même. D'où le caractère aléatoire observé : ça dépend uniquement du
+timing entre le clic mute et l'aller-retour réseau.
+
+**Corrigé** : `VoiceOutput.play()` revérifie `this.enabled` en tout
+premier, et ignore l'audio reçu si désactivé entre-temps — un second
+verrou côté client, indépendant du drapeau déjà envoyé au serveur.
+
+### 3. Micro incomplet/imprécis — non élucidé, corrigé partiellement, instrumenté
+
+**Hypothèses testées et ÉCARTÉES, pas supposées** :
+- *Décalage d'extension de fichier* : le client envoie l'audio brut sans
+  jamais transmettre son vrai type MIME (`static/js/websocket.js::sendAudio()`
+  n'envoie que `audio_base64`) — le serveur transcrit toujours avec le
+  suffixe par défaut `.wav` (`transcribe_base64()`), quel que soit le
+  format réel (webm/opus sur la plupart des navigateurs mobiles).
+  **Reproduit avec un vrai fichier webm/opus** (parole réelle générée par
+  Piper, réencodée en webm/opus via PyAV, comme le ferait un vrai
+  téléphone) : transcription strictement IDENTIQUE avec un suffixe
+  `.wav` ou `.webm` — ffmpeg/PyAV détecte le format réel par le contenu
+  du fichier, pas par son extension. Cette piste est écartée.
+- *Détection de fin de parole automatique* : aucune ne s'est trouvée dans
+  `static/js/audio.js` — l'enregistrement ne s'arrête que sur un second
+  clic explicite du bouton micro. Pas de coupure automatique côté client.
+- *Limite de taille WebSocket* : aucune configurée explicitement,
+  largement au-dessus de ce qu'une voix courte en Opus représenterait.
+
+**Corrigé, en hygiène, sans garantie que ce soit la cause** :
+`getUserMedia()` du bouton micro utilisait `{audio: true}` nu, sans
+réglages explicites — contrairement au flux de surveillance du barge-in
+(`voice_output.js`), déjà aligné sur `echoCancellation`/`noiseSuppression`
+explicites. Alignés, avec `autoGainControl` volontairement laissé à sa
+valeur par défaut (activé) plutôt qu'à `false` comme le barge-in : la
+dictée profite d'une voix normalisée, le barge-in a besoin d'un gain
+stable pour comparer à un seuil RMS fixe — besoins opposés, pas un oubli.
+
+**Instrumentation ajoutée pour le prochain test réel**, plutôt qu'un
+correctif à l'aveugle sur une cause non confirmée : durée et taille
+réelles de l'enregistrement journalisées côté client (console du
+navigateur, `static/js/audio.js`), durée détectée par Whisper renvoyée au
+client via un message d'activité (`api/server.py`) — comparer les deux
+au prochain essai dira si l'enregistrement envoyé est déjà incomplet
+(bug côté navigateur/matériel) ou si le problème est ailleurs (modèle,
+réseau). 1 test ajouté (`test_server.py`) sur la présence de ce message.
+
+**Suite complète** : 1061 passed — 3 tests ajoutés ce chantier (2 unicité
+de chemin TTS dans `test_voice_router.py`, 1 message diagnostic micro
+dans `test_server.py`).
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

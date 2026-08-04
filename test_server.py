@@ -718,6 +718,33 @@ def test_websocket_audio_is_transcribed_and_answered(client, fake_core, fake_stt
     assert "audio transcrit" in answer
 
 
+def test_websocket_audio_reports_detected_duration_for_diagnosis(client, fake_core, fake_stt) -> None:
+    """
+    Instrumentation ajoutée le 05/08/2026 (bug micro remonté par Cyril,
+    cause non confirmée) : la durée détectée par Whisper doit être
+    communiquée au client, pour comparaison avec la durée mesurée côté
+    navigateur au prochain test réel.
+    """
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "audio", "audio_base64": "ZmF1eCBhdWRpbw=="})
+
+        activity_texts = []
+        states = []
+        for _ in range(20):
+            message = ws.receive_json()
+            if message.get("type") == "activity":
+                activity_texts.append(message.get("text", ""))
+            if message.get("type") == "avatar_state":
+                states.append(message["state"])
+                # Un "idle" est déjà envoyé juste après la connexion, avant
+                # tout traitement (voir websocket_endpoint()) — attendre la
+                # VRAIE séquence complète, pas le premier idle venu.
+                if states[-4:] == ["listening", "thinking", "speaking", "idle"]:
+                    break
+
+    assert any("1.5s détectées" in t and "15 caractère" in t for t in activity_texts)
+
+
 def test_websocket_audio_reaches_the_stt_engine(client, fake_core, fake_stt) -> None:
     with client.websocket_connect("/ws") as ws:
         ws.send_json({"type": "audio", "audio_base64": "ZmF1eCBhdWRpbw=="})

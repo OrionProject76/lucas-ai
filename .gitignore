@@ -67,6 +67,12 @@ data/logs/
 data/screenshots/
 data/screenshot.png
 data/output.mp3
+# Chemins uniques par synthèse (corrigé le 05/08/2026, voir ROADMAP.md
+# §5.26 — un chemin fixe partagé causait une course entre connexions
+# concurrentes). Nettoyés après lecture en usage normal ; ignorés au cas
+# où un résidu survivrait (panne, interruption).
+data/tts_*.mp3
+data/tts_*.wav
 
 # --- Sorties d'inspection ponctuelles ---
 tree_output.txt

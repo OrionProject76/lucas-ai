@@ -440,6 +440,19 @@ async def websocket_endpoint(websocket: WebSocket):
                 try:
                     transcript = _stt_engine.transcribe_base64(audio_base64)
                     message = transcript.text
+                    # Diagnostic (bug micro remonté le 05/08/2026, cause non
+                    # confirmée — voir static/js/audio.js) : la durée que
+                    # Whisper a réellement détectée, à comparer à celle
+                    # mesurée côté client (console du navigateur) pour savoir
+                    # si l'enregistrement envoyé est déjà incomplet ou si le
+                    # problème est ailleurs.
+                    await websocket.send_json(
+                        protocol.activity(
+                            "voice",
+                            f"micro — {transcript.duration_seconds:.1f}s détectées, "
+                            f"{len(message)} caractère(s) transcrit(s)",
+                        )
+                    )
                 except STTUnavailable as exc:
                     # Même logique que le chemin vision plus bas : un doute
                     # sur l'audio ne doit jamais planter la connexion, mais
@@ -563,6 +576,12 @@ async def websocket_endpoint(websocket: WebSocket):
                         with open(audio_path, "rb") as audio_file:
                             audio_b64 = base64.b64encode(audio_file.read()).decode("ascii")
                         mime = _audio_mime_type(audio_path)
+                        # Chaque synthèse produit désormais un fichier UNIQUE
+                        # (modules/voice_manager.py, corrigé le 05/08/2026 —
+                        # un chemin fixe partagé causait une course entre
+                        # connexions concurrentes, voir ROADMAP.md). Un
+                        # fichier lu une fois n'a plus de raison de rester.
+                        Path(audio_path).unlink(missing_ok=True)
                         await websocket.send_json(protocol.speech(audio_b64, mime))
                         await websocket.send_json(
                             protocol.activity(

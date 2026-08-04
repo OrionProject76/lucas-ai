@@ -5,7 +5,9 @@
 # La décision appartient à core.router.route_voice() — voir CLAUDE.md règle 3.
 
 import asyncio
+import uuid
 from collections.abc import Callable
+from pathlib import Path
 
 import edge_tts
 
@@ -39,10 +41,31 @@ class VoiceManager:
         log_event: Callable[[str, str], object] | None = None,
     ) -> None:
         self.voice = voice or EDGE_TTS_VOICE
-        self.output_path = "data/output.mp3"
-        self.piper_output_path = "data/output_piper.wav"
         self.log_event = log_event
         self.piper = PiperEngine()
+
+    @staticmethod
+    def _unique_output_path(suffix: str) -> str:
+        """
+        Chemin de sortie UNIQUE par appel — jamais un chemin fixe partagé.
+
+        ⚠️ Bug réel trouvé le 05/08/2026, premier vrai test audio sur la
+        PWA mobile (Cyril) : "quelle heure est-il ?" ne se lisait qu'en
+        partie ("2026" au lieu de la phrase complète). Cause : `_voice_manager`
+        (api/server.py) est une instance PARTAGÉE entre toutes les
+        connexions WebSocket, et écrivait toujours sur le MÊME chemin fixe
+        (`data/output.mp3` / `data/output_piper.wav`, "wb", tronqué à
+        l'ouverture). Deux synthèses qui se chevauchent dans le temps
+        (PC et téléphone connectés en même temps, ou deux messages
+        rapprochés — edge_tts prend plusieurs secondes, largement de quoi
+        se chevaucher) écrivent alors sur le MÊME fichier : la seconde
+        écriture tronque/écrase le début du fichier de la première pendant
+        que le serveur est encore en train de le lire, un décodeur audio
+        ne retrouvant alors une trame valide que vers la fin. Un chemin
+        unique par appel élimine la course entièrement, quel que soit le
+        nombre de synthèses simultanées.
+        """
+        return f"data/tts_{uuid.uuid4().hex}{suffix}"
 
     # ── Journalisation ────────────────────────────────────────────────
 
@@ -71,12 +94,12 @@ class VoiceManager:
 
     def _synthesize_edge(self, text: str, output_path: str | None = None) -> str:
         """Synthèse cloud (Microsoft). Le texte quitte la machine."""
-        output_path = output_path or self.output_path
+        output_path = output_path or self._unique_output_path(".mp3")
         return asyncio.run(self._synthesize_edge_async(text, output_path))
 
     def _synthesize_piper(self, text: str, output_path: str | None = None) -> str:
         """Synthèse locale. Lève PiperUnavailable si le modèle manque."""
-        return self.piper.synthesize(text, output_path or self.piper_output_path)
+        return self.piper.synthesize(text, output_path or self._unique_output_path(".wav"))
 
     # ── API publique ──────────────────────────────────────────────────
 
@@ -159,6 +182,10 @@ class VoiceManager:
         if on_playback_start is not None:
             on_playback_start()
         self.play_audio(audio_path)
+        # Fichier unique par appel (corrigé le 05/08/2026) : play_audio()
+        # bloque jusqu'à la fin de la lecture, le supprimer ensuite ne
+        # coupe jamais un son en cours.
+        Path(audio_path).unlink(missing_ok=True)
         return audio_path
 
     def synthesize_routed(self, text: str, question: str = "") -> str | None:

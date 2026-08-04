@@ -86,6 +86,17 @@ window.Lucas = window.Lucas || {};
 
         play(audioBase64, mime) {
             if (!audioBase64) return;
+            // ⚠️ Bug réel trouvé le 05/08/2026 (premier vrai test audio,
+            // Cyril) : le bouton 🔇 ne coupait pas le son de façon fiable.
+            // Cause : le drapeau "speak" envoyé au serveur est figé au
+            // moment de l'ENVOI du message (sendChat(text, voiceOutput.enabled)
+            // dans app.js) — si Cyril coupe le son APRÈS l'envoi mais AVANT
+            // que la réponse "speech" n'arrive (edge_tts prend plusieurs
+            // secondes), ce handler s'exécutait quand même et jouait le
+            // son malgré le mute entre-temps. Revérifier `this.enabled` ICI,
+            // à l'instant où l'audio arrive réellement, plutôt que de se
+            // fier à l'état capturé au moment de l'envoi.
+            if (!this.enabled) return;
             // Une réponse qui arrive pendant que la précédente joue encore
             // interrompt celle-ci et prend le relais — comportement voulu,
             // pas un effet de bord : la dernière réponse de Cyril est

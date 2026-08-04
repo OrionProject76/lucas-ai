@@ -416,6 +416,48 @@ def test_synthesize_piper_forwards_to_the_piper_engine(monkeypatch) -> None:
     assert result == "data/sortie.wav"
 
 
+# ── Chemin de sortie unique par appel (bug réel du 05/08/2026) ─────────
+#
+# Premier vrai test audio sur la PWA mobile : "quelle heure est-il ?" ne
+# se lisait qu'en partie ("2026" au lieu de la phrase complète). Cause :
+# un chemin de sortie FIXE partagé entre toutes les connexions — deux
+# synthèses qui se chevauchent (edge_tts prend plusieurs secondes,
+# largement de quoi se chevaucher) écrivaient sur le même fichier.
+
+def test_synthesize_piper_uses_a_different_path_on_each_call(monkeypatch) -> None:
+    manager = VoiceManager()
+    seen_paths: list[str] = []
+    monkeypatch.setattr(
+        manager.piper, "synthesize",
+        lambda text, output_path: seen_paths.append(output_path) or output_path,
+    )
+
+    manager._synthesize_piper("bonjour")
+    manager._synthesize_piper("au revoir")
+
+    assert len(seen_paths) == 2
+    assert seen_paths[0] != seen_paths[1], "deux synthèses ne doivent jamais viser le même fichier"
+    assert all(p.endswith(".wav") for p in seen_paths)
+
+
+def test_synthesize_edge_uses_a_different_path_on_each_call(monkeypatch) -> None:
+    manager = VoiceManager()
+    seen_paths: list[str] = []
+
+    async def fake_save(text, output_path):
+        seen_paths.append(output_path)
+        return output_path
+
+    monkeypatch.setattr(manager, "_synthesize_edge_async", fake_save)
+
+    manager._synthesize_edge("bonjour")
+    manager._synthesize_edge("au revoir")
+
+    assert len(seen_paths) == 2
+    assert seen_paths[0] != seen_paths[1], "deux synthèses ne doivent jamais viser le même fichier"
+    assert all(p.endswith(".mp3") for p in seen_paths)
+
+
 def test_list_voices_returns_the_french_voices() -> None:
     assert VoiceManager().list_voices() == [
         "fr-FR-HenriNeural", "fr-FR-DeniseNeural", "fr-FR-EloiseNeural",
