@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import base64
 import inspect
+import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -193,6 +195,124 @@ def test_manager_forwards_the_mobile_path(monkeypatch) -> None:
     manager = STTManager()
     manager.engine._backend = _FakeBackend()
     assert manager.transcribe_from_mobile(base64.b64encode(b"a").decode()).language == "fr"
+
+
+# ── Sélection du backend réel ──────────────────────────────────────────
+#
+# Tout ce qui précède injecte un backend factice : _load_backend() et les
+# deux adaptateurs (_FasterWhisperBackend, _OpenAIWhisperBackend) n'étaient
+# donc jamais exercés eux-mêmes. Trouvé via mesure de couverture réelle,
+# même motif que piper_engine.py (backend réel jamais chargé, seule son
+# absence l'était).
+
+def test_load_backend_prefers_faster_whisper(monkeypatch) -> None:
+    class _FakeWhisperModel:
+        def __init__(self, model_size, device=None, compute_type=None):
+            self.model_size = model_size
+            self.device = device
+            self.compute_type = compute_type
+
+    fake_module = SimpleNamespace(WhisperModel=_FakeWhisperModel)
+    monkeypatch.setitem(sys.modules, "faster_whisper", fake_module)
+
+    engine = STTEngine(model_size="small")
+    backend = engine._load_backend()
+
+    assert isinstance(backend, stt_module._FasterWhisperBackend)
+    assert backend.model.model_size == "small"
+    assert backend.model.device == "cpu", "jamais 'auto' : voir le commentaire du module (bug cublas64_12.dll)"
+    assert backend.model.compute_type == "int8"
+
+
+def test_load_backend_falls_back_to_openai_whisper(monkeypatch) -> None:
+    monkeypatch.setitem(sys.modules, "faster_whisper", None)
+
+    class _FakeModel:
+        pass
+
+    fake_whisper = SimpleNamespace(load_model=lambda model_size: _FakeModel())
+    monkeypatch.setitem(sys.modules, "whisper", fake_whisper)
+
+    backend = STTEngine(model_size="base")._load_backend()
+
+    assert isinstance(backend, stt_module._OpenAIWhisperBackend)
+
+
+def test_faster_whisper_backend_converts_segments_to_a_transcript_result() -> None:
+    segments = [
+        SimpleNamespace(start=0.0, end=0.8, text="bonjour "),
+        SimpleNamespace(start=0.8, end=1.5, text="Luca's"),
+    ]
+    info = SimpleNamespace(language="fr", language_probability=0.91, duration=1.5)
+
+    class _FakeModel:
+        def transcribe(self, audio, language=None):
+            assert language is None
+            return segments, info
+
+    backend = stt_module._FasterWhisperBackend.__new__(stt_module._FasterWhisperBackend)
+    backend.model = _FakeModel()
+
+    result = backend.transcribe("extrait.wav")
+
+    assert result.text == "bonjour Luca's"
+    assert result.language == "fr"
+    assert result.confidence == pytest.approx(0.91)
+    assert result.duration_seconds == pytest.approx(1.5)
+    assert result.segments == [
+        {"start": 0.0, "end": 0.8, "text": "bonjour "},
+        {"start": 0.8, "end": 1.5, "text": "Luca's"},
+    ]
+
+
+def test_openai_whisper_backend_approximates_confidence_from_segments() -> None:
+    """
+    openai-whisper ne donne pas de score global : approximé par la moyenne
+    des probabilités de segment (documenté comme une approximation, pas
+    une mesure exacte).
+    """
+    raw = {
+        "text": " bonjour Luca's ",
+        "language": "fr",
+        "segments": [
+            {"end": 0.8, "no_speech_prob": 0.1},
+            {"end": 1.5, "no_speech_prob": 0.3},
+        ],
+    }
+
+    class _FakeModel:
+        def transcribe(self, audio):
+            return raw
+
+    backend = stt_module._OpenAIWhisperBackend.__new__(stt_module._OpenAIWhisperBackend)
+    backend.model = _FakeModel()
+
+    result = backend.transcribe("extrait.wav")
+
+    assert result.text == "bonjour Luca's"
+    assert result.confidence == pytest.approx(1.0 - (0.1 + 0.3) / 2)
+    assert result.duration_seconds == pytest.approx(1.5)
+
+
+def test_openai_whisper_backend_handles_no_segments() -> None:
+    """Pas de segment (silence complet) : ne pas diviser par zéro."""
+    class _FakeModel:
+        def transcribe(self, audio):
+            return {"text": "", "language": "fr", "segments": []}
+
+    backend = stt_module._OpenAIWhisperBackend.__new__(stt_module._OpenAIWhisperBackend)
+    backend.model = _FakeModel()
+
+    result = backend.transcribe("silence.wav")
+
+    assert result.confidence == 0.0
+    assert result.duration_seconds == 0.0
+
+
+def test_cache_key_treats_path_objects_like_strings() -> None:
+    from pathlib import Path
+
+    assert STTEngine._cache_key(Path("extrait.wav")) == str(Path("extrait.wav"))
 
 
 # ── Sécurité ──────────────────────────────────────────────────────────
