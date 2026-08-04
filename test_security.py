@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import inspect
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import psutil
@@ -531,6 +532,109 @@ def test_findings_reach_the_event_log(watched) -> None:
     (watched / "doc.locked").write_text("x")
     RansomwareWatch(log_event=lambda t, d="": events.append((t, d))).scan()
     assert "security_ransom_extension" in [t for t, _ in events]
+
+
+# ── Rançongiciel : résolution des dossiers réels (04/08/2026) ──────────
+#
+# Tous les tests ci-dessus remplacent _watched_directories() par une
+# fausse fonction entière — nécessaire pour scanner un tmp_path isolé,
+# mais ça laisse _resolve_shell_folder() (redirection OneDrive via le
+# registre) et le vrai corps de _watched_directories() (repli sur
+# Path.home(), déduplication) jamais exécutés. Trouvé via mesure de
+# couverture réelle, même motif que security/persistence_watch.py.
+
+def test_resolve_shell_folder_reads_the_redirected_path(monkeypatch, tmp_path) -> None:
+    import winreg
+
+    from security.ransomware_watch import _resolve_shell_folder
+
+    class _FakeKey:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info):
+            return False
+
+    monkeypatch.setattr(winreg, "OpenKey", lambda *a, **k: _FakeKey())
+    monkeypatch.setattr(winreg, "QueryValueEx", lambda key, name: (str(tmp_path), None))
+
+    assert _resolve_shell_folder("Documents") == tmp_path
+
+
+def test_resolve_shell_folder_returns_none_for_an_unknown_name() -> None:
+    from security.ransomware_watch import _resolve_shell_folder
+
+    assert _resolve_shell_folder("Vidéos") is None
+
+
+def test_resolve_shell_folder_returns_none_when_registry_key_missing(monkeypatch) -> None:
+    import winreg
+
+    from security.ransomware_watch import _resolve_shell_folder
+
+    def _raise(*a, **k):
+        raise OSError("clé absente")
+
+    monkeypatch.setattr(winreg, "OpenKey", _raise)
+
+    assert _resolve_shell_folder("Documents") is None
+
+
+def test_watched_directories_falls_back_to_home_when_not_redirected(monkeypatch, tmp_path) -> None:
+    """Registre muet (pas de redirection OneDrive) : repli sur ~/Documents, etc."""
+    from security import ransomware_watch as rw
+
+    home_docs = tmp_path / "Documents"
+    home_docs.mkdir()
+
+    monkeypatch.setattr(rw, "RANSOMWARE_WATCH_DIRS", ["Documents"])
+    monkeypatch.setattr(rw, "_resolve_shell_folder", lambda name: None)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    assert rw._watched_directories() == [home_docs]
+
+
+def test_watched_directories_skips_a_folder_that_does_not_exist(monkeypatch, tmp_path) -> None:
+    """Ni redirigé ni présent sous le profil : ignoré, pas une erreur."""
+    from security import ransomware_watch as rw
+
+    monkeypatch.setattr(rw, "RANSOMWARE_WATCH_DIRS", ["Documents", "Desktop"])
+    monkeypatch.setattr(rw, "_resolve_shell_folder", lambda name: None)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    (tmp_path / "Desktop").mkdir()  # Documents n'existe pas
+
+    assert rw._watched_directories() == [tmp_path / "Desktop"]
+
+
+# ── Rançongiciel : cas d'échec des fichiers-appâts ─────────────────────
+
+def test_deploy_canaries_skips_a_read_only_directory(watched, monkeypatch) -> None:
+    """Un répertoire où l'écriture échoue ne doit pas faire échouer le déploiement."""
+    real_write_text = Path.write_text
+
+    def _maybe_fail(self, *args, **kwargs):
+        if self.parent == watched:
+            raise OSError("accès refusé")
+        return real_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", _maybe_fail)
+
+    assert RansomwareWatch().deploy_canaries() == []
+
+
+def test_unreadable_canary_is_critical(watched) -> None:
+    """
+    Un appât devenu illisible (encodage cassé — même symptôme qu'un
+    chiffrement en cours) doit alerter, pas juste être ignoré.
+    """
+    from security.ransomware_watch import CANARY_FILENAME
+
+    watch = RansomwareWatch()
+    watch.deploy_canaries()
+    (watched / CANARY_FILENAME).write_bytes(b"\xff\xfe\x00\xff garbage binaire")
+
+    findings = watch.scan()
+    assert any(f.kind == "canary_unreadable" and f.severity == CRITICAL for f in findings)
 
 
 # ── Surveillance continue : déduplication ─────────────────────────────
