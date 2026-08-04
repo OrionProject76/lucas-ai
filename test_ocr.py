@@ -10,10 +10,18 @@
 from __future__ import annotations
 
 import inspect
+import sys
+from types import SimpleNamespace
 
 import pytest
 
-from modules.ocr_engine import OCREngine, OCRResult, OCRUnavailable
+from modules.ocr_engine import (
+    OCREngine,
+    OCRResult,
+    OCRUnavailable,
+    _RapidOCRBackend,
+    _TesseractBackend,
+)
 
 
 class _FakeBackend:
@@ -87,6 +95,99 @@ def test_empty_result_is_detected() -> None:
 
 def test_is_available_reflects_the_backend() -> None:
     assert OCREngine(backend=_FakeBackend()).is_available()
+
+
+def test_is_available_returns_false_when_no_backend_installed(monkeypatch) -> None:
+    """Seul le cas "un backend fonctionne" était testé jusqu'ici."""
+    monkeypatch.setitem(sys.modules, "rapidocr_onnxruntime", None)
+    monkeypatch.setitem(sys.modules, "pytesseract", None)
+
+    assert OCREngine().is_available() is False
+
+
+# ── Sélection du backend réel ────────────────────────────────────────────
+#
+# Comme pour modules/stt_engine.py : _load_backend() lui-même (choix
+# RapidOCR -> repli pytesseract) et les deux adaptateurs
+# (_RapidOCRBackend, _TesseractBackend) n'étaient jamais exercés — tous
+# les tests ci-dessus injectent un backend factice.
+
+def test_load_backend_prefers_rapidocr(monkeypatch) -> None:
+    class _FakeRapidOCR:
+        pass
+
+    monkeypatch.setitem(
+        sys.modules, "rapidocr_onnxruntime", SimpleNamespace(RapidOCR=_FakeRapidOCR)
+    )
+
+    backend = OCREngine()._load_backend()
+
+    assert isinstance(backend, _RapidOCRBackend)
+    assert isinstance(backend.engine, _FakeRapidOCR)
+
+
+def test_load_backend_falls_back_to_tesseract(monkeypatch) -> None:
+    monkeypatch.setitem(sys.modules, "rapidocr_onnxruntime", None)
+    monkeypatch.setitem(sys.modules, "pytesseract", SimpleNamespace(image_to_string=lambda *a, **k: ""))
+
+    backend = OCREngine()._load_backend()
+
+    assert isinstance(backend, _TesseractBackend)
+
+
+def test_rapidocr_backend_returns_empty_result_when_nothing_detected() -> None:
+    """RapidOCR renvoie None (pas une liste vide) quand rien n'est détecté."""
+    class _FakeEngine:
+        def __call__(self, image_path):
+            return None, {"det": 0.0}
+
+    result = _RapidOCRBackend(_FakeEngine()).extract("capture.png")
+
+    assert result.text == ""
+    assert result.lines == []
+    assert result.confidence == 0.0
+
+
+def test_rapidocr_backend_converts_detections_to_a_result() -> None:
+    raw = [
+        [[[0, 0], [10, 0], [10, 10], [0, 10]], "Error 404", 0.9],
+        [[[0, 20], [10, 20], [10, 30], [0, 30]], "page introuvable", 0.7],
+    ]
+
+    class _FakeEngine:
+        def __call__(self, image_path):
+            return raw, {"det": 1.0}
+
+    result = _RapidOCRBackend(_FakeEngine()).extract("capture.png")
+
+    assert result.text == "Error 404\npage introuvable"
+    assert result.lines == ["Error 404", "page introuvable"]
+    assert result.confidence == pytest.approx(0.8)
+
+
+def test_tesseract_backend_extracts_text_via_pytesseract(monkeypatch, tmp_path) -> None:
+    import PIL.Image
+
+    image = tmp_path / "capture.png"
+    image.write_bytes(b"\x89PNG faux contenu")
+    captured: dict = {}
+
+    monkeypatch.setattr(PIL.Image, "open", lambda path: "image-ouverte")
+
+    class _FakePytesseract:
+        @staticmethod
+        def image_to_string(img, lang=None):
+            captured["image"] = img
+            captured["lang"] = lang
+            return "Error 404\n\n   \npage introuvable\n"
+
+    result = _TesseractBackend(_FakePytesseract).extract(str(image))
+
+    assert result.text == "Error 404\npage introuvable"
+    assert result.lines == ["Error 404", "page introuvable"]
+    assert result.confidence == 0.0, "Tesseract ne donne pas de score global sans image_to_data"
+    assert captured["lang"] == "fra+eng", "Tesseract attend 'fra+eng', pas une liste"
+    assert captured["image"] == "image-ouverte"
 
 
 # ── Sécurité ──────────────────────────────────────────────────────────
