@@ -176,6 +176,37 @@ construis exactement ça, mais en vrai."*
 > par Cyril en testant le pont TTS : `IDEAS.md` #79 — même limitation,
 > détail du mécanisme de diffusion envisagé.
 
+#### Connectivité multi-surface (Telegram/Discord/WhatsApp/Signal) — ajouté le 04/08/2026
+
+Ambition confirmée par Cyril, inspirée de l'architecture passerelles de
+Hermes Agent (Nous Research, MIT) : Luca's doit à terme être joignable
+depuis plusieurs canaux de messagerie, pas seulement la PWA mobile —
+même esprit que « un seul cerveau, plusieurs fenêtres d'accès » déjà
+acté ci-dessus pour PC/S25 Ultra. Une passerelle Telegram/Discord/
+WhatsApp/Signal serait une fenêtre d'accès de plus vers le même
+`LucasCore`, pas un second cerveau.
+
+**Séquencé après le socle actuel** (Godot, modes AURA restants, Decision
+Engine mature) — pas un chantier à ouvrir maintenant. La première
+ambition (étendue de capacités) avance à son rythme propre, sans
+précipitation ni glissement silencieux vers une nouvelle surface avant
+que l'existant soit mûr.
+
+⚠️ **Point de sécurité distinct, à traiter à l'ouverture de ce chantier,
+pas avant** : contrairement à la PWA (qui ne parle qu'au téléphone de
+Cyril via son propre tunnel), une passerelle Telegram/Discord/WhatsApp
+rend Luca's joignable depuis l'internet ouvert — un vrai changement de
+surface d'attaque (bot exposé, potentiels webhooks). Nécessitera son
+propre passage sécurité (liste blanche de contacts autorisés, etc.)
+avant toute activation, cohérent avec **§4.1** : « la liberté d'action
+de Luca's est conditionnée à sa capacité de protection ».
+
+**Référence technique pour le moment venu** : github.com/NousResearch/hermes-agent
+(Python, MIT). **Ne pas cloner maintenant** — le clone se fera au moment
+où ce chantier s'ouvre réellement, pour une version fraîche plutôt qu'un
+dépôt qui traîne périmé. Documenter alors dans `ROADMAP.md` quand,
+pourquoi, et quelle version a été clonée.
+
 ---
 
 ## 3. Décision moteur de rendu — actée le 30/07/2026
