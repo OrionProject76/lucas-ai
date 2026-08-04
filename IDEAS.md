@@ -871,3 +871,55 @@ chacun.
 actuel fonctionne et est testé (voir `ROADMAP.md` §5.19/§5.20) ; cette idée
 ne corrige rien de cassé, elle ouvre une porte pour un usage futur au-delà
 du chat de Luca's lui-même.
+
+---
+
+## 89. Exécution d'actions côté mobile (Android) — Option B, actée par Cyril le 04/08/2026
+
+**Aujourd'hui** : le S25 Ultra est un client léger PUR — capteurs
+(micro/caméra) et affichage, aucun exécuteur d'action. Quand Cyril
+demande une action système ("ouvre le bloc-notes"), elle s'exécute sur
+le PC via `modules/automation_manager.py`/`core/decision_engine.py`
+(premier câblage réel, `ROADMAP.md` §5.25) — quel que soit l'appareil
+depuis lequel la demande est partie.
+
+**Option B actée** : quand Cyril dit "Luca, ouvre le bloc-notes sur le
+mobile" (ou équivalent explicite), l'action doit s'exécuter sur le S25
+Ultra LUI-MÊME, pas seulement sur le PC — deux exécuteurs distincts,
+chacun sur sa propre machine, au lieu d'un seul exécuteur PC servant
+toutes les demandes peu importe leur origine.
+
+**Pourquoi un NOUVEAU chantier, pas une extension mineure** : contrairement
+au PC, où `automation_manager.py`/`decision_engine.py` existent déjà et
+n'avaient qu'à être câblés au chat (§5.25), le mobile ne dispose
+d'AUCUN mécanisme d'exécution — tout est à construire :
+- une liste blanche ANDROID séparée (les applications/actions
+  autorisées sur le PC — Chrome, Bloc-notes, Calculatrice, Explorateur —
+  n'ont pas d'équivalent direct ou univoque côté Android) ;
+- un mécanisme d'exécution côté mobile (quel canal entre le serveur et
+  le téléphone déclenche réellement une action sur l'appareil — la PWA
+  actuelle n'a aucun accès de ce type) ;
+- la gestion des permissions Android, structurellement plus restrictives
+  que Windows pour ce type d'action (lancer une appli tierce, en
+  particulier, est un modèle de permission différent et plus contraint
+  qu'un simple `subprocess.Popen` côté PC).
+
+**Séquencé après le socle PC actuel** : à ouvrir quand le Decision Engine
+PC sera mature (plusieurs actions gouvernées et confirmées fiables en
+usage réel, pas seulement le lancement d'appli isolé de §5.25) — le
+moment précis se juge au cas par cas, pas sur une date fixée à l'avance.
+
+**Ne pas construire sans cadrage dédié préalable** — même logique que
+l'addendum "HERMES + JARVIS" (§ ci-dessus, direction actée sur le
+principe uniquement, conception détaillée réservée à une session
+supervisée) et que la réintroduction d'un mode shell
+(`modules/automation_manager.py`, `SHELL_LIKE_APPS` : retiré de la liste
+blanche, "le jour où un shell sera réintroduit... derrière une
+confirmation explicite, quand le moteur de décision existera"). Une
+direction actée n'est pas un feu vert de construction.
+
+**En attendant** : `config.SYSTEM_PROMPT` précise désormais explicitement
+que les actions s'exécutent sur le PC — le seul exécuteur existant
+aujourd'hui, quel que soit l'appareil depuis lequel Cyril les demande —
+pour que ce soit dit clairement plutôt que supposé par Cyril ou deviné
+par le modèle.

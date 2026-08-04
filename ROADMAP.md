@@ -2694,6 +2694,26 @@ réseau). 1 test ajouté (`test_server.py`) sur la présence de ce message.
 de chemin TTS dans `test_voice_router.py`, 1 message diagnostic micro
 dans `test_server.py`).
 
+## 5.27 Exécution d'actions côté mobile — catalogué (IDEAS.md #89), pas construit
+
+Cyril acte le principe (Option B) : une demande explicite d'exécuter une
+action SUR le téléphone ("ouvre le bloc-notes sur le mobile") devra un
+jour s'exécuter sur le S25 Ultra lui-même, pas seulement sur le PC —
+catalogué dans `IDEAS.md` #89 comme un chantier NOUVEAU (liste blanche
+Android séparée, mécanisme d'exécution mobile à construire de zéro,
+permissions Android plus restrictives), séquencé après un Decision
+Engine PC mature, jamais construit sans cadrage dédié — même logique que
+HERMES/JARVIS et la réintroduction d'un mode shell.
+
+**Fait dès maintenant, en attendant** (ajustement mineur jugé simple) :
+`config.SYSTEM_PROMPT` précise désormais explicitement qu'une action
+automatisée s'exécute TOUJOURS sur le PC, jamais sur le téléphone de
+Cyril, même quand la demande part du mobile — pour que ce soit dit
+clairement par Luca's plutôt que supposé. Aucun test n'asserte le
+contenu littéral de `SYSTEM_PROMPT` (vérifié avant modification,
+`test_history_budget.py`/`test_integration.py` ne vérifient que sa
+position dans les messages) — suite complète rejouée, sans régression.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
