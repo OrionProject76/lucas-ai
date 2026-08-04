@@ -132,6 +132,38 @@ def test_piper_produces_real_audio(tmp_path) -> None:
     assert duration > 0.5, f"durée suspecte : {duration:.2f}s"
 
 
+# ── STT desktop (fichier audio, pas de vrai micro) ─────────────────────
+
+def test_desktop_stt_transcribes_synthetic_speech(tmp_path) -> None:
+    """
+    Validation de bout en bout du câblage STT desktop (ui/main_window.py,
+    STTWorker) demandée en session autonome : PAS de vrai micro (ce PC
+    n'en a pas, voir VISION_LONG_TERME.md §2 Pilier 3), mais de la vraie
+    parole synthétique (Piper) transcrite par le vrai moteur STT
+    (faster-whisper) — les deux composants réels, sans doublure.
+    """
+    from modules.piper_engine import PiperEngine
+    from modules.stt_engine import STTEngine
+
+    piper = PiperEngine()
+    if not piper.is_available():
+        pytest.skip("modèle Piper absent — python -m piper.download_voices")
+
+    stt = STTEngine()
+    if not stt.is_available():
+        pytest.skip("aucun backend Whisper installé — pip install faster-whisper")
+
+    audio_path = tmp_path / "synthetique.wav"
+    piper.synthesize("Bonjour Luca's, ceci est un test de transcription.", str(audio_path))
+
+    result = stt.transcribe(str(audio_path))
+
+    assert result.text.strip(), "transcription vide sur un audio synthétique clair"
+    assert "test" in result.text.lower() or "transcription" in result.text.lower(), (
+        f"transcription inattendue : {result.text!r}"
+    )
+
+
 # ── Vision ────────────────────────────────────────────────────────────
 
 def test_the_vlm_describes_the_real_screen() -> None:

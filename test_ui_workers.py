@@ -317,5 +317,128 @@ def test_prepare_is_not_called_on_the_main_thread() -> None:
     assert "ContextWorker" in source
 
 
+# ── STT desktop : bouton micro = fichier, PAS un vrai micro ────────────
+#
+# Ce PC n'a pas de microphone (VISION_LONG_TERME.md §2, Pilier 3). Les
+# tests ci-dessous vérifient le câblage avec un STTEngine factice — la
+# validation avec un VRAI backend Whisper sur de l'audio synthétique vit
+# dans test_integration.py (marqueur "integration"), jamais ici.
+
+class _FakeSTTResult:
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+def test_stt_worker_transcribes_via_the_shared_engine(monkeypatch) -> None:
+    """
+    Un seul STTEngine partagé (comme _stt_engine dans api/server.py) :
+    recharger Whisper à chaque fichier serait coûteux.
+    """
+    from ui import main_window
+
+    calls: list[str] = []
+
+    class _FakeEngine:
+        def transcribe(self, path):
+            calls.append(path)
+            return _FakeSTTResult("bonjour Luca's")
+
+    monkeypatch.setattr(main_window, "_stt_engine", _FakeEngine())
+
+    worker = main_window.STTWorker("extrait.wav")
+    received: list[str] = []
+    worker.transcribed.connect(received.append)
+    worker.run()  # appel direct : pas besoin d'une boucle d'événements
+
+    assert calls == ["extrait.wav"]
+    assert received == ["bonjour Luca's"]
+
+
+def test_stt_worker_reports_unavailable_as_a_readable_error(monkeypatch) -> None:
+    from modules.stt_engine import STTUnavailable
+    from ui import main_window
+
+    class _FakeEngine:
+        def transcribe(self, path):
+            raise STTUnavailable("aucun backend Whisper installé")
+
+    monkeypatch.setattr(main_window, "_stt_engine", _FakeEngine())
+
+    worker = main_window.STTWorker("extrait.wav")
+    errors: list[str] = []
+    worker.error.connect(errors.append)
+    worker.run()
+
+    assert errors and "Transcription impossible" in errors[0]
+
+
+def test_stt_worker_never_crashes_on_an_unexpected_error(monkeypatch) -> None:
+    """Comme ContextWorker : une erreur de transcription ne doit jamais faire tomber le thread."""
+    from ui import main_window
+
+    class _BrokenEngine:
+        def transcribe(self, path):
+            raise RuntimeError("fichier audio corrompu")
+
+    monkeypatch.setattr(main_window, "_stt_engine", _BrokenEngine())
+
+    worker = main_window.STTWorker("extrait.wav")
+    worker.error.connect(lambda msg: None)
+    worker.run()  # ne doit pas lever
+
+
+def test_transcribe_audio_file_does_nothing_when_the_dialog_is_cancelled(app_window, monkeypatch) -> None:
+    """Annuler la sélection de fichier ne doit lancer aucune transcription."""
+    from PySide6.QtWidgets import QFileDialog
+
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(lambda *a, **k: ("", "")))
+
+    app_window.transcribe_audio_file()
+
+    assert app_window.stt_worker is None
+
+
+def test_on_transcribed_fills_the_input_field_without_sending(app_window) -> None:
+    """
+    Cyril garde la main : le texte transcrit remplit le champ de saisie,
+    il n'est jamais envoyé automatiquement.
+    """
+    app_window._on_transcribed("quel temps fait-il")
+
+    assert app_window.input_field.text() == "quel temps fait-il"
+    assert app_window.worker is None, "aucune génération ne doit démarrer toute seule"
+
+
+def test_on_stt_error_appends_a_message_to_the_chat(app_window) -> None:
+    app_window._on_stt_error("aucun backend Whisper installé")
+
+    assert "[STT]" in app_window.chat_history.toPlainText()
+    assert "aucun backend Whisper installé" in app_window.chat_history.toPlainText()
+
+
+def test_mic_button_is_wired_to_transcribe_audio_file() -> None:
+    import inspect
+
+    from ui import main_window
+
+    source = inspect.getsource(main_window.MainWindow.__init__)
+    assert "self.mic_button.clicked.connect(self.transcribe_audio_file)" in source
+
+
+def test_close_waits_for_the_stt_worker() -> None:
+    import inspect
+
+    from ui import main_window
+
+    source = inspect.getsource(main_window.MainWindow.closeEvent)
+    assert "stt_worker" in source
+    assert "wait(" in source
+
+
+def test_stt_worker_is_initialised(app_window) -> None:
+    """closeEvent lit stt_worker : il doit exister dès le départ."""
+    assert app_window.stt_worker is None
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

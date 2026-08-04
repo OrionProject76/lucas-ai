@@ -1578,6 +1578,54 @@ journalisé), action inconnue refusée, `ActionSpec` complet transmis à
 quand l'action est refusée (compteur d'appels vérifié à chaque cas de
 refus). Suite complète du projet : 889 passed.
 
+## 5.12 STT desktop — câblé le 04/08/2026, PySide6 côté PC
+
+Session autonome 8-10h, suite du 5.11. Le STT n'était câblé que côté
+pont mobile (`api/server.py` → `STTEngine.transcribe_base64()`) : zéro
+chemin STT dans `ui/main_window.py`, confirmé en grepant le fichier avant
+de commencer (aucune occurrence de `STTEngine`/`stt_engine`/`micro`).
+
+**Ce qui est construit** : un bouton 🎙️ dans la barre de saisie,
+`STTWorker(QThread)` (même patron que `TTSWorker`/`ContextWorker` déjà
+en place), et `_stt_engine = STTEngine()` en instance de module unique —
+exactement le même raisonnement que `_stt_engine` dans `api/server.py`
+(recharger Whisper par appel serait coûteux). **Un seul et même
+`STTEngine`** pour les deux chemins (mobile et desktop) : jamais un
+second pipeline de transcription, cohérent avec le principe du pont
+audio unique (`VISION_LONG_TERME.md`).
+
+⚠️ **Ce n'est PAS un bouton micro au sens propre.** Ce PC n'a pas de
+microphone (`VISION_LONG_TERME.md` §2, Pilier 3 — confirmé, pas
+contourné). Le bouton ouvre un sélecteur de fichier (`QFileDialog`) et
+transcrit un fichier audio déjà enregistré — utile pour un mémo vocal
+existant, pas pour parler en direct au PC. Le texte transcrit remplit le
+champ de saisie SANS envoi automatique : Cyril garde la main pour
+relire/corriger, comme pour tout ce qu'il tape.
+
+**Validé, deux niveaux** :
+- **Unitaire (rapide, 9 tests, `test_ui_workers.py`)** : `STTEngine`
+  factice — transcription réussie, `STTUnavailable` rapportée
+  lisiblement, toute autre exception avalée sans faire tomber le thread,
+  dialogue annulé ne lance rien, texte transcrit remplit le champ sans
+  déclencher `send_message()`, erreur affichée dans le chat, bouton bien
+  câblé, `closeEvent` attend `stt_worker`.
+- **Réel, de bout en bout (`test_integration.py`, marqueur
+  "integration")** : Piper (réel) synthétise « Bonjour Luca's, ceci est
+  un test de transcription. », faster-whisper (réel) la transcrit — AUCUN
+  mock des deux côtés. Résultat obtenu : *« Bonjour Loucoise, ceci est un
+  test de transcription. »* — Whisper déforme « Luca's » en « Loucoise »
+  (artefact voix Piper + reconnaissance sur un nom propre inhabituel),
+  tout le reste de la phrase est exact ; langue détectée `fr`, confiance
+  0,97. L'assertion ne porte volontairement pas sur le nom (fragile),
+  seulement sur « test »/« transcription » (présents).
+
+**Reste bloqué, comme prévu** : aucune validation avec un vrai micro —
+ce PC n'en a pas, ça attend le pont mobile / un speakerphone.
+
+Suite complète du projet : 898 passed (889 + 9 unitaires ; le test
+d'intégration synthétique est le 9e test marqué "integration", exclu du
+compte par défaut).
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

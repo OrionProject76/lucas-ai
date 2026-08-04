@@ -3,6 +3,7 @@
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -17,6 +18,14 @@ from core.llm_worker import LLMWorker
 from core.lucas_core import LucasCore
 from core.router import should_use_vision
 from memory.memory_manager import save_event_from_any_thread
+from modules.stt_engine import STTEngine, STTUnavailable
+
+# Instance unique, partagée entre toutes les transcriptions du bouton
+# micro — recharger Whisper à chaque fichier serait coûteux (même
+# raisonnement que _stt_engine dans api/server.py, pont mobile). Ce
+# module est le second et dernier appelant réel de modules/stt_engine.py,
+# jamais un second pipeline parallèle.
+_stt_engine = STTEngine()
 
 # ── Imports optionnels — fallback gracieux ──
 try:
@@ -211,6 +220,35 @@ class TTSWorker(QThread):
             self.finished.emit()
 
 
+class STTWorker(QThread):
+    """
+    Transcrit un fichier audio dans un thread séparé — ne bloque jamais l'UI.
+
+    ⚠️ Ce PC n'a pas de microphone (VISION_LONG_TERME.md §2, Pilier 3) :
+    ce worker transcrit un fichier déjà enregistré, choisi via un
+    sélecteur de fichier — ce n'est PAS une capture micro en direct.
+    Utilise le MÊME STTEngine partagé que le pont mobile (api/server.py) :
+    jamais un second pipeline de transcription.
+    """
+
+    transcribed = Signal(str)
+    error = Signal(str)
+
+    def __init__(self, audio_path: str):
+        super().__init__()
+        self.audio_path = audio_path
+
+    def run(self):
+        try:
+            result = _stt_engine.transcribe(self.audio_path)
+            self.transcribed.emit(result.text)
+        except STTUnavailable as e:
+            self.error.emit(f"Transcription impossible : {e}")
+        except Exception as e:  # noqa: BLE001 — un souci de transcription ne
+            # doit pas faire tomber le thread ni l'interface.
+            self.error.emit(str(e))
+
+
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -218,6 +256,7 @@ class MainWindow(QWidget):
         self.worker = None
         self.tts_worker = None
         self.context_worker = None
+        self.stt_worker = None
         self.tts_auto = False
         self.last_lucas_response = ""
 
@@ -312,9 +351,20 @@ class MainWindow(QWidget):
         self.tts_button.setToolTip("TTS Auto — Luca's lit ses réponses")
         self.tts_button.clicked.connect(self.toggle_tts)
 
+        # 🎙️ Bouton STT — transcrit un fichier audio, PAS une capture micro
+        # en direct (ce PC n'a pas de microphone, voir STTWorker).
+        self.mic_button = QPushButton("🎙️")
+        self.mic_button.setObjectName("tts")
+        self.mic_button.setFixedWidth(40)
+        self.mic_button.setToolTip(
+            "Transcrire un fichier audio (pas de micro sur ce PC — pont mobile S25 Ultra)"
+        )
+        self.mic_button.clicked.connect(self.transcribe_audio_file)
+
         input_layout.addWidget(self.input_field, stretch=1)
         input_layout.addWidget(self.send_button)
         input_layout.addWidget(self.stop_button)
+        input_layout.addWidget(self.mic_button)
         input_layout.addWidget(self.tts_button)
 
         # Assemblage droit
@@ -545,6 +595,48 @@ class MainWindow(QWidget):
         self._append("assistant", msg)
         self._set_avatar_state("IDLE")
 
+    # ── STT (fichier audio, pas de micro sur ce PC) ──
+    def transcribe_audio_file(self):
+        """
+        Transcrit un fichier audio via le même STTEngine que le pont
+        mobile (api/server.py) — jamais un second pipeline.
+
+        ⚠️ Pas un bouton micro au sens propre : ce PC n'a pas de
+        microphone (VISION_LONG_TERME.md §2, Pilier 3 — c'est le S25
+        Ultra qui capte l'audio réel). Le texte transcrit remplit le
+        champ de saisie sans envoyer automatiquement : Cyril garde la
+        main pour relire ou corriger avant d'envoyer, comme pour tout ce
+        qu'il tape lui-même.
+        """
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Choisir un fichier audio", "",
+            "Fichiers audio (*.wav *.mp3 *.m4a *.ogg *.flac)",
+        )
+        if not path:
+            return
+
+        self._set_status("🎙️ Transcription de l'audio...", "connecting")
+        self._set_avatar_state("THINKING")
+        self.mic_button.setEnabled(False)
+
+        self.stt_worker = STTWorker(path)
+        self.stt_worker.transcribed.connect(self._on_transcribed)
+        self.stt_worker.error.connect(self._on_stt_error)
+        self.stt_worker.start()
+
+    def _on_transcribed(self, text: str):
+        self.status_label.setVisible(False)
+        self._set_avatar_state("IDLE")
+        self.mic_button.setEnabled(True)
+        self.input_field.setText(text)
+        self.input_field.setFocus()
+
+    def _on_stt_error(self, message: str):
+        self.status_label.setVisible(False)
+        self._set_avatar_state("IDLE")
+        self.mic_button.setEnabled(True)
+        self._append("assistant", f"[STT] {message}")
+
     # ── Stop & Unlock ──
     def stop_generation(self):
         """
@@ -592,5 +684,7 @@ class MainWindow(QWidget):
             self.worker.stop()
         if self.tts_worker is not None and self.tts_worker.isRunning():
             self.tts_worker.wait(2000)
+        if self.stt_worker is not None and self.stt_worker.isRunning():
+            self.stt_worker.wait(2000)
         self.lucas.close()
         event.accept()
