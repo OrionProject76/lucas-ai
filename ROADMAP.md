@@ -1777,6 +1777,69 @@ réel/aspirationnel reste visible sans relire ce fichier.
 non-enregistrement automatique, résistance à la dérive). Suite
 complète : 929 passed.
 
+## 5.16 Fermeture des trous de couverture résiduels, 04/08/2026
+
+Session autonome, Priorité 3. Les ~10 modules à 3-12 lignes non
+couvertes identifiés la veille (§5.9) : `core/intent.py`,
+`modules/stt_manager.py`, `modules/semantic_desktop.py`,
+`security/history.py`, `security/monitor.py`,
+`modules/finance_categorizer.py`, `modules/voice_manager.py`,
+`api/server.py`. `modules/calculator.py` écarté sans y toucher — son
+seul residu est le bloc `__main__`, même catégorie acceptée partout
+ailleurs dans le projet.
+
+Rien d'exceptionnel module par module — des branches jamais exercées
+par manque d'un scénario précis (échec réseau, cache plein, fichier
+corrompu, message WebSocket inconnu), toutes fermées en suivant les
+patrons déjà établis (mock de la frontière d'E/S, jamais de la logique).
+Un vrai bug trouvé au passage :
+
+⚠️ **`core/intent.py::classify()`** — en isolant le test du nettoyage de
+cache sur la branche héritée (`_CACHE.clear()` ligne 329), l'appel
+récursif interne (`classify(precedente, "", _inherit=False)`) s'est
+révélé être celui qui viderait le cache EN PREMIER si la question
+précédente n'est pas déjà en cache — la branche héritée elle-même ne
+voit alors jamais un cache plein. Pas un bug de production (le
+comportement observable — un cache qui ne dépasse jamais `_CACHE_MAX` —
+reste correct dans tous les cas), mais un premier test qui vérifiait la
+bonne PROPRIÉTÉ sans exercer la bonne LIGNE. Corrigé en pré-remplissant
+la question précédente dans le cache pour isoler proprement la branche
+héritée.
+
+**`api/server.py`** — les deux boucles de fond WebSocket
+(`_push_system_state`, `_push_security_status`, jamais appelées dans
+aucun test) tournent en `while True` : testées en appelant directement
+la coroutine avec un faux WebSocket dont `send_json()` lève — la boucle
+s'arrête au premier tour sans jamais avoir besoin d'un vrai
+`asyncio.sleep()`.
+
+**Détail par fichier** (tests ajoutés) : `core/intent.py` +4 (contexte
+vide après filtrage, `_ask_classifier` sur Ollama injoignable, cache
+plein sur classification directe ET héritée) ; `modules/stt_manager.py`
++4 (`is_available()` vrai/faux, chemin mobile qui échoue) ;
+`modules/semantic_desktop.py` +4 (sans ChromaDB pour les deux méthodes,
+entrée sans `source`) ; `security/history.py` +4 (JSON valide mais pas
+un objet, échec d'écriture, compte à rebours d'apprentissage) ;
+`security/monitor.py` +3 (`scan_runtime()`/`scan_all()` jamais appelés,
+échec de sauvegarde d'état) ; `modules/finance_categorizer.py` +2
+(`ask_local` réellement appelé par défaut, repli LLM réellement atteint
+pour un libellé non reconnu) ; `modules/voice_manager.py` +4 (log sans
+callback, forward vers Piper, échec de libération audio, liste des
+voix) ; `api/server.py` +6 (dépendance manquante sur `/system`, type de
+message WebSocket inconnu, échec du classifieur vision, les deux
+boucles de fond).
+
+Suite complète : 957 passed (929 + 28 nouveaux tests). Couverture
+globale (`core`/`modules`/`security`/`api`/`memory`) : 96% → 98%.
+Résiduel accepté, même catégorie que partout ailleurs (stub
+`cloud_llm.py`, blocs `__main__`, imports de compatibilité, UI PySide6
+hors périmètre) : `core/cloud_llm.py` (stub confirmé), une poignée de
+lignes à 1-8 par fichier sur `core/dates.py`, `core/lucas_core.py`,
+`modules/calculator.py`, `modules/finance_manager.py`,
+`modules/rag_manager.py`, `modules/vision_manager.py` (garde d'import
+`ollama`), `modules/weather_manager.py`, `modules/web_search.py`,
+`security/guardian.py`, `security/ransomware_watch.py`.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

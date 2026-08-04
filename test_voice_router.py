@@ -268,6 +268,43 @@ def test_audio_is_released_even_when_playback_fails(monkeypatch) -> None:
     assert "unload" in calls
 
 
+def test_release_audio_failure_is_logged_not_raised(monkeypatch, capsys) -> None:
+    """
+    Si la libération elle-même échoue, la synthèse suivante butera sur un
+    fichier verrouillé — ça doit être visible (print), jamais silencieux,
+    et surtout jamais remonter comme exception.
+    """
+    class _BrokenMusic:
+        @staticmethod
+        def load(path):
+            pass
+
+        @staticmethod
+        def play():
+            pass
+
+        @staticmethod
+        def get_busy():
+            return False
+
+        @staticmethod
+        def stop():
+            raise RuntimeError("mixer déjà fermé")
+
+        @staticmethod
+        def unload():
+            pass
+
+    fake_pygame = SimpleNamespace(
+        mixer=SimpleNamespace(music=_BrokenMusic, get_init=lambda: True),
+        time=SimpleNamespace(Clock=lambda: None),
+    )
+    monkeypatch.setitem(__import__("sys").modules, "pygame", fake_pygame)
+
+    assert VoiceManager().play_audio("data/output.mp3") is True
+    assert "Libération du fichier audio impossible" in capsys.readouterr().out
+
+
 def test_mixer_is_not_reinitialised_while_playing(monkeypatch) -> None:
     """Réinitialiser le mixer à chaque lecture coupe le son en cours."""
     inits: list[str] = []
@@ -357,6 +394,32 @@ def test_tts_worker_passes_question_and_logger(monkeypatch) -> None:
     assert received["on_playback_start"] is not None, (
         "l'UI doit être prévenue du démarrage réel du son"
     )
+
+
+# ── Détails jamais exercés (log sans callback, forward Piper, voix) ────
+
+def test_log_does_nothing_without_a_callback() -> None:
+    VoiceManager(log_event=None)._log("tts_skipped_sensitive", "texte", "raison")  # ne doit pas lever
+
+
+def test_synthesize_piper_forwards_to_the_piper_engine(monkeypatch) -> None:
+    manager = VoiceManager()
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        manager.piper, "synthesize",
+        lambda text, output_path: calls.append((text, output_path)) or output_path,
+    )
+
+    result = manager._synthesize_piper("bonjour", "data/sortie.wav")
+
+    assert calls == [("bonjour", "data/sortie.wav")]
+    assert result == "data/sortie.wav"
+
+
+def test_list_voices_returns_the_french_voices() -> None:
+    assert VoiceManager().list_voices() == [
+        "fr-FR-HenriNeural", "fr-FR-DeniseNeural", "fr-FR-EloiseNeural",
+    ]
 
 
 # ── PiperEngine ───────────────────────────────────────────────────────

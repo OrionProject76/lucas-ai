@@ -127,6 +127,41 @@ def test_default_llm_is_local_only() -> None:
     assert callable(ask_local)
 
 
+def test_categorize_by_llm_really_calls_ask_local_when_not_injected(monkeypatch) -> None:
+    """
+    La garde ci-dessus vérifie le texte du code ; celle-ci vérifie que la
+    branche par défaut (aucun `ask` fourni) s'exécute réellement.
+    """
+    import core.local_llm as local_llm_module
+
+    called = []
+
+    def fake_ask_local(messages):
+        called.append(messages)
+        return "Transport"
+
+    monkeypatch.setattr(local_llm_module, "ask_local", fake_ask_local)
+
+    assert categorize_by_llm("libellé quelconque") == "Transport"
+    assert len(called) == 1
+
+
+def test_categorize_falls_back_to_the_llm_for_an_unrecognized_label() -> None:
+    """
+    test_rules_win_over_llm prouve l'inverse (un libellé reconnu
+    n'atteint jamais le LLM) — celui-ci prouve qu'un libellé NON reconnu
+    l'atteint bien, plutôt que de rester bloqué avant.
+    """
+    called = []
+
+    def spy(messages):
+        called.append(messages)
+        return "Transport"
+
+    assert categorize("XYZ VIREMENT DIVERS 9988", ask=spy) == "Transport"
+    assert len(called) == 1
+
+
 # ── Analyse de format ─────────────────────────────────────────────────
 
 @pytest.mark.parametrize(

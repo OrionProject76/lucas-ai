@@ -197,6 +197,32 @@ def test_manager_forwards_the_mobile_path(monkeypatch) -> None:
     assert manager.transcribe_from_mobile(base64.b64encode(b"a").decode()).language == "fr"
 
 
+def test_manager_mobile_path_returns_none_instead_of_raising(monkeypatch) -> None:
+    """Même garde côté mobile que côté fichier : jamais d'exception qui remonte à l'API."""
+    manager = STTManager()
+    monkeypatch.setattr(
+        manager.engine, "transcribe_base64",
+        lambda audio: (_ for _ in ()).throw(STTUnavailable("pas de backend")),
+    )
+    assert manager.transcribe_from_mobile("peu importe") is None
+
+
+def test_manager_is_available_reflects_the_engine() -> None:
+    manager = STTManager()
+    manager.engine._backend = _FakeBackend()
+    assert manager.is_available() is True
+
+
+def test_manager_is_available_false_without_a_backend(monkeypatch) -> None:
+    import sys
+
+    manager = STTManager()
+    monkeypatch.setitem(sys.modules, "faster_whisper", None)
+    monkeypatch.setitem(sys.modules, "whisper", None)
+
+    assert manager.is_available() is False
+
+
 # ── Sélection du backend réel ──────────────────────────────────────────
 #
 # Tout ce qui précède injecte un backend factice : _load_backend() et les

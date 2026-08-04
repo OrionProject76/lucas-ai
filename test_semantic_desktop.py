@@ -111,6 +111,14 @@ def test_related_documents_empty_when_source_not_indexed(desktop) -> None:
     assert sd.related_documents("inconnu.pdf") == []
 
 
+def test_related_documents_empty_without_chroma(desktop) -> None:
+    sd, collection = desktop
+    _index(collection, "cv.pdf", ["contenu"])
+    sd.rag.use_chroma = False
+
+    assert sd.related_documents("cv.pdf") == []
+
+
 def test_group_by_period_groups_matching_documents(desktop) -> None:
     sd, collection = desktop
     _index(collection, "bulletin_juillet.pdf", ["contenu"], periods="2025-07,2025")
@@ -148,6 +156,25 @@ def test_group_by_period_ignores_month_level_granularity(desktop) -> None:
 
     assert "2025-07" not in groups
     assert groups["2025"] == ["bulletin_juillet.pdf"]
+
+
+def test_group_by_period_empty_without_chroma(desktop) -> None:
+    sd, collection = desktop
+    _index(collection, "bulletin_juillet.pdf", ["contenu"], periods="2025-07,2025")
+    sd.rag.use_chroma = False
+
+    assert sd.group_by_period() == {}
+
+
+def test_group_by_period_ignores_entries_without_a_source(desktop) -> None:
+    """Une métadonnée sans "source" (chunk orphelin) ne doit pas produire de groupe fantôme."""
+    sd, collection = desktop
+    collection.add(documents=["contenu"], metadatas=[{"periods": "2025"}], ids=["orphelin_0"])
+    _index(collection, "bulletin.pdf", ["contenu"], periods="2025")
+
+    groups = sd.group_by_period()
+
+    assert groups["2025"] == ["bulletin.pdf"]
 
 
 def test_semantic_desktop_never_writes_to_disk() -> None:

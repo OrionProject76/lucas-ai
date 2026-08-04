@@ -513,3 +513,84 @@ def test_sans_contexte_une_ellipse_est_classee_normalement(fake_classifier):
     resultat = classify("Et pour 2024 ?")
 
     assert resultat.source == "llm"
+
+
+# ── format_context() : cas jamais testé ─────────────────────────────────
+
+def test_format_context_is_empty_when_every_recent_turn_is_blank():
+    """Un historique non vide mais dont les derniers tours sont vides ne doit rien produire."""
+    from core.intent import format_context
+
+    assert format_context([("user", "   "), ("assistant", "\n")]) == ""
+
+
+# ── _ask_classifier() : jamais appelé réellement, toujours mocké ────────
+
+def test_ask_classifier_returns_none_when_ollama_is_unreachable(monkeypatch):
+    """Ollama à l'arrêt, timeout, réponse malformée : dégrader, jamais planter."""
+    from core.intent import _ask_classifier
+
+    def _raise(*a, **k):
+        raise ConnectionError("Ollama injoignable")
+
+    monkeypatch.setattr("core.ollama_client.post_chat", _raise)
+
+    assert _ask_classifier("quelle heure est-il ?") is None
+
+
+# ── Cache borné : jamais rempli jusqu'à _CACHE_MAX dans un test ─────────
+
+def _fill_cache_to_the_limit():
+    for i in range(intent._CACHE_MAX):
+        intent._CACHE[(f"contexte{i}", f"question{i}")] = Intent(
+            needs_screen=False, needs_documents=False, source="llm",
+        )
+
+
+def test_cache_is_reset_when_full_on_a_direct_classification(fake_classifier):
+    """
+    Un repli mots-clés ne serait pas mis en cache (voir
+    test_a_fallback_is_never_cached) — remplir le cache exige donc de
+    vrais verdicts LLM, jusqu'à _CACHE_MAX, avant de classer une question
+    de plus.
+    """
+    _fill_cache_to_the_limit()
+    fake_classifier({"nouvelle question": SCREEN})
+
+    classify("nouvelle question")
+
+    assert len(intent._CACHE) == 1, "le cache plein doit être vidé, pas laissé grossir"
+    assert intent._CACHE[("", "nouvelle question")].needs_screen
+
+
+def test_cache_is_reset_when_full_on_an_inherited_classification(monkeypatch):
+    """
+    ⚠️ L'appel récursif interne (classify(precedente, "", _inherit=False))
+    classe et met en cache la question précédente EN PREMIER. Si elle
+    n'est pas déjà en cache, c'est LUI qui viderait le cache plein — pas
+    la branche héritée elle-même. Pour isoler et vérifier le nettoyage
+    PROPRE À la branche héritée, la question précédente est donc déjà en
+    cache : l'appel interne fait un cache HIT (`_ask_classifier` ne doit
+    jamais être sollicité) et ne modifie pas la taille du cache — c'est
+    seulement alors que la branche héritée voit un cache plein et le vide.
+    """
+    for i in range(intent._CACHE_MAX - 1):
+        intent._CACHE[(f"contexte{i}", f"question{i}")] = Intent(
+            needs_screen=False, needs_documents=False, source="llm",
+        )
+    intent._CACHE[("", "Que dit mon relevé de carrière ?")] = Intent(
+        needs_screen=False, needs_documents=True, source="llm",
+    )
+    assert len(intent._CACHE) == intent._CACHE_MAX
+
+    def _must_not_be_called(q, c=""):
+        raise AssertionError("la question précédente était déjà en cache : pas d'appel LLM attendu")
+
+    monkeypatch.setattr(intent, "_ask_classifier", _must_not_be_called)
+
+    contexte = "Cyril : Que dit mon relevé de carrière ?\nToi : Vos trimestres."
+    resultat = classify("Et pour 2024 ?", contexte)
+
+    assert resultat.source == "inherited"
+    assert resultat.needs_documents
+    assert len(intent._CACHE) == 1, "le cache plein doit être vidé par la branche héritée elle-même"

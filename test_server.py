@@ -193,6 +193,20 @@ def test_system_returns_the_world_model_snapshot(client) -> None:
     }
 
 
+def test_system_reports_a_missing_dependency_clearly(client, monkeypatch) -> None:
+    """Une dépendance manquante pour le World Model doit devenir un 500 explicite, pas un plantage brut."""
+    from api import server
+
+    def _raise():
+        raise ImportError("GPUtil absent")
+
+    monkeypatch.setattr(server, "get_snapshot", _raise)
+
+    response = client.get("/system")
+    assert response.status_code == 500
+    assert "Dépendance manquante" in response.json()["detail"]
+
+
 def test_chat_returns_the_answer(client, fake_core) -> None:
     response = client.post("/chat", json={"message": "quelle heure il est"})
     assert response.status_code == 200
@@ -517,6 +531,50 @@ def test_websocket_mobile_explicit_pc_mention_still_watches(client, fake_core) -
     # mentions_pc_explicitly(), à l'intérieur de LucasCore, qui lève la
     # restriction — pas ce indicateur-ci.
     assert fake_core["asked_allow_screen_capture"] is False
+
+
+def test_websocket_ignores_an_unrecognized_message_type(client, fake_core) -> None:
+    """Un type de message inconnu (else: continue) ne doit ni casser la connexion ni bloquer les suivants."""
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "morse_inconnu", "message": "..."})
+        ws.send_json({"type": "chat", "message": "bonjour"})
+
+        states = []
+        for _ in range(15):
+            message = ws.receive_json()
+            if message.get("type") == "avatar_state":
+                states.append(message["state"])
+            if states[-3:] == ["thinking", "speaking", "idle"]:
+                break
+
+    assert states[-3:] == ["thinking", "speaking", "idle"]
+
+
+def test_websocket_a_vision_check_failure_falls_back_to_thinking(client, fake_core, monkeypatch) -> None:
+    """
+    Un doute sur should_use_vision() (ou recent_context()) ne doit jamais
+    empêcher de répondre — regarde=False, comme si l'écran n'était pas
+    demandé, jamais une connexion rompue.
+    """
+    from api import server
+
+    def _raise(message, context=""):
+        raise RuntimeError("classifieur indisponible")
+
+    monkeypatch.setattr(server, "should_use_vision", _raise)
+
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "chat", "message": "regarde mon écran"})
+
+        states = []
+        for _ in range(15):
+            message = ws.receive_json()
+            if message.get("type") == "avatar_state":
+                states.append(message["state"])
+            if states[-3:] == ["thinking", "speaking", "idle"]:
+                break
+
+    assert states[-3:] == ["thinking", "speaking", "idle"], "jamais WATCHING quand le classifieur a échoué"
 
 
 def test_websocket_also_emits_a_chat_message(client, fake_core) -> None:
@@ -1090,6 +1148,37 @@ def test_world_model_is_not_reimplemented() -> None:
     )
     assert "_get_active_window_title" not in source
     assert "get_snapshot" in source
+
+
+# ── Boucles de fond du WebSocket (jamais appelées directement ailleurs) ─
+
+def test_push_system_state_stops_on_a_broken_connection() -> None:
+    """
+    _push_system_state() tourne en boucle infinie pour le HUD Godot —
+    la seule façon d'en sortir est l'exception attrapée. Sans elle, une
+    déconnexion laisserait la tâche de fond tourner pour rien.
+    """
+    import asyncio
+
+    from api.server import _push_system_state
+
+    class _BrokenWebSocket:
+        async def send_json(self, data):
+            raise RuntimeError("connexion fermée")
+
+    asyncio.run(_push_system_state(_BrokenWebSocket()))  # ne doit jamais lever ni boucler
+
+
+def test_push_security_status_stops_on_a_broken_connection() -> None:
+    import asyncio
+
+    from api.server import _push_security_status
+
+    class _BrokenWebSocket:
+        async def send_json(self, data):
+            raise RuntimeError("connexion fermée")
+
+    asyncio.run(_push_security_status(_BrokenWebSocket()))  # ne doit jamais lever ni boucler
 
 
 if __name__ == "__main__":

@@ -885,6 +885,44 @@ def test_corrupted_state_file_does_not_crash(tmp_path) -> None:
     assert SecurityMonitor(state_path=state)._seen == {}
 
 
+def test_scan_runtime_combines_guardian_and_privacy_shield(monitor, monkeypatch) -> None:
+    """scan_runtime() n'était jamais appelé dans aucun test — seul _report_new() l'était directement."""
+    mon, _events = monitor
+    monkeypatch.setattr(mon.guardian, "scan", lambda: [_finding(kind="guardian_signal")])
+    monkeypatch.setattr(mon.privacy_shield, "scan", lambda: [_finding(kind="privacy_signal")])
+
+    kinds = {f.kind for f in mon.scan_runtime()}
+    assert kinds == {"guardian_signal", "privacy_signal"}
+
+
+def test_scan_all_combines_the_four_sensors(monitor, monkeypatch) -> None:
+    """scan_all() n'était jamais appelé dans aucun test."""
+    mon, _events = monitor
+    monkeypatch.setattr(mon.guardian, "scan", lambda: [_finding(kind="guardian_signal")])
+    monkeypatch.setattr(mon.privacy_shield, "scan", lambda: [_finding(kind="privacy_signal")])
+    monkeypatch.setattr(mon.ransomware_watch, "scan", lambda: [_finding(kind="ransomware_signal")])
+    monkeypatch.setattr(mon.persistence_watch, "scan", lambda: [_finding(kind="persistence_signal")])
+
+    kinds = {f.kind for f in mon.scan_all()}
+    assert kinds == {
+        "guardian_signal", "privacy_signal", "ransomware_signal", "persistence_signal",
+    }
+
+
+def test_save_state_failure_does_not_raise(monitor, monkeypatch) -> None:
+    """Un état non sauvegardé fait re-signaler au prochain balayage, ne doit jamais planter celui-ci."""
+    from pathlib import Path
+
+    mon, _events = monitor
+
+    def _raise(self, *a, **k):
+        raise OSError("disque plein")
+
+    monkeypatch.setattr(Path, "write_text", _raise)
+
+    mon._report_new([_finding()])  # ne doit pas lever
+
+
 def test_forget_all_makes_everything_reportable(monitor) -> None:
     mon, _events = monitor
     mon._report_new([_finding()])
@@ -998,6 +1036,51 @@ def test_old_entries_are_purged(tmp_path, monkeypatch) -> None:
     )
 
     assert len(BehaviourHistory(path)) == 0
+
+
+def test_history_starts_empty_when_the_json_is_not_an_object(tmp_path) -> None:
+    """Un JSON valide mais qui n'est pas un objet (liste, nombre...) doit aussi repartir à vide."""
+    from security.history import BehaviourHistory
+
+    path = tmp_path / "h.json"
+    path.write_text("[1, 2, 3]", encoding="utf-8")
+    assert len(BehaviourHistory(path)) == 0
+
+
+def test_save_failure_does_not_raise(monkeypatch, tmp_path) -> None:
+    """Un historique non sauvegardé dégrade le prochain balayage, ne doit jamais planter celui-ci."""
+    from pathlib import Path
+
+    from security.history import BehaviourHistory
+
+    history = BehaviourHistory(tmp_path / "h.json")
+    history.remember("net|chrome.exe|8.8.8.8")
+
+    def _raise(self, *a, **k):
+        raise OSError("disque plein")
+
+    monkeypatch.setattr(Path, "write_text", _raise)
+
+    history.save()  # ne doit pas lever
+
+
+def test_learning_remaining_hours_counts_down(tmp_path, monkeypatch) -> None:
+    import time
+
+    from security import history as history_module
+    from security.history import BehaviourHistory
+
+    monkeypatch.setattr(history_module, "SECURITY_LEARNING_HOURS", 24)
+    learning = BehaviourHistory(tmp_path / "h.json")
+    learning._started_at = time.time() - 3600  # une heure déjà écoulée
+
+    remaining = learning.learning_remaining_hours()
+    assert 22.9 < remaining < 23.1
+
+
+def test_learning_remaining_hours_never_negative(history) -> None:
+    """La période est déjà terminée (fixture history) : jamais un compte à rebours négatif."""
+    assert history.learning_remaining_hours() == 0.0
 
 
 # ── Premier contact externe ───────────────────────────────────────────
