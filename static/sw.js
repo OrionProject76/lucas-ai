@@ -12,7 +12,12 @@
 // nom change à chaque fois pour forcer un install() frais — sans ça, un
 // téléphone avec la PWA déjà installée garderait indéfiniment l'ancien
 // fichier buggé en cache.
-const CACHE_NAME = "lucas-shell-v8";
+// v9 (05/08/2026) : correctif audio.js — flux micro mis en cache et
+// réutilisé entre enregistrements (perte de la première syllabe d'une
+// phrase, cause probable identifiée en conditions réelles avec Cyril,
+// voir ROADMAP.md §5.28). Même raison que v6 : sans bump, le téléphone
+// garderait l'ancien audio.js en cache malgré le fichier serveur à jour.
+const CACHE_NAME = "lucas-shell-v9";
 const SHELL_FILES = [
     "/app/",
     "/app/index.html",
