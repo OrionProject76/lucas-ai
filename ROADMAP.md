@@ -1489,6 +1489,45 @@ hors périmètre.
 
 **Campagne close ici.** Suite complète : 859 tests, tous verts.
 
+## 5.10 Memory Palace — socle confiance/provenance construit le 04/08/2026
+
+Session autonome 8-10h. `IDEAS.md` #2bis (ajout 03/08/2026) demandait
+d'ajouter aux tables mémoire existantes les six champs — `source`,
+`date`, `confidence`, `last_validated`, `importance`, `expiration` —
+plutôt qu'un nouveau système parallèle. Fait dans `memory/memory_manager.py` :
+migration additive (`_migrate_add_column()`, généralisation de l'ancien
+`_migrate_add_agent_id_column()`), sur `conversations` ET `system_events`.
+`date`/`last_validated` rétro-remplis depuis `created_at` sur une base
+existante — un message déjà en base était vrai au moment observé, seule
+valeur par défaut disponible sans reconstituer un historique perdu.
+
+`save_message()`/`save_event()` acceptent ces six champs en paramètres
+**optionnels, mots-clé uniquement**, valeurs par défaut sûres
+(`confidence=1.0`, `importance=0.5`, `source` selon la table) : aucun
+appelant existant du projet n'a eu besoin de changer. Deux nouvelles
+méthodes de lecture, `load_history_with_metadata()` et
+`load_recent_events_with_metadata()` — volontairement séparées de
+`load_history()`/`load_recent_events()`, dont `LucasCore._build_messages()`
+et toute la suite de tests dépendent sous leur forme `(role, message)` /
+`(event_type, details, created_at)` actuelle ; les changer aurait
+propagé une modification non demandée dans tout le projet.
+
+**Portée délibérément arrêtée ici** : le socle est prêt, mais rien
+n'exploite encore ces valeurs. Ni le Reasoning Engine (qui reste
+désactivé, `REASONING_ENGINE_ENABLED=False`, décision de Cyril — non
+touchée) ni le RAG ne repondèrent quoi que ce soit dessus aujourd'hui.
+C'est le chantier suivant, pas celui-ci.
+
+**Validé** : 12 tests dans `test_memory_manager.py` (colonnes présentes,
+défauts sensés côté message ET événement, surcharge explicite par
+l'appelant, rétro-remplissage sur une base à l'ancien schéma, forme de
+`load_history()` inchangée). **Validation en conditions réelles** : migration
+exécutée sur une COPIE de la vraie base de Cyril (`memory/lucas_memory.db`,
+jamais le fichier live) — 100 conversations et 233 événements présents
+avant/après, premier message identique bit à bit, toutes les colonnes
+créées et rétro-remplies (`date`/`last_validated` = `created_at` d'origine,
+ex. `2026-08-02 20:06:58`). Suite complète du projet : 865 passed.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

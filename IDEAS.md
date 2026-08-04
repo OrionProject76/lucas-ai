@@ -87,6 +87,14 @@ doit porter ces métadonnées, pas juste le contenu brut :
 | importance | Poids dans les décisions futures |
 | expiration (optionnel) | Date au-delà de laquelle le souvenir doit être revalidé avant réemploi |
 
+**Socle construit et testé le 04/08/2026** (`memory/memory_manager.py`,
+voir `ROADMAP.md` §5.10) : les six colonnes existent sur `conversations`
+et `system_events`, migration additive (bases existantes rétro-remplies
+depuis `created_at`), `save_message()`/`save_event()` les acceptent en
+paramètres optionnels avec des valeurs par défaut sûres. **L'exploitation
+reste future** : rien ne repondère aujourd'hui le Reasoning Engine ou le
+RAG sur ces valeurs — c'est le chantier suivant, pas celui-ci.
+
 Pourquoi : évite qu'une info fausse ou périmée devienne une vérité figée dans
 la mémoire de Luca's juste parce qu'elle a été écrite une fois. Ajoute ces
 colonnes à la table memories/events SQLite existante plutôt que créer un
