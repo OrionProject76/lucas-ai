@@ -249,6 +249,14 @@ Une fois le test terminé, restaurer les fenêtres minimisées — ou les laisse
 
 Contexte : posé après l'incident du 02/08/2026 où un avatar Godot plein écran, toujours au-dessus, capturait les clics sur tout le bureau (voir `ROADMAP.md` §3, section Godot). Minimiser les fenêtres gênantes évite la confusion visuelle pendant un test, sans rapport avec ce bug de fond.
 
+### Précision : jamais de P/Invoke Win32 pour manipuler des fenêtres en test (acté le 04/08/2026)
+
+La section précédente autorise Claude Code à minimiser des fenêtres pour un test visuel — celle-ci borne COMMENT. **Jamais de P/Invoke bas niveau** (`Add-Type` + `[DllImport("user32.dll")]` ou équivalent — `SetForegroundWindow`, `ShowWindow`, `GetForegroundWindow`, hooks clavier/souris...) pour manipuler ou contrôler des fenêtres tierces à des fins de test, même motif que l'exclusion déjà actée côté détection (`ROADMAP.md` §4, "Sur les hooks clavier" : "énumérer les hooks `SetWindowsHookEx` demande des appels natifs Win32... un module qui ne détecte rien donnerait une fausse assurance") — appliqué ici à l'inverse, à ce que Claude Code s'autorise à FAIRE plutôt qu'à ce que Luca's est capable de détecter, mais la même méfiance envers ce registre d'API.
+
+**Seules les méthodes déjà documentées restent autorisées** : capture d'écran standard (`PIL.ImageGrab`, comme `modules/vision_manager.py`), minimiser/fermer un process via les cmdlets PowerShell standard (`Stop-Process`, `Get-Process` en lecture) — jamais de contrôle direct de fenêtres tierces (focus forcé, injection de messages Windows, hooks).
+
+Contexte : incident du 04/08/2026 — une tentative de forcer une fenêtre Notepad de test au premier plan via `Add-Type`/`SetForegroundWindow` a (1) capturé par accident une fenêtre imprévue (l'appli Claude, titres de conversation réels de Cyril, supprimée immédiatement) et (2) été bloquée par Bitdefender avant toute exécution ("script contenu malveillant"). Le motif — `Add-Type` compilant des `P/Invoke` vers `user32.dll` pour manipuler des fenêtres — est précisément le genre de signature heuristique qu'un antivirus est censé bloquer, intention malveillante ou non. Contourner ce blocage n'a jamais été envisagé ; la bonne réponse est de ne pas emprunter ce chemin du tout.
+
 ### Précision : toute action manuelle côté client se demande explicitement (acté le 02/08/2026)
 
 La section précédente couvre ce que Claude Code peut faire **lui-même** sur le
