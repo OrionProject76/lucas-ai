@@ -2132,12 +2132,24 @@ sur une question écran), avec `ContextWorker`/`LLMWorker` remplacés par un
 `start()` synchrone, même principe que STTWorker/TTSWorker (pas de vraie boucle
 de threads Qt à orchestrer, pas besoin de `pytest-qt`).
 
+**Fermé après coup (même session, suite du rapport à Cyril)** :
+`stop_generation()`/`closeEvent()` sous conditions de vrais threads
+`isRunning()==True` — de VRAIS `QThread` démarrés (`.start()` réel), bloqués sur
+un `threading.Event` jusqu'à ce que le test le libère, sans exécuter de code de
+production (`LucasCore`/Ollama) dedans. 4 tests : Stop interrompt un
+ContextWorker/un LLMWorker réellement en cours, Stop ne fait rien s'il n'y a
+rien à interrompre, `closeEvent()` attend un ContextWorker réel sans planter.
+⚠️ Piège trouvé en écrivant ces tests : `send_button.isVisible()` reste False
+sans `show()` du widget parent — même famille que le bug `repaint()`
+ci-dessus, mais ici c'est l'assertion de test qui aurait été fausse, pas le
+produit ; `isEnabled()` ne dépend pas de la chaîne de parents montrés, utilisé
+à la place.
+
 **Non poursuivi, rendements décroissants** (résidu accepté, même catégorie que le
-reste du projet) : `stop_generation()`/`closeEvent()` sous conditions de vrais
-threads `isRunning()==True` (nécessiterait des faux threads qui restent
-"running", pas juste un `start()` synchrone) ; gardes d'import optionnelles
-(`HAS_AVATAR`/`HAS_VOICE` en échec) ; blocs `__main__`. 12 tests ajoutés au
-total. Suite complète : 1012 passed après Priorité 2 seule.
+reste du projet) : gardes d'import optionnelles (`HAS_AVATAR`/`HAS_VOICE` en
+échec) ; blocs `__main__` ; quelques branches uniques (statut déjà masqué,
+TTS auto désactivé). 16 tests ajoutés au total pour la Priorité 2. UI : 87%
+(`avatar_widget.py` 87%, `main_window.py` 87%).
 
 ### Priorité 3 — validation réelle des 2 modes AURA : 1 bug réel trouvé et corrigé
 
@@ -2159,8 +2171,14 @@ titres réels ci-dessus (tous NONE désormais) plus « Windows Terminal » (touj
 WORKING) ; les 15 tests existants repassent sans régression. **Validation
 réelle** : `AuraModeEngine` réel exécuté contre le VRAI `get_snapshot()` de cette
 machine maintenant — fenêtre active réelle (46 caractères, non divulguée) → NONE
-(correct) ; commande réelle « active le mode focus » → DEEP_FOCUS. Suite
-complète : 1017 passed.
+(correct) ; commande réelle « active le mode focus » → DEEP_FOCUS.
+
+### Clôture du dernier point ouvert (stop_generation()/closeEvent(), même session)
+
+Signalé comme « rendements décroissants » dans le rapport de fin de Priorité 2
+puis fermé dans le temps restant après validation avec Cyril du seuil RAG
+(voir plus haut) — détail dans la sous-section Priorité 2 ci-dessus. Suite
+complète, tout fermé : **1021 passed**.
 
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 

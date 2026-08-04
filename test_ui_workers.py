@@ -10,12 +10,15 @@
 from __future__ import annotations
 
 import os
+import threading
 
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
+
+from PySide6.QtCore import QThread, Signal
 
 from ui.main_window import ContextWorker
 
@@ -640,6 +643,116 @@ def test_send_message_switches_the_avatar_to_watching_for_screen_questions(app_w
     app_window.send_message()
 
     assert app_window.avatar.state == "WATCHING" if main_window.HAS_AVATAR else True
+
+
+# ── stop_generation() / closeEvent() ─────────────────────────────────
+#
+# Dernier trou signalé comme "rendements décroissants" dans le rapport du
+# 04/08/2026 : isRunning() a besoin d'un VRAI thread démarré, pas d'un
+# run() appelé directement comme STTWorker/TTSWorker plus haut. Ces
+# workers de test bloquent réellement (threading.Event) le temps du
+# test — thread réel, pas de code de production (LucasCore/Ollama)
+# exécuté dedans.
+
+
+def _wait_until_running(worker, timeout=2.0) -> None:
+    import time
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if worker.isRunning():
+            return
+        time.sleep(0.005)
+    raise AssertionError("le thread de test n'a jamais démarré à temps")
+
+
+class _BlockingContextWorker(QThread):
+    """Vrai QThread, run() bloquant jusqu'à cancel() — pas de code de production dedans."""
+
+    ready = Signal(list)
+    error = Signal(str)
+
+    def __init__(self):
+        super().__init__()
+        self.cancelled = False
+        self._release = threading.Event()
+
+    def cancel(self):
+        self.cancelled = True
+        self._release.set()
+
+    def run(self):
+        self._release.wait(3)  # filet de sécurité si cancel() n'arrive jamais
+
+
+class _BlockingLLMWorker(QThread):
+    """Vrai QThread, run() bloquant jusqu'à stop() — pas de code de production dedans."""
+
+    token_received = Signal(str)
+    response_complete = Signal(str)
+    error_occurred = Signal(str)
+    started_thinking = Signal()
+
+    def __init__(self):
+        super().__init__()
+        self.stopped = False
+        self._release = threading.Event()
+
+    def stop(self):
+        self.stopped = True
+        self._release.set()
+        self.wait(1000)
+
+    def run(self):
+        self._release.wait(3)
+
+
+def test_stop_generation_interrupts_a_running_context_worker(app_window) -> None:
+    worker = _BlockingContextWorker()
+    app_window.context_worker = worker
+    worker.start()
+    _wait_until_running(worker)
+
+    app_window.stop_generation()
+
+    assert worker.cancelled is True
+    assert "[Génération interrompue]" in app_window.chat_history.toPlainText()
+    # isVisible() exigerait un show() du widget parent (même famille que le
+    # bug repaint()/offscreen déjà trouvé) — isEnabled() n'en dépend pas.
+    assert app_window.input_field.isEnabled() is True
+    worker.wait(2000)
+
+
+def test_stop_generation_interrupts_a_running_llm_worker(app_window) -> None:
+    worker = _BlockingLLMWorker()
+    app_window.worker = worker
+    worker.start()
+    _wait_until_running(worker)
+
+    app_window.stop_generation()
+
+    assert worker.stopped is True
+    assert "[Génération interrompue]" in app_window.chat_history.toPlainText()
+
+
+def test_stop_generation_does_nothing_when_nothing_is_running(app_window) -> None:
+    """Ni context_worker ni worker : Stop ne doit rien afficher."""
+    app_window.stop_generation()
+    assert app_window.chat_history.toPlainText() == ""
+
+
+def test_close_event_waits_for_a_running_context_worker(app_window) -> None:
+    from PySide6.QtGui import QCloseEvent
+
+    worker = _BlockingContextWorker()
+    app_window.context_worker = worker
+    worker.start()
+    _wait_until_running(worker)
+
+    app_window.closeEvent(QCloseEvent())  # ne doit pas lever, ni planter sur un thread encore actif
+
+    assert worker.cancelled is True
+    assert worker.isRunning() is False
 
 
 if __name__ == "__main__":
