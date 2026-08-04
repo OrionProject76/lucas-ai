@@ -389,7 +389,11 @@ C:/OrionAI/
 │   ├── memory_manager.py       # Historique SQLite (memory/lucas_memory.db)
 │   └── index_documents.py      # Indexation batch ChromaDB
 ├── ui/                          # Interface PySide6
-│   ├── main_window.py / chat_widget.py / avatar_widget.py
+│   ├── main_window.py / avatar_widget.py  # chat_widget.py retiré le
+│   │                                        04/08/2026 : code mort,
+│   │                                        jamais importé nulle part
+│   │                                        (main_window.py construit
+│   │                                        son propre QTextEdit)
 ├── api/                         # API FastAPI unique (PWA + Godot + tests)
 │   ├── server.py                # /chat, /history, /system, /documents..., /ws
 │   └── protocol.py               # Vocabulaire WebSocket partagé
