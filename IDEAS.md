@@ -954,6 +954,18 @@ exactement le motif que ce projet traque depuis deux jours : des tests
 verts sur un comportement jamais observé en réel. Les entrées suivantes
 cadrent ce qu'il faudra construire **quand le matériel sera là**.
 
+⚠️ **Le choix du VLM sera à refaire, pas à hériter.** Avec la webcam PTZ,
+le VLM devient un capteur **quotidien** (suivi du regard pendant les
+interactions), plus une capacité occasionnelle : un taux d'hallucination
+supportable sur une capture ponctuelle devient plusieurs erreurs par jour
+sur ce que Cyril fait devant son écran. Quand ce chantier s'ouvre, le VLM
+se traite avec le **même sérieux que le LLM principal** — comparatif
+mesuré complet, jamais une reconduction de `llava` par défaut parce
+qu'il était déjà là. Candidats, réserve sur le 0,33 % non mesuré
+localement, et contrainte VRAM croisée avec le LLM : **`ROADMAP.md` §5.56,
+section « À lire quand le chantier VLM s'ouvrira »**. Méthode
+opposable : règle 12 de `CLAUDE.md`.
+
 ---
 
 ## #91 — Détection de mot de réveil (« Luca ») — options, rien de construit

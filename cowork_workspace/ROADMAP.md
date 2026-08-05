@@ -5749,11 +5749,62 @@ mesurés qui la laissent sont `gemma4:latest` (9,7 Go de marge, 0/15 de
 guichet, mais 3,27 s au premier token) et `granite4.1:8b` (disqualifié
 sur le style). **Ce sera un vrai arbitrage, à refaire à ce moment-là.**
 
+### ⚠️ À LIRE QUAND LE CHANTIER VLM S'OUVRIRA — le choix du VLM vaut celui du LLM
+
+**Note posée d'avance, à dessein.** Le risque n'est pas de mal choisir :
+c'est de **ne pas choisir du tout** et de garder `llava` par défaut,
+simplement parce qu'il était déjà là.
+
+**Ce qui change la donne** : avec la webcam PTZ motorisée
+(`VISION_LONG_TERME.md` §Pilier 3, révisé les 04-05/08), le VLM devient
+un capteur **quotidien** — suivi du regard pendant les interactions — et
+non plus une capacité occasionnelle déclenchée à la demande. Un modèle
+qui hallucine 2 % du temps sur une capture ponctuelle devient un modèle
+qui se trompe plusieurs fois par jour, en continu, sur ce que Cyril fait
+devant son écran.
+
+**Donc : comparatif complet, même sérieux que pour le LLM principal**
+(règle 12 de `CLAUDE.md`) — VRAM avec contexte réaliste, latence au
+premier token, débit, régression sur les tests de contrôle.
+
+Candidats déjà identifiés, **à ne pas prendre pour une liste close** :
+
+| Candidat | Statut au 05/08/2026 |
+|---|---|
+| `qwen2.5-vl:7b` | recommandé par le comparatif VLM (`cowork_workspace/reports/Comparatif_VLM_LucasAI_2026-08-05.md`) |
+| `llava` | l'actuel — à traiter comme un candidat, pas comme le sortant d'office |
+| `minicpm-v4.6` | second candidat sérieux, orienté OCR/document dense |
+| `Qwen3-VL` | **écarté au 05/08** : bug de bascule GPU ouvert sur RTX 50-series. À revérifier — un bug se corrige |
+
+⚠️ **Le 0,33 % d'hallucination de `qwen2.5-vl:7b` n'a PAS été mesuré sur
+cette machine.** Il vient d'un benchmark public tiers (PhotoPrism), cité
+honnêtement comme tel dans le rapport. La règle 12 impose de le
+**re-mesurer localement** avant d'en faire un critère de décision —
+c'est exactement le type de chiffre que les comparatifs du 05/08 ont
+appris à ne pas croire sur parole.
+
+**Et rechercher les sorties les plus récentes à CE moment-là** : cette
+liste est figée au 05/08/2026, le paysage VLM bouge vite. Elle sert de
+point de départ, pas de périmètre.
+
+Rappel du §5.56 ci-dessus qui pèsera dans l'arbitrage : avec
+`VLM_NEEDS_VRAM_MO = 4700`, ni `gpt-oss:20b` (1 011 Mo de marge) ni
+`gemma3:12b` (4 493 Mo) ne laissent la place à un VLM résident. **Le
+choix du VLM et celui du LLM principal devront donc être tranchés
+ensemble, pas l'un après l'autre.**
+
 ### Reste sur le disque
 
 `gemma4:26b` (17 Go) et `granite4.1:8b` (5,3 Go) ont été tirés pour ces
-mesures. 237 Go libres, donc sans urgence — mais 22,3 Go récupérables
-sur demande, aucun des deux n'étant retenu.
+mesures — plus `granite3.3:8b` (4,9 Go), tiré par inadvertance : le test
+de disponibilité des tags utilisait `ollama pull`, qui **télécharge**
+quand le tag existe au lieu de seulement interroger le manifeste. Soit
+**27,2 Go**, et non les 22,3 annoncés d'abord.
+
+**Les trois ont été supprimés le 05/08** sur accord de Cyril : 224 →
+251 Go libres, écart conforme. Inventaire revenu à 14 modèles, celui
+d'avant la campagne ; `gpt-oss:20b`, `llava:latest` et
+`nomic-embed-text` intacts.
 
 **Aucune bascule en production n'a été faite** : `MODEL_NAME` reste
 `gpt-oss:20b`, conformément à la consigne.

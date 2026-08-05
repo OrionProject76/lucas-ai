@@ -691,3 +691,42 @@ rattache.
     session, pas une règle de ce fichier) ; la référence erronée n'a pas
     été recopiée pour ne pas enraciner une fausse piste dans un document
     de référence.
+
+12. **Veille modèles (LLM et VLM)** — recherche du meilleur compromis
+    performance/qualité, **en continu, pas une fois pour toutes**.
+
+    **Quand** : avant tout jalon important du projet (changement de
+    phase, chantier majeur qui rouvre — ex. réactivation du VLM avec la
+    webcam), et à intervalle raisonnable sinon (**tous les 30 jours**,
+    ou à la demande de Cyril).
+
+    **Quoi** : rechercher sur internet les modèles LLM et VLM récents
+    disponibles sur Ollama, adaptés à la config (RTX 5080, 16 Go).
+
+    **Comment — la méthode éprouvée les 05/08** : mesurer RÉELLEMENT sur
+    cette machine — VRAM avec un contexte réaliste (pas un modèle vide),
+    latence au premier token, débit, et régression sur les tests de
+    contrôle existants (guichet, tutoiement). **Jamais se fier à un
+    benchmark ou à une promesse non vérifiée.**
+
+    **Ne jamais basculer un modèle en production sans validation
+    explicite de Cyril**, même si la mesure est favorable.
+
+    **Documenter chaque comparatif dans `ROADMAP.md`**, y compris les
+    candidats écartés et pourquoi.
+
+    ⚠️ **Vérifier la disponibilité réelle du tag avant de mesurer** —
+    `ollama pull` échoue si le tag n'existe pas côté Ollama, même quand
+    le modèle existe sur Hugging Face. Et attention : `ollama pull`
+    **télécharge** quand le tag existe (17 Go pour `gemma4:26b` le
+    05/08) ; `ollama show` ne teste que le local et ne prouve rien sur
+    le registre. Retirer les candidats non retenus une fois le
+    comparatif clos.
+
+    **Pourquoi cette règle existe** : les deux comparatifs du 05/08 ont
+    évité un mauvais choix fondé sur une promesse (`gemma4:26b`
+    déborde de 4,6 Go en RAM — un MoE réduit le calcul, jamais la
+    mémoire) et confirmé un bon choix par la mesure plutôt que par la
+    supposition (le coût VRAM de Godot était supposé en gigaoctets ;
+    mesuré, il est de 246 Mo, ce qui a inversé la conclusion).
+    Voir `ROADMAP.md` §5.39 et §5.56.
