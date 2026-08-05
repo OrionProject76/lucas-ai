@@ -101,6 +101,47 @@ def normalize(text: str) -> str:
     return "".join(resultat)
 
 
+def fold_separators(text: str) -> str:
+    """
+    Replie les espaces et tirets typographiques, SANS toucher au reste.
+
+    ⚠️ À ne pas confondre avec `normalize()`, et la distinction compte
+    (posée le 05/08/2026) :
+
+    - `normalize()` sert à COMPARER. Il met en minuscules et retire les
+      accents, ce qui détruit de l'information — acceptable quand on
+      cherche seulement à savoir si deux textes se ressemblent.
+    - `fold_separators()` sert à EXTRAIRE. La valeur trouvée est réutilisée
+      telle quelle : un nom de ville part vers le service météo et
+      s'affiche à Cyril, une expression arithmétique est évaluée. Les
+      passer par `normalize()` rendrait « Saint-Étienne » en
+      « saint-etienne » — techniquement exploitable, mais on abîmerait la
+      donnée pour corriger un problème de séparateur.
+
+    Ce que cette fonction corrige, mesuré le 05/08/2026 :
+
+        extract_city("météo à Saint‑Étienne")   -> "Saint"  (tiret U+2011)
+        extract_calculation("1 234 + 5 678")    -> expression inévaluable
+        extract_periods("12 / 07 / 2025")       -> mois perdu
+
+    Les trois viennent de la même cause : un séparateur typographique là
+    où le code attend un caractère ASCII. Le cas des dates n'est pas
+    théorique — les bulletins de paie en PDF emploient couramment des
+    espaces insécables, et c'est précisément sur eux que la recherche
+    documentaire datée a été construite.
+    """
+    resultat = []
+    for caractere in text:
+        categorie = unicodedata.category(caractere)
+        if categorie == "Zs":
+            resultat.append(" ")
+        elif categorie == "Pd" or caractere in TIRETS_HORS_CATEGORIE:
+            resultat.append("-")
+        else:
+            resultat.append(caractere)
+    return "".join(resultat)
+
+
 def contains_any(text: str, keywords) -> bool:
     """
     Vrai si l'un des mots-clés apparaît dans le texte, comparaison

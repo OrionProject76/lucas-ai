@@ -71,11 +71,24 @@ def extract_periods(text: str) -> set[str]:
             _add(found, int(match.group(1)), numero)
 
     # 01/07/2025, 07-04-2026, 16.06.1977  (jour/mois/année, usage français)
-    for d, m, y in re.findall(r"\b(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})\b", plain):
+    #
+    # ⚠️ `\s*` autour des séparateurs depuis le 05/08/2026. Sans lui,
+    # « 12 / 07 / 2025 » ne rendait que l'année, le mois était perdu — et
+    # cette mise en forme est courante dans les PDF passés en mode
+    # « layout », qui insèrent des espaces autour des séparateurs. Or
+    # c'est exactement sur des bulletins de paie en PDF que la recherche
+    # documentaire datée a été construite (§5.3).
+    #
+    # Trouvé en auditant les dépendances à la typographie — et il a
+    # d'abord été pris pour l'une d'elles. Vérification faite : la
+    # variante à espaces ASCII ordinaires échoue à l'identique, donc rien
+    # à voir avec les caractères insécables. Corriger la typographie
+    # ici aurait masqué la vraie cause sans la traiter.
+    for d, m, y in re.findall(r"\b(\d{1,2})\s*[/.\-]\s*(\d{1,2})\s*[/.\-]\s*(\d{4})\b", plain):
         _add(found, int(y), int(m))
 
     # 01/07/25 — année sur deux chiffres, bornée au siècle courant
-    for d, m, y in re.findall(r"\b(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2})\b", plain):
+    for d, m, y in re.findall(r"\b(\d{1,2})\s*[/.\-]\s*(\d{1,2})\s*[/.\-]\s*(\d{2})\b", plain):
         _add(found, 2000 + int(y), int(m))
 
     # ⚠️ Les noms de fichiers de Cyril, qui portent l'essentiel de

@@ -5,7 +5,7 @@
 
 import re
 
-from core.text_utils import contains_any
+from core.text_utils import contains_any, fold_separators
 
 KEYWORDS_CLOUD = [
     "analyse", "compare", "projection",
@@ -266,10 +266,29 @@ def extract_calculation(text: str) -> str | None:
     mots qui l'entourent (« combien font », « ? »). None si rien de tel
     n'est trouvé.
     """
-    candidates = _EXPRESSION_CHARS.findall(text)
+    # ⚠️ `fold_separators` : l'expression extraite est ÉVALUÉE ensuite.
+    # La typographie française sépare les milliers par une espace fine
+    # insécable — « 1 234 + 5 678 » copié depuis un document produisait
+    # une expression inévaluable, et un trait d'union insécable faisait
+    # disparaître l'opérateur (aucun calcul détecté du tout).
+    candidates = _EXPRESSION_CHARS.findall(fold_separators(text))
     best = max(candidates, key=len, default="").strip()
     if not best:
         return None
+
+    # ⚠️ Recolle les milliers séparés par une espace — « 1 234 » -> « 1234 ».
+    #
+    # La règle est VOLONTAIREMENT étroite : l'espace doit être suivie
+    # d'exactement trois chiffres terminant un nombre, ce qui est le
+    # groupement français des milliers et rien d'autre. Recoller tous les
+    # chiffres séparés par une espace transformerait « 12 34 » en
+    # « 1234 » — une lecture inventée, pas une correction de typographie.
+    #
+    # Sans cette étape, « 1 234 + 5 678 » atteignait la calculatrice sous
+    # cette forme et rendait None : Luca disait honnêtement ne pas
+    # pouvoir évaluer (§5.39), mais sur une expression parfaitement
+    # ordinaire pour un francophone.
+    best = re.sub(r"(?<=\d) (?=\d{3}(?!\d))", "", best)
     if not any(op in best for op in "+-*/%"):
         return None
     if len(re.findall(r"\d+", best)) < 2:
@@ -334,7 +353,15 @@ def extract_city(text: str) -> str | None:
     nommée — le code appelant ne doit JAMAIS deviner une ville par défaut
     (voir core/lucas_core.py) : mieux vaut demander à Cyril de préciser.
     """
-    match = _CITY_PATTERN.search(text)
+    # ⚠️ `fold_separators` et non `normalize` : la valeur extraite part
+    # vers le service météo ET s'affiche à Cyril. `normalize()` rendrait
+    # « Saint-Étienne » en « saint-etienne » — on abîmerait la donnée pour
+    # corriger un problème de séparateur.
+    #
+    # Mesuré le 05/08/2026 : « Saint‑Étienne » avec un trait d'union
+    # insécable (U+2011) rendait « Saint » — donc la météo d'une autre
+    # ville, ou aucune.
+    match = _CITY_PATTERN.search(fold_separators(text))
     return match.group(1).strip() if match else None
 
 

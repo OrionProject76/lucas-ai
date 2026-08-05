@@ -4798,6 +4798,110 @@ un détecteur qui cesse de détecter redevient silencieux.
 
 Suite complète : **1199 passés**.
 
+## 5.50 🔴 Chasse aux dépendances à la FORME — une seconde fuite trouvée
+
+Demandé par Cyril après le constat de §5.49 (six mécanismes sur sept
+rendus aveugles par un changement de modèle, aucun ne le signalant).
+Question posée : **existe-t-il d'autres mécanismes qui reconnaissent une
+forme d'écriture plutôt qu'un sens ?**
+
+Méthode : recenser tout `re.compile`/`re.search`/`re.findall` du code de
+production, classer par ce sur quoi il opère (sortie du modèle, saisie de
+Cyril, contenu de fichier), puis confronter chacun à la **même chaîne
+écrite de plusieurs façons typographiques**. Un écart entre les lignes
+révèle une dépendance à la forme.
+
+### 🔴 Le filtre anti-fuite de la recherche web
+
+C'est la trouvaille qui compte. `is_identifying()` protège **la seule
+surface où une requête de Cyril part chez DuckDuckGo**. Le test de
+mots-clés passait bien par `contains_any` (normalisé) — mais les motifs
+IBAN et numéro de carte s'appliquaient à la chaîne **BRUTE**, avec
+l'espace ASCII codé en dur : `(?:[ ]?[A-Z0-9])` et `(?:\d[ -]?)`.
+
+Mesuré (numéros fabriqués, format valide) :
+
+| Requête | Bloquée ? |
+|---|---|
+| `FR76 3000 4000 0512 3456 7890 123` | oui |
+| le même avec des espaces **insécables** | **NON — partait chez DuckDuckGo** ⚠️ |
+| le même avec des espaces **fines** | **NON** ⚠️ |
+| `4539 1488 0343 6467` (carte), insécables | **NON** ⚠️ |
+| carte avec **tirets insécables** | **NON** ⚠️ |
+
+⚠️ **Ce n'est pas un cas de laboratoire.** Les sites bancaires et les PDF
+affichent les IBAN avec des espaces **insécables**, précisément pour que
+le numéro ne soit pas coupé en fin de ligne. Un copier-coller depuis la
+banque les emporte — et c'est exactement le geste qu'on fait pour poser
+une question sur son IBAN.
+
+Corrigé : `normalize()` appliqué avant les motifs. Les requêtes anodines
+passent toujours (vérifié).
+
+### `fold_separators()` — un second outil, et pourquoi il fallait le créer
+
+Trois autres mécanismes dépendaient de la forme, mais `normalize()` ne
+pouvait pas les corriger : **ils extraient une valeur réutilisée ensuite**.
+Un nom de ville part vers le service météo et s'affiche à Cyril ; une
+expression arithmétique est évaluée. `normalize()` rendrait
+« Saint-Étienne » en « saint-etienne » — on abîmerait la donnée pour
+corriger un problème de séparateur.
+
+D'où `core/text_utils.fold_separators()` : replie **uniquement** les
+espaces (`Zs`) et tirets (`Pd`) vers l'ASCII, sans toucher à la casse ni
+aux accents.
+
+| Outil | Usage | Effet |
+|---|---|---|
+| `normalize()` | **comparer** | minuscules + sans accents + séparateurs repliés |
+| `fold_separators()` | **extraire** | séparateurs repliés, rien d'autre |
+
+- **`extract_city`** — « Saint‑Étienne » (U+2011) rendait « Saint », donc
+  la météo d'une autre ville ou aucune.
+- **`extract_calculation`** — « 1 234 + 5 678 » avec espace fine
+  produisait une expression inévaluable, et un tiret insécable faisait
+  disparaître l'opérateur (aucun calcul détecté). Ajout d'une règle
+  **volontairement étroite** : recoller les milliers seulement quand
+  l'espace est suivie d'exactement trois chiffres. Recoller tous les
+  chiffres transformerait « 12 34 » en « 1234 » — une lecture inventée,
+  pas une correction de typographie (verrouillé par un test).
+
+### ⚠️ Un faux diagnostic, attrapé avant de « corriger »
+
+`extract_periods` perdait le mois sur « 12 / 07 / 2025 » avec espaces
+insécables. J'ai d'abord classé ça comme une dépendance typographique de
+plus — **c'était faux**. Vérification : la variante à espaces **ASCII
+ordinaires** échoue à l'identique. Le motif n'a jamais toléré d'espace
+autour des séparateurs, quels qu'ils soient.
+
+Appliquer le correctif typographique aurait fait disparaître le symptôme
+de mon test **sans traiter la cause**, et le vrai trou serait resté. Le
+motif accepte désormais `\s*` autour des séparateurs.
+
+Ça compte, parce que les PDF passés en mode « layout » insèrent
+couramment ces espaces — et c'est sur des bulletins de paie en PDF que la
+recherche documentaire datée a été construite (§5.3).
+
+### Ce qui a résisté
+
+- `core/intent.is_elliptical` et `DEICTIC` — robustes aux trois variantes.
+- `api/log_scrub.mask_secrets` — le jeton est correctement masqué même
+  suivi d'une espace insécable (`\s` de Python est déjà Unicode).
+- `finance_categorizer` — audité en §5.49.
+
+### La règle qui se dégage
+
+Deux fuites de sécurité en une journée, **même cause** : un motif qui
+décrit une forme là où il croit décrire un sens.
+
+*Tout motif appliqué à du texte qui peut venir d'un copier-coller, d'un
+PDF ou d'un modèle doit passer par `normalize()` (pour comparer) ou
+`fold_separators()` (pour extraire). Coder un espace ou un tiret ASCII
+en dur, c'est supposer que le monde tape comme un clavier américain.*
+
+`test_dependance_forme.py` — 26 tests, dont ceux qui verrouillent les
+deux fuites. Suite complète : **1225 passés**.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

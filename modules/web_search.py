@@ -25,7 +25,7 @@ import re
 # `ddgs` (même API, from ddgs import DDGS) renvoie de vrais résultats.
 from ddgs import DDGS
 
-from core.text_utils import contains_any
+from core.text_utils import contains_any, normalize
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,35 @@ def is_identifying(query: str) -> bool:
     # partait chez DuckDuckGo (voir core/text_utils.py).
     if contains_any(query, IDENTIFYING_KEYWORDS):
         return True
-    return bool(IBAN_PATTERN.search(query) or LONG_NUMBER_PATTERN.search(query))
+
+    # ⚠️ NORMALISÉ AUSSI DEPUIS LE 05/08/2026 — c'était une vraie fuite.
+    #
+    # Les deux motifs ci-dessus codent l'espace ASCII en dur :
+    # `(?:[ ]?[A-Z0-9])` et `(?:\d[ -]?)`. Appliqués à la chaîne BRUTE,
+    # ils ne voyaient rien dès que les séparateurs n'étaient pas des
+    # espaces ASCII. Mesuré :
+    #
+    #   "FR76 3000 4000 0512 3456 7890 123"            -> bloqué
+    #   "FR76<NBSP>3000<NBSP>4000<NBSP>…"              -> PASSAIT ⚠️
+    #   "4539<NBSP>1488<NBSP>0343<NBSP>6467" (carte)   -> PASSAIT ⚠️
+    #   "4539‑1488‑0343‑6467" (tiret insécable)        -> PASSAIT ⚠️
+    #
+    # Ce n'est pas un cas de laboratoire : les sites bancaires et les PDF
+    # affichent couramment les IBAN avec des espaces INSÉCABLES,
+    # précisément pour que le numéro ne soit pas coupé en fin de ligne.
+    # Un copier-coller depuis la banque emporte donc ces caractères — et
+    # c'est exactement le geste qu'on fait pour poser une question sur
+    # son IBAN.
+    #
+    # `normalize()` replie les catégories Unicode Zs (tout espace) et Pd
+    # (tout tiret) vers leurs équivalents ASCII, ce qui rend les motifs
+    # existants opérants sans les réécrire. Il met aussi en minuscules :
+    # sans effet ici, IBAN_PATTERN portant déjà re.IGNORECASE et
+    # LONG_NUMBER_PATTERN ne visant que des chiffres.
+    normalized = normalize(query)
+    return bool(
+        IBAN_PATTERN.search(normalized) or LONG_NUMBER_PATTERN.search(normalized)
+    )
 
 
 class WebSearch:
