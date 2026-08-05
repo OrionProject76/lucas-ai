@@ -717,6 +717,174 @@ def test_websocket_ignores_an_empty_message(client, fake_core) -> None:
         assert _next_of_type(ws, "avatar_state", limit=20)["state"] in {"idle", "thinking"}
 
 
+# ── WebSocket audio : aucun silence, jamais ────────────────────────────
+#
+# ⚠️ Deux silences réels trouvés le 05/08/2026 sur le chemin le plus
+# utilisé par Cyril (bouton micro de la PWA) :
+#
+#   1. transcription VIDE -> retour à IDLE sans un mot. Il appuyait,
+#      parlait, et rien ne se passait — indiscernable d'un bouton cassé.
+#      C'est exactement ce qui arrive quand la voix est trop faible pour
+#      Whisper : la transcription RÉUSSIT et rend une chaîne vide. C'est
+#      donc la version dégradée du bug qu'il a rapporté (« je dois parler
+#      fort »), et la plus déroutante des deux.
+#   2. toute panne AUTRE que STTUnavailable remontait hors du handler et
+#      FERMAIT la connexion. Côté PWA : bandeau qui clignote, reconnexion,
+#      phrase perdue — une panne déguisée en hoquet réseau.
+#
+# Même doctrine que les blocs de contexte du prompt (ROADMAP.md §5.39) :
+# une capacité qui ne produit rien doit le DIRE.
+
+
+def _echange_audio(client, fake_stt, texte=None, boom=None, duree=1.5, confiance=0.9):
+    """Envoie un audio et collecte ce que le serveur répond jusqu'à IDLE."""
+    from modules.stt_engine import TranscriptResult
+
+    double = fake_stt["_double"]
+    if boom is not None:
+        double.boom = boom
+    else:
+        double.boom = None
+        double.transcribe_base64 = lambda audio_base64, suffix=".wav": TranscriptResult(
+            text=texte, language="fr", confidence=confiance, duration_seconds=duree,
+        )
+
+    recus = []
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "hello", "client": "lucas_pwa", "version": "1.0"})
+        # ⚠️ `audio_base64`, PAS `audio`. Le protocole n'accepte que ce
+        # nom-là (api/protocol.py::read_user_audio, qui le documente :
+        # « pas de deuxième nom accepté ici »). Avec la mauvaise clé, le
+        # serveur fait simplement `continue` — mes premiers tests
+        # échouaient donc sans que rien n'atteigne jamais le code testé.
+        ws.send_json({"type": "audio", "audio_base64": "ZmF1eC1hdWRpbw=="})
+        # Le serveur pousse en continu des messages `system` et
+        # `security_status` en tâche de fond : on ignore tout ce qui n'est
+        # pas une réponse à CET envoi, plutôt que de compter des positions.
+        pertinents = ("error", "chat", "avatar_state", "activity", "speech")
+        for _ in range(30):
+            message = ws.receive_json()
+            if message.get("type") not in pertinents:
+                continue
+            recus.append(message)
+            if (
+                message.get("type") == "avatar_state"
+                and message.get("state") == "idle"
+                and len(recus) > 1
+            ):
+                break
+    return recus
+
+
+def test_an_empty_transcription_is_reported_not_swallowed(client, fake_core, fake_stt) -> None:
+    """LE cas du bug micro : Whisper réussit et rend une chaîne vide."""
+    recus = _echange_audio(client, fake_stt, texte="")
+    erreurs = [m for m in recus if m.get("type") == "error"]
+    assert erreurs, "un micro qui n'entend rien doit le dire"
+    # `detail`, pas `message` — c'est le nom du champ dans protocol.error().
+    assert "plus fort" in erreurs[0].get("detail", "").lower()
+
+
+def test_an_empty_transcription_reports_the_measured_duration(client, fake_core, fake_stt) -> None:
+    """
+    La durée détectée distingue deux pannes très différentes : « 0,1 s
+    reçues » désigne l'enregistrement côté client, « 3,2 s reçues mais
+    rien reconnu » désigne le niveau sonore. Sans elle, on cherche à
+    l'aveugle — et c'est précisément le diagnostic ouvert sur le micro.
+    """
+    recus = _echange_audio(client, fake_stt, texte="", duree=3.2)
+    assert any(
+        m.get("type") == "activity" and "3.2s" in str(m) and "aucune parole" in str(m)
+        for m in recus
+    )
+
+
+def test_whitespace_only_counts_as_empty(client, fake_core, fake_stt) -> None:
+    """
+    Whisper rend volontiers un espace ou un saut de ligne sur du silence.
+    Sans `.strip()`, cette chaîne passait pour une vraie question et
+    partait au LLM — qui répondait à du vide.
+    """
+    recus = _echange_audio(client, fake_stt, texte="\n  ")
+    assert any(m.get("type") == "error" for m in recus)
+
+
+def test_an_unexpected_failure_does_not_kill_the_connection(client, fake_core, fake_stt) -> None:
+    """
+    Seul STTUnavailable était rattrapé. Une panne de décodeur fermait la
+    connexion, et la PWA se reconnectait en silence — indiscernable d'un
+    problème de réseau.
+    """
+    recus = _echange_audio(client, fake_stt, boom=MemoryError("plus de mémoire"))
+    erreurs = [m for m in recus if m.get("type") == "error"]
+    assert erreurs, "la panne doit être annoncée, pas fermer la connexion"
+    assert "MemoryError" in erreurs[0].get("detail", "")
+
+
+def test_the_avatar_returns_to_idle_after_a_silent_recording(client, fake_core, fake_stt) -> None:
+    """
+    Un avatar bloqué sur « listening » laisserait croire que Luca écoute
+    encore, alors qu'elle a déjà abandonné.
+    """
+    recus = _echange_audio(client, fake_stt, texte="")
+    etats = [m.get("state") for m in recus if m.get("type") == "avatar_state"]
+    assert etats and etats[-1] == "idle"
+
+
+def test_a_real_transcription_still_goes_through(client, fake_core, fake_stt) -> None:
+    """Garde-fou : ces correctifs ne doivent pas avaler un enregistrement valide."""
+    recus = _echange_audio(client, fake_stt, texte="quelle heure est-il")
+    assert not [m for m in recus if m.get("type") == "error"]
+
+
+
+
+def test_a_low_confidence_hallucination_is_rejected(client, fake_core, fake_stt) -> None:
+    """
+    ⚠️ CE test vient du REEL, pas de l'imagination — et il montre pourquoi
+    les tests unitaires seuls ne suffisaient pas.
+
+    Le premier correctif ne testait que la chaîne vide, et tous les tests
+    passaient. Confronté au vrai moteur Whisper sur un WAV de silence
+    pur :
+
+        silence 2 s   -> texte 'You',    confiance 0,349
+        silence 3 s   -> texte 'You',    confiance 0,305
+        parole réelle -> texte juste,    confiance 0,995
+
+    Whisper HALLUCINE un mot court et plausible. Ce mot partait au LLM,
+    qui répondait à du vide — observé tel quel avant ce correctif.
+
+    La confiance sépare les deux cas sans ambiguïté, et `is_confident`
+    existait déjà dans TranscriptResult : simplement jamais consulté.
+    """
+    recus = _echange_audio(client, fake_stt, texte="You", confiance=0.35)
+    erreurs = [m for m in recus if m.get("type") == "error"]
+    assert erreurs, "une hallucination à faible confiance ne doit pas partir au LLM"
+    assert "plus fort" in erreurs[0].get("detail", "").lower()
+
+
+def test_the_reported_confidence_helps_diagnosis(client, fake_core, fake_stt) -> None:
+    """
+    Distinguer « 0,3 de confiance » de « 0 s reçues » oriente vers deux
+    causes opposées : niveau sonore trop faible, ou enregistrement vide
+    côté client. Le diagnostic micro est encore ouvert.
+    """
+    recus = _echange_audio(client, fake_stt, texte="You", confiance=0.35, duree=2.0)
+    assert any(
+        m.get("type") == "activity" and "0.35" in str(m) for m in recus
+    )
+
+
+def test_a_confident_transcription_is_not_rejected(client, fake_core, fake_stt) -> None:
+    """
+    Garde-fou symétrique : le seuil ne doit pas avaler une vraie phrase.
+    Une parole réelle mesure 0,97-0,99, très au-dessus du seuil de 0,6.
+    """
+    recus = _echange_audio(client, fake_stt, texte="ouvre le bloc note", confiance=0.97)
+    assert not [m for m in recus if m.get("type") == "error"]
+
+
 # ── WebSocket : audio (pont mobile, Phase 4) ───────────────────────────
 #
 # Premier appelant réel de modules/stt_engine.py — jusqu'ici écrit et

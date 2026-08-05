@@ -4125,6 +4125,96 @@ avec son propre stub qui prend le pas sur celui du `conftest`.
 
 Suite complète : **1120 passés**, avec ou sans Ollama.
 
+## 5.43 Le micro se taisait — et Whisper hallucinait, 05/08/2026
+
+Audit du chemin audio mobile sous l'angle « silence qui laisse deviner ».
+C'est le chemin le plus utilisé par Cyril (bouton micro de la PWA), et il
+en portait **trois** défauts, dont le dernier n'était visible qu'en réel.
+
+### Défaut 1 — une transcription vide ne disait rien
+
+Transcription vide → retour à `idle`, sans un mot. Cyril appuyait,
+parlait, et **il ne se passait rien** : indiscernable d'un bouton cassé,
+d'un serveur muet, ou d'une phrase ignorée. C'est la version dégradée du
+bug qu'il a rapporté (« je dois parler fort ») — et la plus déroutante,
+parce qu'elle ne ressemble pas à une panne.
+
+### Défaut 2 — une panne inattendue fermait la connexion
+
+Seul `STTUnavailable` était rattrapé. Toute autre panne (décodeur absent,
+mémoire, fichier corrompu) remontait hors du handler et **fermait le
+WebSocket**. Côté PWA : bandeau qui clignote, reconnexion automatique,
+phrase perdue — **une panne déguisée en hoquet réseau**.
+
+### Défaut 3 — celui que seuls les tests réels pouvaient trouver
+
+Le correctif des deux premiers ne testait que `if not message.strip()`.
+Tous les tests unitaires passaient. Puis confrontation au **vrai moteur
+Whisper**, sur un WAV de silence pur généré pour l'occasion :
+
+```
+  [activity] micro — 2.0s détectées, 3 caractère(s) transcrit(s)
+  [chat]     Tu veux que je fasse quelque chose en particulier ?
+```
+
+**Whisper ne rend pas une chaîne vide sur du silence : il rend `'You'`.**
+Un mot court, plausible, entièrement inventé — qui partait au LLM, lequel
+répondait poliment à du néant. Le correctif ne servait à rien dans le seul
+cas qui se produit vraiment.
+
+Mesure sur le vrai moteur, en comparant avec de la vraie parole
+synthétisée par Piper (disponible localement, donc mesurable sans micro) :
+
+| Entrée | Texte rendu | Confiance |
+|---|---|---|
+| silence 2 s | `'You'` | **0,349** |
+| silence 3 s | `'You'` | **0,305** |
+| silence 5 s | `''` | 0,325 |
+| parole réelle | correct | **0,995** |
+| parole réelle | correct | **0,974** |
+
+L'écart est sans ambiguïté — et **le signal existait déjà** :
+`TranscriptResult.is_confident` (seuil 0,6) était écrit, testé, et
+**jamais consulté par le serveur**. Même famille que `core/aura_modes.py`,
+qui existait depuis le 04/08 sans être importé nulle part.
+
+### Vérifié en réel, dans les deux sens
+
+Après correctif, même WAV de silence :
+
+```
+  [activity] micro — 2.0s reçues, confiance 0.35 : aucune parole reconnue
+  [error]    Je n'ai rien compris — parle un peu plus fort ou
+             rapproche-toi du micro.
+  [avatar_state] idle
+```
+
+Et la contre-épreuve, avec de la vraie parole (Piper → serveur réel) :
+
+```
+  [activity] micro — 1.1s détectées, 19 caractère(s) transcrit(s)
+  [chat]     Il est 11:01 du mercredi 5 août 2026.
+```
+
+La confiance mesurée est jointe au message de diagnostic : « 0,35 de
+confiance » et « 0 s reçues » désignent deux causes opposées — niveau
+sonore trop faible, ou enregistrement vide côté client. Le diagnostic
+micro étant toujours ouvert, cette distinction lui servira directement.
+
+### Ce que cet épisode dit de la méthode
+
+Trois erreurs d'instrument en une nuit, toutes attrapées avant conclusion :
+le filtre `tasklist` qui ne voit pas le Notepad du Store (§5.31),
+`OLLAMA_HOST` codé en dur qui rendait une mesure vide (§5.42), et ici des
+tests unitaires verts sur un cas qui ne se produit jamais.
+
+Le point commun : **le double de test encode ce qu'on CROIT que le monde
+fait**. Whisper « devrait » rendre une chaîne vide sur du silence — c'est
+raisonnable, c'est faux, et aucun test écrit à partir de cette croyance ne
+pouvait le révéler. Seule la confrontation au vrai moteur l'a fait.
+
+Suite complète : **1129 passés**.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

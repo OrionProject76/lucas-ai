@@ -522,8 +522,63 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
                     await websocket.send_json(protocol.avatar_state(protocol.STATE_IDLE))
                     continue
+                except Exception as exc:  # noqa: BLE001 — voir ci-dessous
+                    # ⚠️ Élargi le 05/08/2026. Seul `STTUnavailable` était
+                    # rattrapé : toute autre panne (fichier audio corrompu,
+                    # décodeur absent, mémoire) remontait hors du handler et
+                    # FERMAIT la connexion WebSocket. Côté PWA, Cyril voyait
+                    # le bandeau clignoter puis se reconnecter, sans jamais
+                    # savoir que sa phrase avait été perdue — une panne
+                    # déguisée en hoquet réseau.
+                    await websocket.send_json(
+                        protocol.error(f"Transcription impossible : {type(exc).__name__}")
+                    )
+                    await websocket.send_json(protocol.avatar_state(protocol.STATE_IDLE))
+                    continue
 
-                if not message:
+                if not message.strip() or not transcript.is_confident:
+                    # ⚠️ LE SILENCE QUI CORRESPOND AU BUG MICRO DE CYRIL
+                    # (05/08/2026). Avant : retour à IDLE, sans un mot. Il
+                    # appuyait sur le micro, parlait, et il ne se passait
+                    # RIEN — indiscernable d'un bouton cassé, d'un serveur
+                    # muet ou d'une phrase ignorée.
+                    #
+                    # ⚠️ `is_confident` est ARRIVÉ APRÈS, et c'est le test
+                    # réel qui l'a imposé. Le correctif ne testait d'abord
+                    # que la chaîne vide — les tests unitaires passaient.
+                    # Confronté au vrai moteur Whisper sur un WAV de
+                    # silence pur, le résultat n'est PAS une chaîne vide :
+                    #
+                    #   silence 2 s -> texte 'You',  confiance 0,349
+                    #   silence 3 s -> texte 'You',  confiance 0,305
+                    #   parole réelle -> texte juste, confiance 0,995
+                    #
+                    # Whisper HALLUCINE un mot court et plausible sur du
+                    # silence. Ce mot serait parti au LLM, qui aurait
+                    # répondu à du vide — observé exactement ainsi en test
+                    # réel avant ce correctif.
+                    #
+                    # La confiance sépare les deux cas sans ambiguïté (0,3
+                    # contre 0,99), et `TranscriptResult.is_confident`
+                    # existait déjà, testé, depuis la construction du
+                    # module — simplement jamais consulté par ce serveur.
+                    #
+                    # Même doctrine que les blocs de contexte du prompt :
+                    # une capacité qui ne produit rien doit le DIRE.
+                    await websocket.send_json(
+                        protocol.activity(
+                            "voice",
+                            f"micro — {transcript.duration_seconds:.1f}s reçues, "
+                            f"confiance {transcript.confidence:.2f} : aucune parole "
+                            "reconnue",
+                        )
+                    )
+                    await websocket.send_json(
+                        protocol.error(
+                            "Je n'ai rien compris — parle un peu plus fort ou "
+                            "rapproche-toi du micro."
+                        )
+                    )
                     await websocket.send_json(protocol.avatar_state(protocol.STATE_IDLE))
                     continue
 
