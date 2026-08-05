@@ -377,6 +377,28 @@ _APP_NAME_ALIASES = {
 }
 
 
+def _spoken_name_pattern(spoken_name: str) -> str:
+    """
+    Motif tolérant aux variantes d'écriture d'un même nom d'application.
+
+    ⚠️ Bug réel trouvé le 05/08/2026 (Cyril, PWA mobile) : il a écrit
+    « ouvre le bloc note » — singulier, sans trait d'union. Les deux alias
+    existants étaient « bloc-notes » et « bloc notes », tous deux au
+    PLURIEL : aucun ne correspondait, `extract_app_name` a rendu None, et
+    l'action n'a jamais été tentée. Voir ROADMAP.md §5.31.
+
+    Ajouter « bloc note » à la liste aurait corrigé ce cas précis et laissé
+    passer le suivant (« bloc-note », « blocnotes »...). Le motif traite
+    donc la CLASSE de variantes :
+    - trait d'union, espace ou rien entre les mots (`[-\\s]*`)
+    - « s » final optionnel sur chaque mot (singulier/pluriel)
+
+    Le nombre de mots, lui, reste exigé : « bloc » seul ne déclenche rien.
+    """
+    mots = [mot for mot in re.split(r"[-\s]+", spoken_name) if mot]
+    return r"[-\s]*".join(rf"{re.escape(mot.rstrip('s'))}s?" for mot in mots)
+
+
 def extract_app_name(text: str) -> str | None:
     """
     Cherche un nom d'application DE LA LISTE BLANCHE réelle (ou un alias
@@ -396,7 +418,16 @@ def extract_app_name(text: str) -> str | None:
         {alias: real for alias, real in _APP_NAME_ALIASES.items() if real in WHITELISTED_APPS}
     )
     for spoken_name, real_name in candidates.items():
-        pattern = rf"\b{_AUTOMATION_VERB_PATTERN}\b(?:\s+\w+){{0,1}}\s+{re.escape(spoken_name)}\b"
+        # `\s*'?\s*` après l'article optionnel : sans lui, « ouvre
+        # l'explorateur » ne correspondait à rien — l'article élidé « l' »
+        # n'est pas suivi d'un espace, donc `\s+nom` échouait. Même famille
+        # que le bug « bloc note » ci-dessus (une variante d'écriture
+        # naturelle qui ne déclenche rien), trouvée en vérifiant ce
+        # correctif-ci plutôt qu'en usage réel.
+        pattern = (
+            rf"\b{_AUTOMATION_VERB_PATTERN}\b(?:\s+\w+)?\s*'?\s*"
+            rf"{_spoken_name_pattern(spoken_name)}\b"
+        )
         if re.search(pattern, normalized):
             return real_name
     return None
@@ -409,3 +440,67 @@ def should_use_automation(text: str) -> bool:
     extract_app_name(), pas besoin d'un second test de mot-clé séparé.
     """
     return extract_app_name(text) is not None
+
+
+# Objets abstraits qui suivent naturellement un verbe d'ouverture sans
+# désigner un programme — « lance une réflexion sur Chrome », « ouvre la
+# discussion ». Le commentaire de _AUTOMATION_VERB_PATTERN signalait déjà
+# ce risque de faux positif ; cette liste le neutralise pour la détection
+# large ci-dessous, qui n'exige justement PAS un nom connu.
+_ABSTRACT_ACTION_OBJECTS = (
+    "reflexion",
+    "recherche",
+    "analyse",
+    "discussion",
+    "conversation",
+    "debat",
+    "idee",
+    "projet",
+    "sujet",
+    "piste",
+    # Pas abstraits, mais pas des applications non plus : Luca's ne sait
+    # pas les ouvrir, et injecter « aucune application reconnue » pour
+    # « ouvre le fichier X » enverrait la réponse à côté de la question.
+    "fichier",
+    "dossier",
+    "document",
+    "lien",
+    "page",
+    "onglet",
+)
+
+
+def looks_like_app_request(text: str) -> bool:
+    """
+    Cyril demande-t-il d'ouvrir QUELQUE CHOSE — même chose inconnue ?
+
+    ⚠️ Ne sert JAMAIS à exécuter : seul `extract_app_name()` autorise une
+    exécution, et seulement pour la liste blanche réelle. Cette fonction-ci
+    répond à une autre question, qui n'était posée nulle part : « une action
+    a-t-elle été demandée ? », indépendamment de « sait-on la faire ? ».
+
+    Sans cette distinction, une demande non reconnue produisait un silence
+    total dans le prompt — et le modèle, n'ayant reçu aucune information sur
+    l'action, répondait « Le Bloc-notes est lancé » alors que rien n'avait
+    été tenté (cas réel du 05/08/2026, ROADMAP.md §5.31). Un silence laisse
+    le modèle deviner ; ici deviner produit un mensonge sur l'état réel de
+    la machine de Cyril.
+
+    Volontairement plus large que `extract_app_name` : mieux vaut expliquer
+    une fois de trop qu'on n'a rien fait, que confirmer une fois de trop
+    qu'on l'a fait.
+    """
+    from core.text_utils import normalize
+
+    normalized = normalize(text)
+    # « comment ouvrir un fichier ? » demande une explication, pas une
+    # action — répondre « je n'ai rien lancé » serait hors sujet.
+    pattern = (
+        rf"(?<!comment )\b{_AUTOMATION_VERB_PATTERN}\b"
+        r"(?:\s+(?:le|la|l'|les|un|une|des|moi|nous|mon|ma|mes)){0,2}"
+        r"\s+([a-z0-9][\w-]*)"
+    )
+    match = re.search(pattern, normalized)
+    if match is None:
+        return False
+    return match.group(1).rstrip("s") not in _ABSTRACT_ACTION_OBJECTS

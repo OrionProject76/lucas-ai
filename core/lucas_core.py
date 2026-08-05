@@ -31,6 +31,7 @@ from core.router import (
     extract_app_name,
     extract_calculation,
     extract_city,
+    looks_like_app_request,
     mentions_pc_explicitly,
     route,
     should_use_automation,
@@ -153,6 +154,59 @@ def is_vision_refusal(content: str) -> bool:
     """Ce tour ressemble-t-il à un refus de vision déjà observé en réel ?"""
     normalized = normalize(content)
     return any(re.search(pattern, normalized) for pattern in VISION_REFUSAL_PATTERNS)
+
+
+# ── Garde-fou : jamais confirmer une action qui n'a pas eu lieu ────────
+#
+# ⚠️ Pourquoi un contrôle DÉTERMINISTE et pas seulement une consigne de
+# prompt (« INTERDIT d'affirmer... », injectée juste au-dessus) ?
+#
+# Parce que ce projet a DÉJÀ MESURÉ que les consignes de prompt cèdent
+# sous un historique long : la règle de sécurité « refuse de consulter ma
+# boîte mail » passe de 9/9 sans historique à 2/9 avec 100 messages
+# (§5.29). Une consigne suffit pour orienter une réponse ; elle ne suffit
+# pas pour GARANTIR qu'une affirmation sur l'état réel de la machine de
+# Cyril est vraie. Cyril l'a formulé exactement ainsi : « Luca ne doit
+# JAMAIS confirmer une action comme réussie sans un vrai retour de succès
+# du code d'exécution. »
+#
+# Ce contrôle-ci ne dépend d'aucun modèle : il compare ce que la réponse
+# AFFIRME à ce que le code a RÉELLEMENT exécuté (self._action_executed,
+# posé uniquement quand DecisionEngine a rendu la main sans exception).
+#
+# Il AJOUTE une correction plutôt que de réécrire la réponse : réécrire
+# supposerait de savoir ce que Luca's voulait dire, ajouter se contente
+# de rétablir le fait. Le texte trompeur reste visible — c'est voulu :
+# Cyril doit pouvoir constater l'écart, pas le découvrir plus tard.
+_CLAIMED_ACTION_SUCCESS = re.compile(
+    r"\b(?:"
+    r"est (?:bien |maintenant |desormais )*(?:lance|lancee|ouvert|ouverte|demarre|demarree)"
+    r"|a ete (?:bien )?(?:lance|lancee|ouvert|ouverte|demarre|demarree)"
+    r"|j'ai (?:bien |donc )*(?:lance|ouvert|demarre)"
+    r"|je l'ai (?:bien |donc )*(?:lance|ouvert|demarre)"
+    r"|viens d'(?:ouvrir|ouvrir)|viens de (?:lancer|demarrer)"
+    r"|vient d'etre (?:lance|ouvert|demarre)"
+    r"|voila (?:le |la )?(?:bloc|notepad|chrome|explorateur|calculatrice)"
+    r")\b"
+)
+
+FALSE_CLAIM_CORRECTION = (
+    "\n\n⚠️ *Correction automatique : aucune action n'a réellement été "
+    "exécutée sur ton PC pour ce message. La phrase ci-dessus est fausse — "
+    "elle vient du modèle, pas du code d'exécution. Rien n'a été lancé.*"
+)
+
+
+def claims_action_success(answer: str) -> bool:
+    """
+    La réponse affirme-t-elle qu'une application a été lancée/ouverte ?
+
+    Volontairement centrée sur l'AFFIRMATION D'ÉTAT (« est lancé », « j'ai
+    ouvert »), pas sur l'intention (« je vais ouvrir ») : une intention
+    annoncée n'est pas un mensonge sur ce qui s'est passé, et la corriger
+    produirait du bruit sur des réponses honnêtes.
+    """
+    return bool(_CLAIMED_ACTION_SUCCESS.search(normalize(answer)))
 
 
 class LucasCore:
@@ -283,15 +337,33 @@ class LucasCore:
                     # plus bas : un silence laisse le modèle deviner, et
                     # deviner ici serait décrire un écran que personne n'a
                     # demandé à montrer à cet instant précis.
+                    # ⚠️ Formulation durcie le 05/08/2026. Le bloc existait
+                    # déjà et s'est bien déclenché en usage réel (Cyril,
+                    # « Décris ce que tu vois. » depuis la PWA), mais le
+                    # modèle en a tiré : « veuillez prendre une capture
+                    # d'écran » — il a inventé une manipulation manuelle au
+                    # lieu de nommer les deux moyens qui existent vraiment.
+                    # Le problème n'était donc pas le déclenchement mais ce
+                    # que le bloc laissait ouvert : il proposait UNE issue
+                    # sans interdire d'en inventer d'autres. Voir
+                    # ROADMAP.md §5.31.
                     vision_context = (
                         "Cyril te parle depuis l'application mobile, pas "
                         "depuis son PC : tu N'AS PAS regardé l'écran du PC "
                         "pour cette demande, volontairement. Lire son écran "
                         "sans savoir s'il est devant serait une faute de "
                         "confidentialité, pas un détail technique.\n"
-                        "Dis-le à Cyril simplement, et propose : s'il veut "
-                        "que tu regardes quelque chose depuis son "
-                        "téléphone, il peut utiliser le bouton caméra. "
+                        "Dis-le à Cyril simplement, puis propose EXACTEMENT "
+                        "ces deux possibilités, sans en inventer d'autres :\n"
+                        "1. le bouton caméra de l'application, pour te "
+                        "montrer ce qu'il a sous les yeux ;\n"
+                        "2. redemander en nommant le PC (par exemple "
+                        "« regarde sur mon PC »), et tu regarderas l'écran.\n"
+                        "INTERDIT : lui demander de faire lui-même une "
+                        "capture d'écran, de te l'envoyer par un autre "
+                        "moyen, de coller du texte, ou toute manipulation "
+                        "manuelle — aucune n'est nécessaire, les deux "
+                        "possibilités ci-dessus suffisent.\n"
                         "S'il parlait d'autre chose que de l'écran du PC, "
                         "réponds à ça à la place."
                     )
@@ -535,6 +607,11 @@ class LucasCore:
         # l'endroit précis où `ActionDenied` a été levée à l'intérieur de
         # `core/decision_engine.py` — trouvé en écrivant le test de refus.
         automation_context = ""
+        # Remis à False à CHAQUE construction : c'est le témoin qui autorise
+        # (ou non) la réponse à affirmer qu'une action a eu lieu, relu dans
+        # ask(). Un témoin qui resterait vrai d'un tour sur l'autre
+        # rouvrirait exactement la faille qu'il ferme.
+        self._action_executed = False
         if not is_cloud and should_use_automation(user_message):
             from core.decision_engine import (
                 ActionDenied,
@@ -553,6 +630,7 @@ class LucasCore:
             try:
                 result_message = engine.request(action_name, run=lambda: automation.open_app(app_name))
                 self.memory.save_action(action=action_name, source="chat", result="executed")
+                self._action_executed = True
                 automation_context = (
                     f"ACTION RÉELLE EFFECTUÉE : {result_message}\n\n"
                     "Confirme ceci à Cyril. INTERDIT : prétendre avoir fait "
@@ -567,6 +645,35 @@ class LucasCore:
                     "lancé l'application."
                 )
                 _emit(on_activity, "automation_requested", f"lancement refusé — {app_name}")
+        elif not is_cloud and looks_like_app_request(user_message):
+            # ⚠️ LE TROU QUI A PRODUIT LA FAUSSE CONFIRMATION (05/08/2026).
+            #
+            # Cyril a écrit « ouvre le bloc note » (singulier) : aucun alias
+            # ne correspondait, donc `should_use_automation` était faux, donc
+            # AUCUN bloc de contexte n'était injecté — ni succès, ni refus.
+            # Le modèle n'avait donc aucune information sur l'action, et a
+            # répondu « Le Bloc-notes est lancé » alors que rien ne s'était
+            # ouvert, ni même tenté (`action_log` vide pour ce tour).
+            #
+            # Le silence était le bug. Une demande d'action non exécutée doit
+            # produire un contexte EXPLICITE, exactement comme un RAG sans
+            # résultat ou une capture d'écran refusée plus haut : le modèle
+            # ne doit jamais avoir à deviner ce qui s'est passé sur la
+            # machine de Cyril. Voir ROADMAP.md §5.31.
+            from modules.automation_manager import WHITELISTED_APPS
+
+            disponibles = ", ".join(sorted(WHITELISTED_APPS))
+            automation_context = (
+                "Cyril semble demander d'ouvrir une application, mais aucune "
+                "application connue n'a été reconnue dans sa phrase.\n"
+                "AUCUNE ACTION N'A ÉTÉ EFFECTUÉE : rien n'a été lancé, rien "
+                "n'a même été tenté.\n"
+                "INTERDIT ABSOLU : écrire qu'une application est lancée, "
+                "ouverte, démarrée, ou que tu vas l'ouvrir. Ce serait faux.\n"
+                f"Dis-lui que tu n'as pas reconnu l'application, et rappelle "
+                f"celles que tu sais ouvrir : {disponibles}."
+            )
+            _emit(on_activity, "automation_requested", "action demandée — application non reconnue")
 
         # ⚠️ SECONDE MOITIÉ DU MÊME BUG, et elle vaut pour LES DEUX SOURCES.
         #
@@ -935,6 +1042,20 @@ class LucasCore:
             answer = ask_local(messages)
         elapsed = time.time() - start
         _emit(on_activity, "answered", f"réponse prête ({elapsed:.1f} s)")
+
+        # Garde-fou déterministe — voir claims_action_success() plus haut.
+        # Placé APRÈS la génération et AVANT l'enregistrement en mémoire :
+        # une fausse confirmation non corrigée en base deviendrait un
+        # exemple à imiter au tour suivant (§5.5, auto-imitation).
+        if not getattr(self, "_action_executed", False) and claims_action_success(answer):
+            answer = answer.rstrip() + FALSE_CLAIM_CORRECTION
+            self.memory.save_action(
+                action="unknown", source="chat", result="false_claim_corrected"
+            )
+            _emit(
+                on_activity, "automation_requested",
+                "fausse confirmation corrigée — aucune action réelle",
+            )
 
         self.memory.save_message("assistant", answer)
         return answer

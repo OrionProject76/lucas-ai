@@ -22,7 +22,12 @@
 // d'être journalisé en clair (ROADMAP.md §5.29). Bump indispensable ici :
 // sans lui, le téléphone continuerait d'envoyer `?token=` depuis son
 // cache, et le correctif ne changerait rien pour le seul client réel.
-const CACHE_NAME = "lucas-shell-v10";
+// v11 (05/08/2026) : trois correctifs client remontés par Cyril en usage
+// réel — réactivation du son en cours de lecture (voice_output.js),
+// barge-in désactivé le temps d'être calibré (il coupait Luca's au milieu
+// de ses phrases), autoGainControl explicite pour le micro (audio.js).
+// Voir ROADMAP.md §5.31.
+const CACHE_NAME = "lucas-shell-v11";
 const SHELL_FILES = [
     "/app/",
     "/app/index.html",

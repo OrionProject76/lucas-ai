@@ -25,6 +25,32 @@ window.Lucas = window.Lucas || {};
     // rester indépendant du frame rate réel de requestAnimationFrame.
     const BARGE_IN_CONSECUTIVE_FRAMES = 4;
 
+    // ⚠️ DÉSACTIVÉ PAR DÉFAUT depuis le 05/08/2026 — résultat du test en
+    // conditions réelles que le commentaire ci-dessus appelait de ses vœux.
+    //
+    // Symptôme rapporté par Cyril : le son s'interrompt EN COURS de lecture
+    // (distinct du bug d'hier, où le début manquait). En remontant les
+    // chemins capables de couper une lecture déjà commencée, il n'en reste
+    // que trois : ce barge-in, le bouton mute, et l'arrivée d'une nouvelle
+    // réponse. Le réseau est formellement hors de cause — l'audio est reçu
+    // ENTIÈREMENT avant lecture, sous forme de data: URI en mémoire ; un
+    // Wi-Fi faible peut retarder le début, jamais interrompre le milieu.
+    //
+    // Reste le barge-in, et son hypothèse était déjà écrite dans ce
+    // fichier : « l'annulation d'écho dépend du device, pas garantie à
+    // 100 % pour un <audio> hors WebRTC ». Le haut-parleur du téléphone
+    // rejoue la voix de Luca's à quelques centimètres du micro : elle
+    // dépasse le seuil, et Luca's se coupe elle-même.
+    //
+    // Remis à true dès que le seuil aura été calibré sur le S25 Ultra —
+    // le mode diagnostic ci-dessous sert exactement à ça.
+    const BARGE_IN_ENABLED = false;
+    // À passer à true pour calibrer : affiche le RMS mesuré dans la console
+    // du navigateur, sans jamais couper la lecture. Permet de relever les
+    // vraies valeurs (voix de Luca's seule, puis Cyril parlant par-dessus)
+    // et d'en déduire un seuil, au lieu de le deviner une seconde fois.
+    const BARGE_IN_DIAGNOSTIC = false;
+
     class VoiceOutput {
         constructor({ toggleEl, onBargeIn }) {
             this.toggleEl = toggleEl;
@@ -65,16 +91,64 @@ window.Lucas = window.Lucas || {};
 
             this._reflect();
 
-            toggleEl.addEventListener("click", () => {
-                this.enabled = !this.enabled;
-                window.localStorage.setItem("lucas_speak", this.enabled ? "1" : "0");
-                // Désactiver doit couper un son déjà en cours, pas
-                // seulement s'appliquer à la prochaine réponse (ROADMAP.md
-                // §5.4 point 3) — sinon le bouton 🔇 ment sur ce qu'il fait
-                // à l'instant où on clique dessus.
-                if (!this.enabled) this.stop();
-                this._reflect();
-            });
+            // Dernier audio reçu pendant que le son était coupé. Permet à
+            // une réactivation de le jouer, au lieu d'un silence jusqu'à la
+            // question suivante (voir _toggleSpeak).
+            this._pending = null;
+
+            toggleEl.addEventListener("click", () => this._toggleSpeak());
+        }
+
+        // ⚠️ Bug réel rapporté par Cyril le 05/08/2026 : couper le son
+        // marchait, mais le RÉACTIVER pendant une réponse en cours ne
+        // ramenait rien — silence jusqu'à la question suivante. Le bouton
+        // était donc asymétrique : franc dans un sens, sans effet dans
+        // l'autre.
+        //
+        // Deux causes distinctes, corrigées séparément :
+        //  1. stop() remettait currentTime à 0 en plus de mettre en pause.
+        //     Même en relançant, on serait reparti du début. La coupure par
+        //     mute utilise maintenant pause() SEUL (position conservée) ;
+        //     stop() garde sa remise à zéro, qui reste juste pour le
+        //     barge-in et pour une nouvelle réponse.
+        //  2. Si le son était coupé AVANT l'arrivée de l'audio, play()
+        //     sortait immédiatement et l'audio était perdu. Il est
+        //     désormais mis de côté (_pending) et joué si Cyril réactive.
+        _toggleSpeak() {
+            this.enabled = !this.enabled;
+            window.localStorage.setItem("lucas_speak", this.enabled ? "1" : "0");
+            if (this.enabled) {
+                this._resume();
+            } else {
+                // Pause seule, sans remise à zéro : réactiver doit reprendre
+                // là où on en était, pas tout rejouer depuis le début.
+                if (!this.player.paused) this.player.pause();
+            }
+            this._reflect();
+        }
+
+        _resume() {
+            // Un audio arrivé pendant la coupure attend son tour.
+            if (this._pending) {
+                const { audio, mime } = this._pending;
+                this._pending = null;
+                this.play(audio, mime);
+                return;
+            }
+            // Sinon : reprendre la lecture mise en pause, si elle n'est pas
+            // déjà terminée (rien à reprendre après la fin d'une réponse).
+            if (this.player.src && !this.player.ended && this.player.paused) {
+                this.player.play().catch(() => {});
+                this._startBargeInWatch();
+            }
+        }
+
+        // Appelé quand Cyril envoie un nouveau message : l'audio mis de côté
+        // appartenait à l'échange précédent. Sans ça, réactiver le son trois
+        // questions plus tard rejouerait une vieille réponse — surprenant,
+        // et faux par rapport à ce qui est affiché à l'écran.
+        forgetPending() {
+            this._pending = null;
         }
 
         _reflect() {
@@ -96,7 +170,13 @@ window.Lucas = window.Lucas || {};
             // son malgré le mute entre-temps. Revérifier `this.enabled` ICI,
             // à l'instant où l'audio arrive réellement, plutôt que de se
             // fier à l'état capturé au moment de l'envoi.
-            if (!this.enabled) return;
+            if (!this.enabled) {
+                // Mis de côté plutôt que jeté : si Cyril réactive le son
+                // pendant cette même réponse, il l'entendra (voir _resume).
+                this._pending = { audio: audioBase64, mime };
+                return;
+            }
+            this._pending = null;
             // Une réponse qui arrive pendant que la précédente joue encore
             // interrompt celle-ci et prend le relais — comportement voulu,
             // pas un effet de bord : la dernière réponse de Cyril est
@@ -121,6 +201,7 @@ window.Lucas = window.Lucas || {};
         // ── Barge-in : micro de surveillance pendant la lecture ────────
 
         async _startBargeInWatch() {
+            if (!BARGE_IN_ENABLED && !BARGE_IN_DIAGNOSTIC) return;
             if (this._bargeInStream) return; // déjà en écoute
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
 
@@ -180,7 +261,13 @@ window.Lucas = window.Lucas || {};
                     this._aboveThresholdStreak = 0;
                 }
 
-                if (this._aboveThresholdStreak >= BARGE_IN_CONSECUTIVE_FRAMES) {
+                if (BARGE_IN_DIAGNOSTIC) {
+                    // Calibration : relever les vraies valeurs sur le S25
+                    // Ultra plutôt que redeviner un seuil. Ne coupe rien.
+                    console.log(`[barge-in] rms=${rms.toFixed(3)} seuil=${BARGE_IN_RMS_THRESHOLD}`);
+                }
+
+                if (BARGE_IN_ENABLED && this._aboveThresholdStreak >= BARGE_IN_CONSECUTIVE_FRAMES) {
                     this.stop();
                     if (this.onBargeIn) this.onBargeIn();
                     this._stopBargeInWatch();

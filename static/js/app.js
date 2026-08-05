@@ -76,18 +76,27 @@
             const text = input.value.trim();
             if (!text) return;
             chat.addUserMessage(text);
+            // L'audio éventuellement mis de côté appartenait à l'échange
+            // précédent : réactiver le son après cette nouvelle question ne
+            // doit pas rejouer l'ancienne réponse (voir voice_output.js).
+            voiceOutput.forgetPending();
             socket.sendChat(text, voiceOutput.enabled);
             input.value = "";
         });
 
         new window.Lucas.MicRecorder(document.getElementById("mic-btn"), {
-            onAudioReady: (audioBase64) => socket.sendAudio(audioBase64, voiceOutput.enabled),
+            onAudioReady: (audioBase64) => {
+                voiceOutput.forgetPending();
+                socket.sendAudio(audioBase64, voiceOutput.enabled);
+            },
             onError: (message) => chat.addError(message),
         });
 
         new window.Lucas.CameraCapture(document.getElementById("camera-btn"), {
-            onImageReady: (imageBase64) =>
-                socket.sendImage(imageBase64, undefined, voiceOutput.enabled),
+            onImageReady: (imageBase64) => {
+                voiceOutput.forgetPending();
+                socket.sendImage(imageBase64, undefined, voiceOutput.enabled);
+            },
             onError: (message) => chat.addError(message),
         });
 

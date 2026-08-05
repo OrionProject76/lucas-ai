@@ -2985,6 +2985,220 @@ Suite : `test_server.py` + `test_log_scrub.py` → 90 passés. Un échec,
 vérifié par `git stash` avant/après : il échoue à l'identique sans ces
 modifications (routage vision, sans rapport).
 
+## 5.31 Fausse confirmation d'action + 4 correctifs client — 05/08/2026
+
+Cinq symptômes rapportés par Cyril après un vrai usage de la PWA mobile.
+Diagnostiqués séparément, comme demandé — **ils n'ont pas une cause
+commune**, mais deux d'entre eux partagent un motif structurel qui vaut
+d'être nommé (voir « Le motif commun » en fin de section).
+
+### 🔴 Le point grave : Luca's a confirmé une action qui n'a pas eu lieu
+
+```
+Cyril  : « Bonjour , ouvre le bloc note »
+Luca's : « D'accord, j'ouvrirai donc le Bloc-notes sur votre PC.
+           Le Bloc-notes est lancé. »
+Réalité: aucun Bloc-notes ouvert.
+```
+
+**Premier fait établi** : `action_log` ne contenait **aucune entrée** pour
+ce tour — seulement mes deux tests de la veille (04/08, 21:53 et 21:58).
+L'action n'avait donc pas échoué : elle n'avait **même pas été tentée**. Le
+Decision Engine n'a jamais été appelé.
+
+**Cause 1 — le déclencheur.** Cyril a écrit « bloc **note** » (singulier,
+sans trait d'union). Les deux alias existants étaient « bloc-notes » et
+« bloc notes », tous deux au **pluriel**. `extract_app_name()` a rendu
+`None`, `should_use_automation()` était faux.
+
+Ajouter « bloc note » à la liste aurait réparé ce cas et laissé passer le
+suivant. Le correctif traite la **classe** de variantes
+(`_spoken_name_pattern`) : trait d'union / espace / rien entre les mots, et
+« s » final optionnel sur chaque mot. En le vérifiant, un trou de la même
+famille est apparu — « ouvre **l'**explorateur » ne déclenchait rien non
+plus, l'article élidé n'étant pas suivi d'un espace. Corrigé aussi.
+
+**Cause 2 — et c'est le vrai sujet.** Le déclencheur muet produisait un
+**silence total** dans le prompt : ni bloc « action effectuée », ni bloc
+« action refusée ». Le modèle n'avait donc aucune information sur ce qui
+s'était passé sur la machine, et a comblé le vide. Le silence était le bug.
+
+Deux mécanismes ajoutés, à deux niveaux différents :
+
+**(a) `looks_like_app_request()`** (`core/router.py`) répond à une question
+qui n'était posée nulle part : « une action a-t-elle été **demandée** ? »,
+indépendamment de « sait-on la **faire** ? ». Quand oui sans application
+reconnue, un bloc explicite est injecté — « AUCUNE ACTION N'A ÉTÉ
+EFFECTUÉE », interdiction d'affirmer le contraire, et rappel de la liste
+blanche réelle. Volontairement plus large que `extract_app_name` : mieux
+vaut expliquer une fois de trop qu'on n'a rien fait, que confirmer une fois
+de trop qu'on l'a fait. Les faux positifs documentés (« lance une réflexion
+sur Chrome », « comment ouvrir un fichier ») sont neutralisés par une liste
+d'objets non-applicatifs et une exclusion de « comment ».
+
+**(b) Un garde-fou déterministe** (`claims_action_success()` +
+`FALSE_CLAIM_CORRECTION`, `core/lucas_core.py`), qui ne dépend d'aucun
+modèle. Après génération, si `self._action_executed` est faux et que la
+réponse **affirme** un succès (« est lancé », « j'ai ouvert », « vient
+d'être démarré »…), une correction est **ajoutée** au texte.
+
+⚠️ **Pourquoi un contrôle déterministe et pas seulement la consigne (a)** :
+parce que ce projet a déjà **mesuré** que les consignes de prompt cèdent
+sous historique long — la règle de sécurité « refuse de consulter ma boîte
+mail » passe de 9/9 sans historique à **2/9 avec 100 messages** (§5.29).
+Une consigne oriente une réponse ; elle ne **garantit** pas une affirmation
+sur l'état réel de la machine de Cyril. Sa demande était explicite : « Luca
+ne doit JAMAIS confirmer une action comme réussie sans un vrai retour de
+succès du code d'exécution. » Seul un contrôle qui compare l'affirmation à
+`self._action_executed` tient cette promesse.
+
+Le garde-fou **ajoute** au lieu de réécrire : réécrire supposerait de
+savoir ce que Luca's voulait dire ; ajouter se contente de rétablir le
+fait. Le texte trompeur reste visible — voulu, pour que Cyril constate
+l'écart au lieu de le découvrir plus tard. La correction est appliquée
+**avant** l'enregistrement en mémoire : une fausse confirmation stockée
+telle quelle deviendrait un exemple à imiter au tour suivant (§5.5).
+
+**Sur le changement d'adresse IP (.14 → .12)**, écarté formellement comme
+demandé : `action_log` prouve que la chaîne fonctionnait avant (deux
+`executed` le 04/08) et fonctionne après (test ci-dessous, même serveur,
+même code). Le code ne consulte à aucun moment l'adresse d'écoute pour
+décider d'une action. Aucun lien.
+
+### Validation réelle — le process observé, pas le texte
+
+C'est précisément le point du bug : la réponse ne prouve rien.
+
+```
+Message envoye        : 'Bonjour , ouvre le bloc note'
+HTTP 200 en 1.2s
+--- REPONSE REELLE DE LUCA'S ---
+Le bloc-notes a été ouvert. Que devez-vous écrire dans le bloc-notes, Cyril ?
+--------------------------------
+NOUVEAU process cree  : 1  ['9376']
+Dernieres actions     : ('launch_notepad', 'chat', 'executed', '2026-08-05 03:09:24')
+>>> VERDICT : un vrai Notepad s'est ouvert.
+```
+
+Et le cas non exécutable, sans aucune fausse confirmation :
+
+```
+Message envoye        : 'ouvre spotify'
+--- REPONSE REELLE DE LUCA'S ---
+Désolé, Spotify n'est pas parmi les applications que je peux ouvrir sur
+votre ordinateur. Je peux vous aider à ouvrir des applications autorisées
+comme la calculatrice, Chrome, l'explorateur de fichiers ou le bloc-notes.
+--------------------------------
+NOUVEAU process cree  : 0
+action_log            : inchangé
+```
+
+⚠️ **Une erreur de méthode à retenir, plus instructive que le correctif.**
+La première exécution de ce test a conclu « AUCUN Notepad ouvert » — et
+c'était **l'instrument qui était faux, pas le code**. Sur Windows 11 le
+Bloc-notes est une application du Store : son process s'appelle `Notepad`,
+et le filtre `tasklist /FI "IMAGENAME eq notepad.exe"` ne trouve rien. Un
+vrai Notepad venait pourtant de s'ouvrir, horodaté à la seconde près sur
+l'entrée `action_log`. Sans cette vérification croisée, un bug grave aurait
+été inventé de toutes pièces sur la foi d'une mesure — exactement le
+travers que la validation en conditions réelles est censée éviter.
+
+Corollaire pratique : le Bloc-notes de Windows 11 ouvre des **onglets dans
+un process unique**, donc « compter les process » sous-estime les
+lancements réels. Le comptage n'est fiable que quand aucun Notepad n'est
+déjà ouvert.
+
+### Les 4 autres symptômes — causes distinctes
+
+**1. Mute/unmute asymétrique** (`static/js/voice_output.js`). Deux causes
+indépendantes derrière un seul symptôme :
+- `stop()` remettait `currentTime` à 0 en plus de mettre en pause : même en
+  relançant, on serait reparti du début. La coupure par le bouton utilise
+  désormais `pause()` **seul** ; `stop()` garde sa remise à zéro, juste
+  pour le barge-in et pour l'arrivée d'une nouvelle réponse.
+- Si le son était coupé **avant** l'arrivée de l'audio, `play()` sortait
+  immédiatement et l'audio était **perdu**. Il est maintenant mis de côté
+  (`_pending`) et joué si Cyril réactive. Invalidé à l'envoi du message
+  suivant (`forgetPending()` dans `app.js`, sur les trois entrées : texte,
+  micro, caméra) — sinon réactiver le son trois questions plus tard
+  rejouerait une vieille réponse.
+
+**2. Vision inopérante depuis le mobile.** Diagnostic : le mécanisme
+**n'est pas cassé**, et le refus de capture est **voulu** — un client
+mobile peut être n'importe où, capturer l'écran du PC en silence serait une
+faute de confidentialité (décision du 02/08, `allow_screen_capture`). Le
+bloc de contexte prévu pour ce cas s'est bien déclenché. Le défaut est
+ailleurs : il proposait **une** issue (le bouton caméra) sans **interdire
+d'en inventer d'autres**, et le modèle a répondu « veuillez prendre une
+capture d'écran » — une manipulation manuelle qui n'existe pas. Bloc durci :
+les deux possibilités réelles sont énumérées explicitement (bouton caméra,
+ou renommer le PC), et toute autre manipulation est interdite nommément.
+
+**3. L'audio coupe en cours de lecture.** Le réseau est **formellement hors
+de cause** : l'audio est reçu **entièrement** avant lecture, sous forme de
+`data:` URI en mémoire. Un Wi-Fi faible peut retarder le début, jamais
+interrompre le milieu. En éliminant, il ne reste que trois chemins capables
+de couper une lecture commencée : le barge-in, le bouton mute, une nouvelle
+réponse. Le suspect est le **barge-in**, et son hypothèse était déjà écrite
+dans le fichier : « l'annulation d'écho dépend du device, pas garantie à
+100 % pour un `<audio>` hors WebRTC ». Le haut-parleur du téléphone rejoue
+la voix de Luca's à quelques centimètres du micro, dépasse le seuil RMS de
+0.09 — jamais calibré, le commentaire d'origine le disait — et **Luca's se
+coupe elle-même**.
+
+`BARGE_IN_ENABLED = false` en attendant une vraie calibration, plus un mode
+`BARGE_IN_DIAGNOSTIC` qui affiche le RMS mesuré sans rien couper. Le test
+en conditions réelles que le commentaire d'origine appelait a eu lieu : il
+dit que le seuil est mauvais. Le deviner une seconde fois serait répéter
+l'erreur.
+
+**4. Micro peu sensible** (`static/js/audio.js`). Le raisonnement d'hier
+soir (« `autoGainControl` reste à sa valeur par défaut, généralement
+activé ») était juste dans son intention mais reposait sur un défaut **non
+garanti** : la spec laisse le navigateur décider, et Chrome Android
+désactive volontiers l'AGC quand `echoCancellation` est demandé — les deux
+passent par la même chaîne de traitement. Rendu explicite
+(`autoGainControl: true`) : c'est exactement le réglage de gain que le
+symptôme désigne. `noiseSuppression` laissé actif pour l'instant — si la
+voix reste faible, c'est le suspect suivant, à changer **seul** pour
+pouvoir attribuer l'effet.
+
+### Le motif commun (nommé, pas supposé)
+
+Les symptômes n'ont pas la même cause, mais deux d'entre eux — la fausse
+confirmation et la vision mobile — sont la même erreur de conception : **un
+bloc de contexte qui manque, ou qui laisse une issue ouverte, et le modèle
+comble le vide en inventant**. C'est aussi ce que disaient déjà le RAG sans
+résultat (§5.6) et la capture refusée. Règle qui s'en dégage, applicable
+aux prochains câblages : *toute capacité qui peut ne pas s'exécuter doit
+injecter un contexte explicite quand elle ne s'exécute pas* — le silence
+n'est jamais neutre.
+
+### Fichiers
+
+- `core/router.py` — `_spoken_name_pattern()`, article élidé,
+  `looks_like_app_request()`, `_ABSTRACT_ACTION_OBJECTS`
+- `core/lucas_core.py` — `claims_action_success()`,
+  `FALSE_CLAIM_CORRECTION`, témoin `_action_executed`, branche « action
+  demandée non reconnue », bloc vision mobile durci
+- `static/js/voice_output.js` — `_toggleSpeak()`, `_resume()`,
+  `forgetPending()`, `BARGE_IN_ENABLED`, `BARGE_IN_DIAGNOSTIC`
+- `static/js/app.js` — `forgetPending()` sur les trois entrées
+- `static/js/audio.js` — `autoGainControl: true` explicite
+- `static/sw.js` — cache v10 → **v11**
+- `test_false_action_claim.py` — nouveau, 30 tests
+
+Suite complète : **1043 passés**. Note : `test_websocket_mobile_explicit_pc_mention_still_watches`,
+signalé en échec préexistant plus tôt dans la session, passe désormais sans
+avoir été touché — il dépend du classifieur d'intention, donc d'Ollama :
+c'est un test **instable**, pas un test réparé. À traiter comme tel.
+
+### Confirmé en positif
+
+Decision Engine + la clarification « sur votre PC » fonctionnent bien
+ensemble, testé en réel par Cyril (capture à l'appui). Rien touché de ce
+côté.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

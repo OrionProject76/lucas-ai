@@ -65,7 +65,23 @@ window.Lucas = window.Lucas || {};
                     // voix normalisée, le barge-in a besoin d'un gain
                     // stable pour comparer à un seuil RMS fixe — besoins
                     // opposés, pas un oubli.
+                    //
+                    // ⚠️ 05/08/2026 : Cyril rapporte devoir parler fort pour
+                    // être transcrit correctement. « Valeur par défaut »
+                    // n'est pas « activé » : la spec laisse le navigateur
+                    // décider, et Chrome Android désactive volontiers l'AGC
+                    // quand echoCancellation est demandé (les deux passent
+                    // par la même chaîne de traitement). Le raisonnement
+                    // ci-dessus reste juste, mais il supposait un défaut qui
+                    // n'était pas garanti. Rendu explicite : c'est
+                    // exactement le réglage de gain que le symptôme désigne.
+                    autoGainControl: true,
                     echoCancellation: true,
+                    // Laissé actif pour l'instant. Si la voix reste faible
+                    // après le passage de autoGainControl à true, c'est le
+                    // suspect suivant : la suppression de bruit d'Android
+                    // atténue aussi la parole à faible niveau. À changer
+                    // SEUL, pour pouvoir attribuer l'effet.
                     noiseSuppression: true,
                 },
             });
