@@ -25,6 +25,7 @@ from config import (
 )
 from core.cloud_llm import ask_cloud
 from core.local_llm import ask_local
+from core.aura_modes import AuraModeEngine, tone_hint
 from core.memory_weighting import annotate_uncertain_events, annotate_uncertain_history
 from core.reasoning_engine import ReasoningEngine
 from core.router import (
@@ -213,6 +214,67 @@ class LucasCore:
     def __init__(self):
         self.memory = MemoryManager()
 
+    @property
+    def aura(self) -> AuraModeEngine:
+        """
+        Moteur AURA, construit à la première demande.
+
+        Son état « collant » (Deep Focus) est lu et écrit via la mémoire,
+        pas via un attribut : LucasCore est recréé à chaque requête, un
+        drapeau en RAM ne survivrait pas au message suivant (voir
+        core/aura_modes.py::AuraModeEngine).
+
+        Paresseux et non construit dans __init__ à dessein : plusieurs
+        tests instancient `LucasCore.__new__(LucasCore)` avec une mémoire
+        factice, sans jamais passer par __init__. Un attribut posé dans
+        __init__ les cassait tous ; une propriété garde le cœur
+        constructible sans base réelle, ce qui est la raison d'être de ce
+        motif de test.
+        """
+        if getattr(self, "_aura", None) is None:
+            self._aura = AuraModeEngine(
+                store=(
+                    lambda: self.memory.get_state("aura_deep_focus"),
+                    lambda value: self.memory.set_state("aura_deep_focus", value),
+                )
+            )
+        return self._aura
+
+    def _describe_presence(self, snapshot: dict) -> str:
+        """
+        Bloc [Contexte] : ce que fait Cyril, et depuis quand ils se parlent.
+
+        Matière première de la variation de ton (SYSTEM_PROMPT, section
+        « Ta façon de parler ») — le prompt dit d'en tenir compte sans
+        jamais le réciter. Rendre une chaîne vide quand il n'y a rien à
+        dire est délibéré : une ligne « aucun mode détecté, aucun échange
+        récent » n'apprendrait rien au modèle et ne ferait que diluer le
+        prompt système, ce qui est mesuré comme un vrai risque ici (§5.29).
+        """
+        morceaux: list[str] = []
+
+        mode = self.aura.detect(snapshot.get("active_window", ""))
+        indication = tone_hint(mode)
+        if indication:
+            morceaux.append(indication)
+
+        # ⚠️ Formulé SANS « vous » ni « tu ». Première rédaction : « C'est
+        # votre premier échange » — un bloc censé servir la variation de ton
+        # écrivait lui-même du vouvoiement dans le prompt, juste au-dessus
+        # d'une règle qui l'interdit. Le prompt ne doit modéliser aucune
+        # forme d'adresse qu'il ne veut pas voir ressortir.
+        minutes = self.memory.minutes_since_last_exchange()
+        if minutes is None:
+            morceaux.append("Premier échange enregistré avec Cyril.")
+        elif minutes < 10:
+            morceaux.append("Conversation déjà en cours avec Cyril.")
+        elif minutes > 720:
+            morceaux.append("Dernier échange avec Cyril il y a plus de douze heures.")
+
+        if not morceaux:
+            return ""
+        return "[Contexte : " + " ".join(morceaux) + "]"
+
     def _build_messages(
         self,
         user_message: str,
@@ -264,10 +326,25 @@ class LucasCore:
         # quand la question posée est anodine. CPU et RAM restent joints.
         system_context = format_for_prompt(snapshot, include_window=not is_cloud)
 
+        # Contexte de présence — matière première de la variation de ton
+        # demandée par Cyril (05/08/2026). Trois signaux seulement, tous
+        # déterministes (aucun LLM, CLAUDE.md règle 12) :
+        #   - le mode AURA déduit de la fenêtre active (core/aura_modes.py)
+        #   - depuis combien de temps ils se parlent (memory_manager)
+        #   - l'heure, déjà présente dans system_context
+        #
+        # ⚠️ Jamais envoyé au cloud : le mode se déduit du titre de la
+        # fenêtre active, qui ne sort pas de la machine (règle 3, même
+        # raison que include_window=False plus haut). Un mode « Working »
+        # déduit d'« impots_2025.pdf » raconte la même chose que le titre.
+        presence_context = "" if is_cloud else self._describe_presence(snapshot)
+
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "system", "content": system_context},
         ]
+        if presence_context:
+            messages.append({"role": "system", "content": presence_context})
 
         # Événements système récents : ce qui s'est passé sur la machine
         # depuis le début de la session. Jamais vers le cloud — la table
@@ -412,8 +489,45 @@ class LucasCore:
         # get_context() rend une chaîne VIDE quand aucun extrait n'est
         # assez proche : on n'injecte alors rien du tout.
         rag_context = ""
-        if not is_cloud and should_use_rag(user_message, context):
-            rag_context = RAGManager().get_context(user_message)
+        # ⚠️ `not should_use_automation` : trouvé en test réel le 05/08/2026.
+        # « Ouvre le bloc note » a été classé DOCUMENTS par le classifieur
+        # d'intention (core/intent.py), qui a donc lancé une recherche
+        # documentaire sur une demande d'ouverture d'application. Une
+        # demande d'action est reconnue de façon DÉTERMINISTE, elle : quand
+        # elle est certaine, elle prime sur une intention devinée. Évite
+        # aussi d'injecter des extraits de documents personnels sans rapport
+        # dans une réponse d'action — le « RAG qui empoisonne » que
+        # CLAUDE.md décrit.
+        if not is_cloud and not should_use_automation(user_message) and should_use_rag(
+            user_message, context
+        ):
+            # ⚠️ Enveloppé depuis le 05/08/2026, après un HTTP 500 réel :
+            # le modèle d'embedding (nomic-embed-text) a rendu une réponse
+            # sans champ « embedding », l'exception a traversé tout
+            # LucasCore.ask() et l'API a rendu 500. Résultat : Cyril
+            # n'obtenait AUCUNE réponse — pas une réponse dégradée, rien.
+            #
+            # Une panne d'un module optionnel ne doit jamais empêcher de
+            # répondre. Même principe que le `except Exception` déjà en
+            # place sur le classifieur d'intention plus haut : « un doute
+            # sur l'état ne doit jamais empêcher de répondre ».
+            #
+            # Et on ne se tait pas non plus : le bloc injecté dit que la
+            # recherche a échoué, pour que le modèle ne présente pas une
+            # réponse de mémoire générale comme venant des documents.
+            try:
+                rag_context = RAGManager().get_context(user_message)
+            except Exception as exc:  # noqa: BLE001 — panne d'un module optionnel
+                self.log_event("rag_unavailable", type(exc).__name__)
+                _emit(on_activity, "documents_searched", "documents personnels — recherche indisponible")
+                rag_context = (
+                    "La recherche dans les documents personnels a ÉCHOUÉ "
+                    "(service d'indexation indisponible). Tu n'as donc "
+                    "consulté AUCUN document.\n"
+                    "Dis-le clairement à Cyril si sa question portait sur "
+                    "ses documents. INTERDIT : répondre de mémoire générale "
+                    "en laissant croire que ça vient de ses documents."
+                )
             if rag_context:
                 extraits = rag_context.count("[Extrait")
                 _emit(
@@ -1020,6 +1134,11 @@ class LucasCore:
         routage — voir _emit() en tête de fichier.
         """
         self.memory.save_message("user", user_message)
+        # ⚠️ Ici et pas dans _build_messages : celui-ci est aussi appelé par
+        # build_messages_for_ui() pour un simple APERÇU du prompt. Y placer
+        # la commande ferait basculer le mode Deep Focus sans que Cyril ait
+        # rien envoyé — un effet de bord déclenché par un affichage.
+        self.aura.handle_command(user_message)
         destination = route(user_message, self.recent_context())
         _emit(
             on_activity, "routed",

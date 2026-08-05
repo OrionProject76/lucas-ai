@@ -18,6 +18,7 @@ import pytest
 
 from core.dates import extract_periods, extract_query_period
 from core.dates import matches as matches_period
+from test_memory_double import MemoryDouble
 
 
 # ── Extraction côté documents ─────────────────────────────────────────
@@ -271,9 +272,9 @@ def test_une_recherche_infructueuse_est_annoncee_au_modele(monkeypatch):
     from core import lucas_core
     from core.lucas_core import LucasCore
 
-    class _Memoire:
+    class _Memoire(MemoryDouble):
         def __init__(self):
-            self.events = []
+            super().__init__()
 
         def load_history(self):
             return [("user", "mon salaire de juillet 2024")]

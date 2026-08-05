@@ -3199,6 +3199,169 @@ Decision Engine + la clarification « sur votre PC » fonctionnent bien
 ensemble, testé en réel par Cyril (capture à l'appui). Rien touché de ce
 côté.
 
+## 5.32 Personnalité de Luca — appliquée, mesurée, et un incident de méthode grave
+
+Session autonome de nuit, priorité 1 sur 7. La consigne de Cyril portait sur
+quatre points ; **un seul était appliqué** en arrivant (« sur ton PC »).
+
+### 🔴 D'abord l'incident : mes mesures ont détruit de l'historique réel
+
+À signaler avant tout le reste, parce que c'est une perte de données de
+Cyril, pas un bug de code.
+
+La première campagne de mesure croyait travailler sur une **copie isolée**
+de la base. Elle réassignait `memory.memory_manager.DB_PATH` après l'import
+— or `MemoryManager.__init__(self, db_path: Path = DB_PATH)` fige sa valeur
+par défaut **à la définition de la fonction**. Réassigner le module ne
+change donc rien : les deux « conditions » écrivaient dans la **vraie base
+de Cyril**.
+
+Conséquence en cascade, et c'est elle qui fait mal : `save_message()`
+appelle `_cleanup_old_messages()`, qui tronque la table à
+`MAX_HISTORY_MESSAGES = 100`. Mes ~60 messages de test ont poussé le total
+au-delà de 100, et la rotation a supprimé **les plus anciens messages
+réels**. Bilan mesuré : la base est passée de 94 messages réels à **38**.
+**Environ 56 messages de conversation réelle de Cyril, du 02/08 au 04/08,
+sont perdus.** La seule sauvegarde disponible (02/08 18:55) couvre les
+ids 45-307 et **ne contient pas** cette plage — rien à restaurer.
+
+Ce qui a été fait immédiatement :
+- deux sauvegardes déposées dans `data/backups/` (état actuel + celle du
+  02/08), non versionnées (`.gitignore`, ce sont des données personnelles) ;
+- `MemoryManager` expose désormais `self.db_path`, pour qu'un appelant
+  puisse **vérifier** sur quelle base il écrit au lieu de le supposer ;
+- la campagne corrigée remplace la **fabrique** (`lc.MemoryManager`) et
+  s'auto-vérifie : elle compte les messages de la vraie base avant/après
+  une écriture témoin et s'arrête net si le compte bouge.
+
+⚠️ **Règle qui manquait, et qui manque toujours au niveau du projet** :
+aucune campagne de mesure ne doit pouvoir écrire dans
+`memory/lucas_memory.db`. Une sauvegarde préalable ne suffit pas — il faut
+que l'isolation soit **vérifiée**, pas déclarée. C'est exactement le motif
+« tests verts mais comportement jamais réel » que Cyril demande de
+traquer, appliqué cette fois à l'outil de mesure lui-même : la campagne
+était verte, la condition qu'elle croyait tester n'a jamais existé.
+
+### La mesure, une fois l'isolation réparée
+
+Elle renverse la conclusion que la campagne cassée avait produite
+(« le modèle ignore la consigne »).
+
+| Condition | tutoiement | vouvoiement | formule de guichet |
+|---|---|---|---|
+| prompt actuel, historique réel | **0/15** | 15/15 | 14/15 |
+| prompt actuel, historique **vide** | **15/15** | 0/15 | 5/15 |
+| style renforcé, historique réel | **12/15** | 3/15 | 6/15 |
+| style renforcé, historique vide | 15/15 | 0/15 | 3/15 |
+
+Lecture : **la consigne fonctionnait déjà** (15/15 sur conversation
+neuve). Elle tombe à 0/15 dès que l'historique réel — entièrement au
+vouvoiement, 38 messages — la contredit par l'exemple. C'est la
+**quatrième manifestation** du même phénomène (vision §5.6, RAG §5.6,
+prompt système §5.29) : le modèle imite ce qu'il se voit avoir fait plutôt
+que ce qu'on lui dit de faire.
+
+Le correctif retenu est celui qui a été mesuré : répéter la règle **en fin
+de prompt**, en **montrant les phrases exactes** au lieu de les décrire.
+0/15 → 12/15 contre le même historique hostile. Une règle de style
+formulée en abstrait ne pèse rien face à des exemples contraires ; une
+règle montrée pèse.
+
+### Ce qui a été livré
+
+- **Nom** : « Tu es Luca » — auto-référence. Le nom du PRODUIT reste
+  « Luca's » (`WINDOW_TITLE`, dépôt, docs) : les deux coexistent
+  volontairement, noté dans `config.py` pour qu'une relecture future ne
+  prenne pas l'écart pour une incohérence à corriger.
+- **Ton** : tutoiement, interdiction explicite des formules d'accueil et
+  des relances de guichet, avec exemples littéraux.
+- **Variation** : bloc `[Contexte]` construit par `_describe_presence()` —
+  mode AURA déduit de la fenêtre active + depuis quand ils se parlent.
+  Rend une chaîne **vide** quand il n'y a rien à dire : une ligne « aucun
+  mode, aucun échange récent » n'apprendrait rien et ne ferait que diluer
+  le prompt, ce qui est ici un risque mesuré.
+- **« sur ton PC »** : déjà présent, vérifié, inchangé.
+
+⚠️ Détail attrapé en relecture : la première version de ce bloc écrivait
+« C'est **votre** premier échange » — un bloc au service du tutoiement qui
+modélisait lui-même du vouvoiement, deux lignes au-dessus de la règle qui
+l'interdit. Reformulé sans aucune forme d'adresse.
+
+### AURA était du code mort — et cachait un bug qui inversait les commandes
+
+`core/aura_modes.py` existait depuis le 04/08 (§5.13) mais n'était
+**importé nulle part**. En le câblant, deux défauts sont apparus, dont un
+qu'aucun test ne pouvait voir tant que rien n'appelait le module :
+
+1. **Deep Focus ne pouvait pas fonctionner.** Le mode est « collant » par
+   conception, mais son drapeau vivait en mémoire vive — et `LucasCore`
+   est recréé à **chaque requête** (contrainte SQLite/threads). Il
+   repartait donc à `False` au message suivant. Corrigé par une table
+   `app_state` (clé/valeur) et un `store` injecté, sur le modèle de
+   `log_event` ailleurs dans le projet.
+2. **« desactive le mode focus » sans accent ACTIVAIT le mode.** Les
+   phrases étaient comparées avec `.lower()` seul, jamais avec
+   `core.text_utils.normalize()` — dont le module dit pourtant
+   explicitement « Toute comparaison de mots-clés doit passer par
+   normalize() ». Sans accent, aucune phrase OFF ne correspondait, mais la
+   chaîne contient littéralement « active le mode focus », donc la branche
+   ON se déclenchait. Taper vite **inversait le sens de la commande**.
+
+Périmètre verrouillé comme demandé : un mode détecté ne change que le
+**ton**. Les « comportements » de la table `IDEAS.md` §3 (filtrer les
+notifications, régler le volume, fermer des onglets) sont de vraies actions
+système — chacune serait une entrée de plus dans la liste blanche, et
+personne n'a validé d'en ajouter.
+
+### Deux bugs réels trouvés en validant dans la vraie application
+
+**HTTP 500 sur « Ouvre le bloc note »** — la requête entière échouait,
+Cyril n'obtenait **aucune** réponse. Deux causes empilées :
+- le classifieur d'intention a classé une demande d'ouverture
+  d'application comme une question sur les **documents**, déclenchant une
+  recherche RAG ;
+- l'embedding (`nomic-embed-text`) a rendu une réponse sans champ
+  `embedding`, l'exception a traversé tout `ask()` et l'API a rendu 500.
+
+Corrigé des deux côtés : une demande d'action reconnue de façon
+**déterministe** prime désormais sur une intention devinée (`not
+should_use_automation(...)` avant le RAG), et l'appel RAG est enveloppé —
+une panne d'un module optionnel ne doit jamais empêcher de répondre. Le
+repli **ne se tait pas** : il injecte « la recherche a ÉCHOUÉ, tu n'as
+consulté AUCUN document », pour que le modèle ne présente pas une réponse
+de mémoire générale comme venant des documents de Cyril.
+
+**Le garde-fou anti-fausse-confirmation (§5.31) s'est déclenché en
+production**, sur un « Merci » où le modèle a réaffirmé « Le Bloc-notes est
+lancé » par imitation du tour précédent. La correction automatique s'est
+bien ajoutée. Première observation du mécanisme en conditions réelles, non
+provoquée.
+
+### Cinq doubles de test dupliqués — consolidés
+
+Ajouter une méthode à `MemoryManager` a cassé **52 tests dans 5 fichiers**,
+chacun ayant recopié son propre `_FakeMemory`. Cinq doubles écrits
+séparément dérivent séparément de l'objet réel — et chacun peut rester vert
+en simulant une interface qui n'existe plus. `test_memory_double.py`
+(`MemoryDouble`) réunit le socle commun ; les cinq doubles en héritent
+désormais, donc une méthode ajoutée là les couvre tous.
+
+Un test a été rectifié plutôt que réparé : `test_no_empty_system_message_when_no_events`
+affirmait `len(messages système) == 2`. Ce nombre n'est pas la propriété à
+protéger — il change dès qu'une capacité ajoute un bloc. Réécrit sur ce
+qu'il voulait dire : aucun bloc vide, aucun bloc d'événements sans
+événement.
+
+### Fichiers
+
+`config.py` (SYSTEM_PROMPT), `core/lucas_core.py` (`_describe_presence`,
+propriété `aura`, garde RAG), `core/aura_modes.py` (`tone_hint`, `store`,
+`normalize`), `memory/memory_manager.py` (`app_state`, `set_state`,
+`get_state`, `minutes_since_last_exchange`, `db_path`),
+`test_memory_double.py` (nouveau), 6 fichiers de test adaptés.
+
+Suite complète : **1043 passés**.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

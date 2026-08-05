@@ -20,6 +20,7 @@ from config import (
 )
 from core import lucas_core
 from core.lucas_core import LucasCore, fit_history_to_budget
+from test_memory_double import MemoryDouble
 
 
 # ── fit_history_to_budget() ───────────────────────────────────────────
@@ -111,8 +112,9 @@ def test_an_empty_history_stays_empty() -> None:
 
 # ── Intégration dans _build_messages() ────────────────────────────────
 
-class _FakeMemory:
+class _FakeMemory(MemoryDouble):
     def __init__(self, history: list[tuple[str, str]]) -> None:
+        super().__init__()
         self._history = history
 
     def load_history(self) -> list[tuple[str, str]]:

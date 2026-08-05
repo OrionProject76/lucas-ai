@@ -19,8 +19,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
+
+from core.text_utils import normalize
 
 
 class AuraMode(Enum):
@@ -55,13 +58,26 @@ WORKING_APP_MARKERS = (
 # rien bloquer du tout. Comparé sur une phrase en minuscules, en
 # sous-chaîne — assez large pour couvrir des formulations proches, testé
 # sur un corpus comme test_intent.py.
+#
+# ⚠️ Comparées après core.text_utils.normalize(), jamais avec .lower()
+# seul. Bug réel trouvé le 05/08/2026 en câblant le moteur : « desactive
+# le mode focus » tapé SANS ACCENT ne correspondait à aucune phrase OFF —
+# mais contient littéralement la sous-chaîne « active le mode focus », donc
+# il tombait dans la branche ON. Taper vite inversait le sens de la
+# commande : demander l'arrêt de la concentration l'activait.
+#
+# C'est exactement la raison d'être de core/text_utils.py (« Toute
+# comparaison de mots-clés doit passer par normalize() ») ; ce module avait
+# été écrit sans, et personne ne l'avait vu parce que rien ne l'appelait.
+# Les phrases ci-dessous sont donc écrites DÉJÀ normalisées (sans accent),
+# et normalize() est appliqué à l'entrée.
 DEEP_FOCUS_ON_PHRASES = (
     "active le mode focus", "active le mode deep focus", "mode deep focus",
-    "concentre-toi", "mode concentration",
+    "concentre-toi", "concentre toi", "mode concentration",
 )
 DEEP_FOCUS_OFF_PHRASES = (
-    "désactive le mode focus", "arrête le mode focus", "sors du mode focus",
-    "fin du focus", "fin de la concentration",
+    "desactive le mode focus", "arrete le mode focus", "sors du mode focus",
+    "fin du focus", "fin de la concentration", "stop le mode focus",
 )
 
 
@@ -73,6 +89,34 @@ class AuraModeChange:
     reason: str
 
 
+# Ce que chaque mode change dans le TON de Luca — et rien d'autre.
+#
+# ⚠️ Périmètre verrouillé (instruction de Cyril, 05/08/2026) : les
+# "comportements" de la table IDEAS.md §3 (filtrer les notifications,
+# lancer une musique, fermer des onglets, régler le volume) sont de
+# VRAIES actions système. Chacune serait une entrée de plus dans la liste
+# blanche de core/decision_engine.py, et personne n'a validé d'en ajouter
+# — une seule existe à ce jour, le lancement d'application. Détecter un
+# mode ne donne donc le droit qu'à une chose : parler différemment.
+#
+# Formulé comme une consigne courte et concrète : un ton décrit en
+# abstrait ("sois plus efficace") ne change rien à une génération.
+MODE_TONE_HINTS: dict[AuraMode, str] = {
+    AuraMode.WORKING: (
+        "Cyril travaille. Va droit au but, pas de digression ni de relance."
+    ),
+    AuraMode.DEEP_FOCUS: (
+        "Cyril est en concentration profonde. Réponds en une ou deux phrases "
+        "maximum, sans aucune question de relance."
+    ),
+}
+
+
+def tone_hint(mode: AuraMode) -> str:
+    """Consigne de ton associée à un mode — chaîne vide si aucune."""
+    return MODE_TONE_HINTS.get(mode, "")
+
+
 class AuraModeEngine:
     """
     Détecte le mode AURA actif.
@@ -82,10 +126,29 @@ class AuraModeEngine:
     que soit la fenêtre ensuite au premier plan — jamais une fenêtre qui
     annule silencieusement une demande de concentration. Working, lui,
     se déduit à chaque appel depuis la fenêtre active, sans mémoire.
+
+    ⚠️ `store` (05/08/2026, premier câblage réel) : sans lui, ce moteur ne
+    fonctionnait pas du tout en conditions réelles. `LucasCore` est recréé
+    à CHAQUE requête (contrainte SQLite/threads, api/server.py), donc
+    `_deep_focus_active` gardé en mémoire vive repartait à False au message
+    suivant — un mode "collant" qui se décollait tout seul. `store` est un
+    couple (lire, écrire) fourni par l'appelant : le moteur reste ignorant
+    de SQLite, comme `log_event` ailleurs dans le projet. Sans `store`, le
+    comportement en mémoire d'origine est conservé (utile pour les tests).
     """
 
-    def __init__(self) -> None:
+    _STATE_KEY = "aura_deep_focus"
+
+    def __init__(self, store: tuple[Callable[[], str | None], Callable[[str], None]] | None = None) -> None:
+        self._read, self._write = store if store else (None, None)
         self._deep_focus_active = False
+        if self._read is not None:
+            self._deep_focus_active = self._read() == "1"
+
+    def _set_deep_focus(self, actif: bool) -> None:
+        self._deep_focus_active = actif
+        if self._write is not None:
+            self._write("1" if actif else "0")
 
     def handle_command(self, text: str) -> AuraModeChange | None:
         """
@@ -96,12 +159,12 @@ class AuraModeEngine:
         littéralement la sous-chaîne « active le mode focus » — sans cet
         ordre, une désactivation serait lue comme une activation.
         """
-        lowered = text.lower()
+        lowered = normalize(text)
         if any(phrase in lowered for phrase in DEEP_FOCUS_OFF_PHRASES):
-            self._deep_focus_active = False
+            self._set_deep_focus(False)
             return AuraModeChange(AuraMode.NONE, "commande explicite")
         if any(phrase in lowered for phrase in DEEP_FOCUS_ON_PHRASES):
-            self._deep_focus_active = True
+            self._set_deep_focus(True)
             return AuraModeChange(AuraMode.DEEP_FOCUS, "commande explicite")
         return None
 
@@ -110,7 +173,9 @@ class AuraModeEngine:
         if self._deep_focus_active:
             return AuraMode.DEEP_FOCUS
 
-        lowered = (active_window or "").lower()
+        # Normalisé comme les commandes : un titre de fenêtre accentué
+        # (« Résumé - Word ») doit se comparer sur le même terrain.
+        lowered = normalize(active_window or "")
         if any(marker in lowered for marker in WORKING_APP_MARKERS):
             return AuraMode.WORKING
 

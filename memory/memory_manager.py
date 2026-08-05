@@ -2,6 +2,7 @@
 # + événements système significatifs (voir VISION_LONG_TERME.md, mémoire 3 niveaux)
 
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
 from config import MAX_HISTORY_MESSAGES
@@ -44,6 +45,14 @@ def save_event_from_any_thread(event_type: str, details: str = "") -> bool:
 
 class MemoryManager:
     def __init__(self, db_path: Path = DB_PATH):
+        # Conservé (05/08/2026) pour qu'un appelant puisse VÉRIFIER sur
+        # quelle base il écrit, au lieu de le supposer. Ajouté après un
+        # incident réel : une campagne de mesure croyait travailler sur une
+        # copie isolée et écrivait en fait dans la base de Cyril — la valeur
+        # par défaut d'un paramètre est figée à la définition de la
+        # fonction, donc réassigner DB_PATH après l'import ne change rien.
+        # Voir ROADMAP.md §5.32.
+        self.db_path = db_path
         self.conn = sqlite3.connect(db_path)
         self.cursor = self.conn.cursor()
         self._create_tables()
@@ -102,6 +111,17 @@ class MemoryManager:
                 source TEXT NOT NULL,
                 result TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # État persistant clé/valeur — voir set_state/get_state plus bas
+        # pour la raison (LucasCore est recréé à chaque requête, donc tout
+        # état en mémoire vive meurt entre deux messages).
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS app_state (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
 
@@ -331,6 +351,65 @@ class MemoryManager:
         )
         columns = ("action", "source", "result", "created_at")
         return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+
+    # ── État persistant léger (clé/valeur) ────────────────────────────
+    #
+    # ⚠️ Pourquoi une table plutôt qu'un attribut Python : `LucasCore` est
+    # RECRÉÉ à chaque requête (api/server.py, contrainte SQLite/threads
+    # documentée dans CLAUDE.md). Tout état gardé en mémoire vive meurt
+    # donc entre deux messages. Le mode Deep Focus est « collant » par
+    # conception — activé par une commande explicite, il reste actif
+    # jusqu'à désactivation explicite : sans persistance, il s'éteignait
+    # tout seul au message suivant, c'est-à-dire qu'il ne marchait pas.
+    #
+    # Volontairement générique et minuscule : une table clé/valeur, pas un
+    # « système de préférences ». Le jour où il en faut un vrai, il se
+    # construira sur autre chose que ceci.
+
+    def set_state(self, key: str, value: str) -> None:
+        """Écrit (ou remplace) une valeur d'état persistante."""
+        self.cursor.execute(
+            "INSERT INTO app_state (key, value, updated_at) "
+            "VALUES (?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value, "
+            "updated_at = CURRENT_TIMESTAMP",
+            (key, value),
+        )
+        self.conn.commit()
+
+    def get_state(self, key: str, default: str | None = None) -> str | None:
+        """Relit une valeur d'état persistante, `default` si absente."""
+        self.cursor.execute("SELECT value FROM app_state WHERE key = ?", (key,))
+        row = self.cursor.fetchone()
+        return row[0] if row else default
+
+    def minutes_since_last_exchange(self) -> float | None:
+        """
+        Minutes écoulées depuis l'avant-dernier message enregistré.
+
+        ⚠️ AVANT-dernier, pas dernier : au moment où ceci est appelé, la
+        question courante VIENT d'être enregistrée par `ask()`. Mesurer
+        depuis le dernier message rendrait donc toujours ~0 — un signal de
+        présence qui ne dit rien.
+
+        None quand il n'y a pas d'échange antérieur (première question de
+        la base) : l'appelant doit pouvoir distinguer « je ne sais pas » de
+        « à l'instant », deux situations opposées pour choisir un ton.
+        """
+        self.cursor.execute(
+            "SELECT created_at FROM conversations ORDER BY id DESC LIMIT 1 OFFSET 1"
+        )
+        row = self.cursor.fetchone()
+        if row is None or not row[0]:
+            return None
+        try:
+            precedent = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S")
+        except (TypeError, ValueError):
+            return None
+        # created_at est écrit par CURRENT_TIMESTAMP, donc en UTC : la
+        # comparaison se fait en UTC aussi, sinon l'écart vaudrait le
+        # décalage horaire (2 h en été) même sur un message à l'instant.
+        return (datetime.utcnow() - precedent).total_seconds() / 60
 
     def close(self):
         self.conn.close()

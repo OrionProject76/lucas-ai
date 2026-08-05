@@ -15,6 +15,7 @@ import pytest
 from core import lucas_core
 from core.lucas_core import LucasCore
 from core.router import route, should_use_vision
+from test_memory_double import MemoryDouble
 
 # Marqueur du bloc vision injecté dans le prompt. Défini une fois :
 # répété en dur dans chaque test, il a divergé du code au premier
@@ -74,7 +75,7 @@ def test_vision_beats_a_cloud_keyword() -> None:
 
 # ── Injection dans le prompt ──────────────────────────────────────────
 
-class _FakeMemory:
+class _FakeMemory(MemoryDouble):
     """
     ⚠️ `history` est un paramètre depuis le 01/08/2026, et il ne doit
     plus jamais redevenir une constante vide.
@@ -90,7 +91,7 @@ class _FakeMemory:
     """
 
     def __init__(self, history=None) -> None:
-        self.events: list[tuple[str, str]] = []
+        super().__init__()
         self._history = list(history or [])
 
     def load_history(self):

@@ -331,6 +331,19 @@ class _FakeMemory:
     def __init__(self, history: list[tuple[str, str]]) -> None:
         self._history = history
         self.actions_logged: list[dict] = []
+        # État persistant clé/valeur : le moteur AURA y range son mode
+        # « collant » (Deep Focus). Un dict suffit — ce double n'a pas à
+        # survivre au process, contrairement à la vraie table app_state.
+        self.state: dict[str, str] = {}
+
+    def get_state(self, key: str, default: str | None = None) -> str | None:
+        return self.state.get(key, default)
+
+    def set_state(self, key: str, value: str) -> None:
+        self.state[key] = value
+
+    def minutes_since_last_exchange(self) -> float | None:
+        return None
 
     def load_history(self) -> list[tuple[str, str]]:
         return self._history

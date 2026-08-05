@@ -21,6 +21,11 @@ class _FakeMemory:
     def __init__(self) -> None:
         self.saved: list[tuple[str, str]] = []
         self.events: list[tuple[str, str]] = []
+        # État persistant clé/valeur — le moteur AURA s'en sert pour son
+        # mode « collant » (Deep Focus). Un dictionnaire suffit ici : ce
+        # double n'a jamais à survivre au process, contrairement à la vraie
+        # table app_state, dont c'est justement toute la raison d'être.
+        self.state: dict[str, str] = {}
 
     def save_message(self, role: str, content: str) -> None:
         self.saved.append((role, content))
@@ -42,6 +47,18 @@ class _FakeMemory:
 
     def save_event(self, event_type: str, details: str = "") -> None:
         self.events.append((event_type, details))
+
+    def get_state(self, key: str, default: str | None = None) -> str | None:
+        return self.state.get(key, default)
+
+    def set_state(self, key: str, value: str) -> None:
+        self.state[key] = value
+
+    def minutes_since_last_exchange(self) -> float | None:
+        return None
+
+    def save_action(self, action: str, source: str, result: str) -> None:
+        self.events.append(("action", f"{action}/{result}"))
 
     def close(self) -> None:
         self.saved.append(("__closed__", ""))

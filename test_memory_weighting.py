@@ -15,6 +15,7 @@ from core.memory_weighting import (
     annotate_uncertain_events,
     annotate_uncertain_history,
 )
+from test_memory_double import MemoryDouble
 
 
 def _message(role="user", message="bonjour", confidence=1.0, expiration=None):
@@ -117,7 +118,7 @@ def test_annotated_history_reaches_the_prompt(monkeypatch) -> None:
     from core import lucas_core
     from core.lucas_core import LucasCore
 
-    class _Memoire:
+    class _Memoire(MemoryDouble):
         def load_history_with_metadata(self):
             return [
                 {

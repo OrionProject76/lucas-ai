@@ -13,6 +13,7 @@ from config import RECENT_EVENTS_IN_PROMPT
 from core import lucas_core
 from core.lucas_core import LucasCore
 from core.world_model import format_events_for_prompt
+from test_memory_double import MemoryDouble
 
 # ── format_events_for_prompt() ────────────────────────────────────────
 
@@ -83,8 +84,9 @@ def test_window_title_is_omitted_when_asked() -> None:
 
 # ── Injection dans _build_messages() ──────────────────────────────────
 
-class _FakeMemory:
+class _FakeMemory(MemoryDouble):
     def __init__(self, events: list[tuple[str, str, str]]) -> None:
+        super().__init__()
         self._events = events
         self.requested_limit: int | None = None
 
@@ -185,7 +187,13 @@ def test_no_empty_system_message_when_no_events(monkeypatch) -> None:
     messages = core._build_messages("bonjour", "local")
 
     assert all(m["content"].strip() for m in messages), "aucun message vide"
-    assert len([m for m in messages if m["role"] == "system"]) == 2
+    # Le nombre exact de blocs système n'est PAS la propriété testée ici —
+    # il change dès qu'une capacité en ajoute un (le bloc [Contexte] de
+    # présence l'a fait passer de 2 à 3 le 05/08/2026). Ce qui compte, et
+    # que ce test protège vraiment : aucun bloc VIDE, et aucun bloc
+    # d'événements quand il n'y a pas d'événement.
+    systeme = [m["content"] for m in messages if m["role"] == "system"]
+    assert not any("Événements système récents" in c for c in systeme)
 
 
 if __name__ == "__main__":
