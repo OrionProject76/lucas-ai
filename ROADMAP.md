@@ -3533,6 +3533,123 @@ supprimée au passage.
 
 Suite complète : **1074 passés**.
 
+## 5.35 Confiance/provenance étendue au RAG — 05/08/2026
+
+Priorité 4 de la session de nuit. Gap connu depuis l'état des lieux du
+04/08 : `core/memory_weighting.py` annote les souvenirs peu fiables de
+l'historique, mais rien d'équivalent n'existait côté documents.
+
+### Aucune migration de schéma n'était nécessaire
+
+Le commentaire de `memory_weighting.py` expliquait pourquoi le RAG restait
+dehors : « les documents vivent dans ChromaDB avec un schéma de métadonnées
+différent qui n'a jamais eu de colonne confidence ». C'est exact — et hors
+sujet, une fois qu'on regarde ce qui est déjà calculé.
+
+**La distance est le signal de confiance, et elle était jetée.**
+`search()` la calcule à chaque requête, s'en sert pour filtrer, puis rend
+uniquement les textes. `get_context()` n'en voyait donc rien.
+
+Ce qui rend la distinction nécessaire, concrètement : le seuil
+d'acceptation est **assoupli à 0,50** quand une période a filtré (contre
+0,34 sinon), et `search()` décrit lui-même ce cas comme « un extrait
+peut-être peu pertinent DU BON document ». Sans nuance, cet extrait-là
+arrive au modèle avec exactement la même autorité qu'un extrait à 0,08.
+
+`RAG_CONFIDENT_DISTANCE = 0.20` répond à une question différente de
+`RAG_MAX_DISTANCE` : non pas « faut-il montrer cet extrait ? » mais « avec
+quelle assurance le présenter ? ». Les extraits au-delà sont marqués
+« correspondance faible, à confirmer », et un en-tête dit au modèle de ne
+pas les présenter comme des faits établis — le même remède que pour
+l'historique : **le dire**, faute de pouvoir pondérer un nombre qui
+n'existe pas côté LLM.
+
+Conservateur comme demandé : `with_distances=False` par défaut, donc tout
+appelant écrit avant aujourd'hui reçoit exactement ce qu'il recevait.
+`distance is None` (repli textuel) n'est jamais marqué — une sous-chaîne
+trouvée est une correspondance exacte, et `None` veut dire « inconnue »,
+pas « nulle ».
+
+⚠️ **Validation incomplète, et il faut le dire** : les 8 tests unitaires
+passent, mais la vérification contre la **vraie base ChromaDB de Cyril**
+n'a **pas pu avoir lieu** — le modèle d'embeddings est indisponible sur la
+machine (voir §5.36 juste en dessous). Le mécanisme est donc testé, pas
+encore observé sur ses vrais documents.
+
+## 5.36 🔴 Ollama sert ses modèles depuis un magasin imbriqué — RAG et vision HS
+
+Trouvé en essayant de valider §5.35 contre la vraie base. **Ce n'est pas un
+bug de Luca's** : c'est l'installation Ollama de la machine. Rien n'a été
+modifié — la correction touche des variables d'environnement système et la
+suppression de dizaines de Go, deux décisions qui reviennent à Cyril.
+
+### Les faits
+
+`ollama list` ne montre plus que **2 modèles** : `qwen2.5:7b` et
+`qwen3.6:latest`. Manquent notamment `nomic-embed-text` (embeddings RAG) et
+`llava` (vision). Conséquence directe : **toute recherche documentaire
+échoue**, et c'est ce qui a produit le HTTP 500 de §5.32.
+
+Pourtant, sur le disque, tout est intact :
+
+```
+C:\Users\PC\.ollama\models\
+  9 manifests : deepseek-coder, gemma4, kimi-k2.7-code, llama3, llama3.1,
+                llava, nomic-embed-text, qwen2.5, qwen3.6
+  blobs : 99,6 Go, 39 fichiers
+```
+
+Vérification blob par blob (chaque manifest lu, chaque empreinte cherchée
+dans `blobs/`) : **aucun blob manquant, pour aucun modèle**. Les fichiers
+vont bien.
+
+### La cause
+
+Il existe un **magasin Ollama imbriqué dans lui-même** :
+
+```
+...\models\manifests\registry.ollama.ai\library\qwen2.5\
+    ├── 7b, latest          <- les manifests légitimes
+    ├── manifests\registry.ollama.ai\library\   <- qwen2.5 ET qwen3.6
+    └── blobs\                                  <- 9 fichiers, 26,7 Go
+```
+
+Le magasin imbriqué contient **exactement les deux modèles que `ollama
+list` rapporte**. `gemma4/` porte la même anomalie (un `manifests/`
+imbriqué). Les horodatages de ces dossiers sont du **05/08 04:44 et
+04:47**, soit cette nuit.
+
+Aucune variable `OLLAMA_MODELS` n'est définie côté utilisateur ni machine —
+elle doit donc l'être dans l'environnement du process, hérité de
+`ollama app.exe`.
+
+### Et l'application tray est revenue
+
+`ollama app.exe` (PID 30788) a été lancée par **`explorer.exe` à
+03:12:43** — l'heure d'ouverture de session. Elle a ensuite lancé
+`ollama.exe serve` (PID 17988) en process enfant.
+
+C'est précisément ce que le correctif du 02/08 devait empêcher (`Ollama.lnk`
+déplacé hors du dossier de démarrage, voir CLAUDE.md § Leçons
+d'infrastructure). Le démarrage automatique passe donc par un **autre
+mécanisme** — clé `Run` du registre, tâche planifiée, ou raccourci
+restauré. Le correctif du 02/08 était incomplet.
+
+### Ce qu'il faudra décider avec Cyril
+
+1. **D'où vient le magasin imbriqué**, et s'il est sûr de supprimer ses
+   26,7 Go (les mêmes modèles existent dans le magasin principal).
+2. **Comment `ollama app.exe` redémarre à l'ouverture de session**, et s'il
+   faut la neutraliser pour de bon — CLAUDE.md est catégorique sur le fait
+   de n'avoir qu'une seule instance.
+3. **Faut-il re-télécharger quoi que ce soit** : a priori non, tout est là.
+   Un `ollama pull` est un accès réseau externe, donc hors autonomie.
+
+⚠️ En attendant : **le RAG et la vision ne fonctionnent pas** sur cette
+machine. Le chat ordinaire, lui, marche (qwen2.5:7b est servi). Les
+correctifs de §5.32 font que Luca le **dit** au lieu de tomber en 500 ou
+d'inventer une réponse « d'après tes documents ».
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

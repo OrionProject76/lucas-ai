@@ -9,6 +9,7 @@ from config import (
     CHUNK_SIZE,
     DATE_SEARCH_MAX_CANDIDATES,
     OLLAMA_HOST,
+    RAG_CONFIDENT_DISTANCE,
     RAG_MAX_DISTANCE,
     RAG_MAX_DISTANCE_DATED,
 )
@@ -320,9 +321,18 @@ class RAGManager:
         print(f"Document ajouté: {doc_id} ({len(chunks)} chunks)")
         return True
 
-    def search(self, query, top_k=3, max_distance=RAG_MAX_DISTANCE):
+    def search(self, query, top_k=3, max_distance=RAG_MAX_DISTANCE, with_distances=False):
         """
         Recherche les passages les plus pertinents.
+
+        `with_distances=True` rend des couples `(texte, distance)` au lieu
+        des seuls textes. La distance vaut `None` sur le chemin de repli
+        textuel, qui n'en produit aucune — `None` veut dire « inconnue »,
+        pas « nulle », et l'appelant doit pouvoir faire la différence.
+
+        ⚠️ Ajouté le 05/08/2026 (confiance/provenance étendue au RAG,
+        ROADMAP.md §5.35). Le défaut reste `False` : tous les appelants
+        existants reçoivent exactement ce qu'ils recevaient avant.
 
         ⚠️ Le filtrage par distance n'est pas un raffinement, c'est une
         correction. Sans lui, ChromaDB renvoie TOUJOURS ses `top_k`
@@ -394,7 +404,7 @@ class RAGManager:
 
             retenus = retenus[:top_k]
             if max_distance is None:
-                return [doc for doc, _ in retenus]
+                return retenus if with_distances else [doc for doc, _ in retenus]
 
             # ⚠️ Le seuil est ASSOUPLI quand une période a filtré.
             #
@@ -416,7 +426,8 @@ class RAGManager:
             if periode:
                 max_distance = RAG_MAX_DISTANCE_DATED
 
-            return [doc for doc, distance in retenus if distance <= max_distance]
+            gardes = [(doc, d) for doc, d in retenus if d <= max_distance]
+            return gardes if with_distances else [doc for doc, _ in gardes]
 
         # Fallback : recherche texte simple. Pas de distance ici — une
         # sous-chaîne trouvée est une correspondance exacte, donc pertinente.
@@ -425,7 +436,8 @@ class RAGManager:
         for doc_id, i, chunk in self.chunks:
             if query_lower in chunk.lower():
                 matches.append(chunk)
-        return matches[:top_k]
+        matches = matches[:top_k]
+        return [(m, None) for m in matches] if with_distances else matches
 
     def get_context(self, query, top_k=3):
         """
@@ -438,11 +450,42 @@ class RAGManager:
         trouvé. », qui était injectée telle quelle et occupait un tour de
         contexte pour ne rien dire.
         """
-        results = self.search(query, top_k)
+        results = self.search(query, top_k, with_distances=True)
         if not results:
             return ""
-        context = "\n\n".join([f"[Extrait {i+1}] {r[:300]}..." for i, r in enumerate(results)])
-        return f"Contexte trouvé dans les documents:\n{context}"
+
+        # ⚠️ Confiance/provenance étendue au RAG (05/08/2026, ROADMAP.md
+        # §5.35). Aucune migration de schéma : ChromaDB n'a pas de colonne
+        # `confidence`, mais la DISTANCE est déjà calculée à chaque
+        # recherche — et elle était jetée juste avant d'arriver ici.
+        #
+        # Pourquoi ça compte : le seuil d'acceptation est ASSOUPLI à 0,50
+        # quand une période a filtré (voir search()), contre 0,34 sinon.
+        # Un extrait retenu à 0,47 est explicitement « un extrait
+        # peut-être peu pertinent DU BON document » — présenté sans
+        # nuance, il a exactement la même autorité qu'un extrait à 0,08.
+        # C'est la situation que core/memory_weighting.py corrige déjà
+        # pour l'historique, et le même remède s'applique : le DIRE, plutôt
+        # que pondérer un nombre qui n'existe pas côté LLM.
+        #
+        # `distance is None` = chemin de repli textuel : une sous-chaîne
+        # trouvée est une correspondance exacte, jamais incertaine.
+        morceaux = []
+        for i, (texte, distance) in enumerate(results):
+            incertain = distance is not None and distance > RAG_CONFIDENT_DISTANCE
+            marque = " ⚠️ correspondance faible, à confirmer" if incertain else ""
+            morceaux.append(f"[Extrait {i+1}{marque}] {texte[:300]}...")
+
+        context = "\n\n".join(morceaux)
+        entete = "Contexte trouvé dans les documents:"
+        if any(d is not None and d > RAG_CONFIDENT_DISTANCE for _, d in results):
+            entete += (
+                "\n(Les extraits marqués « correspondance faible » sont les "
+                "moins sûrs : ne les présente PAS comme des faits établis, "
+                "et dis à Cyril que tu n'es pas certain qu'ils répondent à "
+                "sa question.)"
+            )
+        return f"{entete}\n{context}"
 
 
 if __name__ == "__main__":

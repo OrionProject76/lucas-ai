@@ -324,6 +324,23 @@ RAG_MAX_DISTANCE_DATED: float = 0.50
 # pourquoi une valeur imparfaite dégrade sans casser.
 RAG_MAX_DISTANCE: float = 0.34
 
+# Seuil de CONFIANCE, à ne pas confondre avec le seuil d'ACCEPTATION
+# ci-dessus (05/08/2026, ROADMAP.md §5.35).
+#
+# `RAG_MAX_DISTANCE` répond à « faut-il montrer cet extrait ? ».
+# Celui-ci répond à « avec quelle assurance le présenter ? ». Entre les
+# deux il y a une zone grise réelle : un extrait retenu à 0,32 passe le
+# filtre de justesse, et un extrait retenu à 0,47 sur une recherche datée
+# est explicitement décrit dans `search()` comme « peut-être peu pertinent
+# DU BON document ». Sans distinction, les deux arrivent au modèle avec
+# exactement la même autorité qu'un extrait à 0,08.
+#
+# Valeur choisie au milieu de la plage acceptée (0 → 0,34), volontairement
+# prudente : mieux vaut signaler un extrait de trop que laisser passer une
+# affirmation mal fondée sur les documents personnels de Cyril. À
+# recalibrer si les marques apparaissent trop souvent en usage réel.
+RAG_CONFIDENT_DISTANCE: float = 0.20
+
 # --- Intention : écran, documents, ou ni l'un ni l'autre ---
 # Les listes de mots-clés couvraient 50 % des formulations réelles et ne
 # pouvaient pas faire mieux : « c'est écrit quoi ? » ne contient aucun mot
