@@ -3703,6 +3703,85 @@ Piper/edge_tts, règle 12 multi-agents/HERMES) portent toutes leur
 paragraphe de clarification daté dans `CLAUDE.md` — vérifié, rien de neuf à
 signaler de ce côté.
 
+## 5.38 Balayage qualité + préparation Godot — 05/08/2026
+
+Priorités 6 et 7 de la session de nuit.
+
+### 🔴 La couverture de test n'est plus mesurable sur le cœur du projet
+
+Trouvé en voulant produire les chiffres demandés. Toute exécution de
+`pytest --cov` sur un module qui importe (même indirectement) `chromadb`
+échoue à la collecte :
+
+```
+ImportError: cannot load module more than once per process
+```
+
+Cela couvre `core/lucas_core.py`, `core/router.py`,
+`modules/rag_manager.py` — c'est-à-dire le cœur. Les bindings Rust de
+ChromaDB ne supportent pas d'être chargés deux fois dans un process, et le
+traçage d'import de `coverage` provoque exactement ça.
+
+**Vérifié préexistant**, pas causé par cette nuit : reproduit à
+l'identique sur le commit `42d1863`, avant tout le travail de la session
+(`git stash` + `git checkout`, puis retour). Les campagnes de couverture
+antérieures (§5.9 à 96 %, §5.16 à 98 %) ont donc été produites avec une
+version de ChromaDB ou de `coverage` qui ne posait pas ce problème.
+
+C'est exactement le motif que Cyril demandait de traquer, dans sa version
+la plus gênante : **un chiffre de couverture qui rassure et qui n'est plus
+reproductible aujourd'hui**. Ce qui reste mesurable l'est :
+`api/log_scrub.py` → **100 %** (23 instructions, 17 tests).
+
+Non corrigé volontairement : la piste (épingler/mettre à jour ChromaDB,
+ou isoler les tests RAG dans un sous-process) engage la chaîne de
+dépendances du projet — à trancher avec Cyril, pas en pleine nuit.
+
+### Le TTS, lui, tient la route réelle
+
+Point le plus exposé au motif « vert mais jamais réel » : si le modèle
+Piper `.onnx` manque, tout contenu sensible reste **muet** (CLAUDE.md,
+section TTS) — et aucun test mocké ne le verrait. Vérifié sur la machine :
+
+```
+data/voices/fr_FR-siwis-medium.onnx   63,2 Mo
+data/voices/fr_FR-upmc-medium.onnx    76,7 Mo
+PiperEngine construit, disponible = True
+```
+
+Routage vérifié sur des cas réels : « Quel est mon salaire ? » → local,
+« Résume mon CV » → local (question RAG), « Quelle heure est-il ? » →
+cloud. Conforme à la règle. Rien à corriger.
+
+### Le reste du travail de la nuit, revu
+
+- `api/log_scrub.py` — testé ET observé sur le vrai fichier de log, avec
+  un vrai serveur et de vraies connexions `wss://` (§5.30).
+- `core/decision_engine.py` — observé sur un vrai process Notepad créé,
+  avec l'entrée `action_log` correspondante (§5.31).
+- `websocket_endpoint` — les quatre chemins d'authentification testés
+  contre le serveur réel, pas en TestClient (§5.30).
+- **Le garde-fou anti-fausse-confirmation s'est déclenché tout seul en
+  production** (§5.32), sans être provoqué. C'est la meilleure preuve
+  disponible qu'un mécanisme est réel.
+
+### Préparation de la session Godot (priorité 7)
+
+`cowork_workspace/CHECKLIST_SESSION_GODOT.md` — **aucun code Godot écrit,
+aucun test Godot lancé**, le chantier reste gelé.
+
+Le document rassemble ce qui est acquis, les deux blocages réels (fermetures
+spontanées sans aucune trace — le vrai sujet ; click-through impossible,
+limite de Godot 4.7 — pas un bug), les 5 décisions qui reviennent à Cyril,
+et surtout **ce qui a changé côté serveur depuis la mise en pause** : le
+client Godot a été écrit avant l'authentification par sous-protocole, avant
+les messages `activity`/`security`, et avant `active_process`.
+
+Point souligné dans la checklist : **régler le doublon Ollama (§5.36) est
+un préalable**, pas une option. Godot et Ollama se partagent la RTX 5080,
+et un doublon fausserait toute corrélation VRAM ↔ fermeture — qui est la
+piste la plus prometteuse sur le blocage principal.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
