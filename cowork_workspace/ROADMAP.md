@@ -5590,6 +5590,174 @@ bombe à retardement si un jour un serveur le reprend pour racine. Sa
 suppression demande de confirmer qu'il ne contient rien d'unique —
 décision de Cyril, non prise ici.
 
+## 5.56 Comparatif fluidité / marge VRAM — la prémisse tenait, la conclusion s'inverse
+
+Deuxième comparatif de modèles, avec un critère **différent** de celui du
+05/08. Celui-là tranchait sur le suivi d'instructions. Celui-ci mesure la
+**réactivité perçue** et ce qui reste de VRAM pour le reste du système.
+
+Six candidats mesurés sur cette machine, jamais un chiffre repris d'un
+benchmark public.
+
+### La prémisse de Cyril est confirmée
+
+`gpt-oss:20b` + embeddings RAG = **15 292 Mo sur 16 303**, soit
+**1 011 Mo de marge**. Le chiffre de ~1 Go annoncé par Cyril est exact.
+Je l'avais soupçonné d'être contaminé par les `llama-server.exe`
+orphelins de §5.55 — mesure propre faite (aucun modèle chargé, zéro
+orphelin, vérifié avant chaque relevé) : il ne l'était pas.
+
+### Les chiffres
+
+| Modèle | Params | Coût VRAM propre | Marge | 1er token | Débit | Réponse complète | Guichet |
+|---|---|---|---|---|---|---|---|
+| `granite4.1:8b` | 8,8 B | 5 903 Mo | **8 381 Mo** | **0,10 s** | 133 tok/s | **0,9 s** | **4-6/15** ❌ |
+| `gemma3:12b` | 12,2 B | 9 044 Mo | 4 493 Mo | **0,34 s** | 89 tok/s | 1,2 s | 1-2/15 |
+| `gpt-oss:20b` | 20,9 B | 12 501 Mo | 1 011 Mo | 1,30 s | **170 tok/s** | 1,7 s | **0-1/15** |
+| `gemma4:latest` | 8,0 B | 4 506 Mo | **9 684 Mo** | 3,27 s | 156 tok/s | 3,9 s | **0/15** |
+| `qwen3:14b` | 14,8 B | 9 485 Mo | 4 050 Mo | 3,30 s | 87 tok/s | 4,3 s | 0-1/15 |
+| `gemma4:26b` | 25,8 B | 13 993 Mo | 522 Mo | 11,23 s | 85 tok/s | 11,9 s | non testé |
+
+Contexte réaliste reconstruit à la taille réelle que produit
+`LucasCore` — `SYSTEM_PROMPT` (3 623 car) + budget d'historique
+(2 000 car) + snapshot système + bloc RAG : **~1 700 tokens de prompt**,
+pas un modèle vide.
+
+### Ce qui gouverne la réactivité n'est pas la taille
+
+Le résultat le plus contre-intuitif : **`gpt-oss:20b` démarre plus vite
+que `gemma4:8b`** (1,30 s contre 3,27 s) alors qu'il est 2,6 fois plus
+gros. Le classement au premier token suit exactement une autre ligne de
+partage :
+
+| Émet un raisonnement avant de répondre ? | 1er token |
+|---|---|
+| **Non** — `granite4.1:8b`, `gemma3:12b` | 0,10 s / 0,34 s |
+| **Oui** — `gpt-oss:20b`, `gemma4:8b`, `qwen3:14b` | 1,30 s / 3,27 s / 3,30 s |
+
+La mesure porte sur le premier caractère de `content`, pas sur la
+première trame réseau — c'est-à-dire sur ce que Cyril voit réellement
+s'afficher, puisque `core/ollama_reply.py` n'affiche `thinking` qu'en
+repli quand `content` est vide.
+
+### ⚠️ MoE : la croyance est FAUSSE sur cette machine, mesuré deux fois
+
+Cyril demandait de ne pas présumer qu'un MoE réduit l'empreinte mémoire.
+**Il a raison, et c'est mesuré.**
+
+`gemma4:26b` — Ollama déclare **17 367 Mo** de modèle, dont seulement
+**12 794 Mo tiennent sur le GPU** : ~4,6 Go débordent en RAM. Résultat,
+11,23 s avant le premier mot. Un MoE charge **tous** ses experts ; seuls
+les paramètres *actifs par token* sont réduits.
+
+`gpt-oss:20b` le montre dans l'autre sens, et c'est sa signature : il
+occupe **12,1 Go** (empreinte pleine d'un 20,9 B) tout en délivrant
+**170 tok/s**, le débit le plus élevé des six — presque le double d'un
+`qwen3:14b` dense pourtant plus petit. Calcul réduit, mémoire non.
+
+**Conséquence** : un MoE ne libère jamais de place pour Godot. Il ne faut
+pas en attendre une marge VRAM.
+
+### Le coût de Godot : 246 Mo, mesuré et non supposé
+
+Aucune estimation n'existait dans la documentation. Mesuré plutôt que
+laissé en « à mesurer » : projet `Lucas3D` lancé, VRAM échantillonnée en
+continu, **pic à 2 510 Mo contre 2 264 Mo au repos → 246 Mo**.
+
+⚠️ Lancement **borné par `--quit-after`** : la fenêtre est plein écran,
+`always_on_top`, et `window_manager.gd` documente que le passthrough
+souris est sans effet mesuré — elle capte donc tous les clics du bureau
+(§3). Cyril était devant le PC ; la borne garantissait l'arrêt même en
+cas de perte de contrôle. Godot n'a pas quitté seul et a dû être arrêté
+— la borne a servi.
+
+Réserve honnête : c'est l'avatar dans son état actuel. Un rendu abouti
+coûtera davantage — mais même trois fois plus tiendrait dans la marge de
+n'importe quel candidat.
+
+### **Ce qui renverse la conclusion**
+
+Le comparatif était motivé par « ~1 Go ne suffit pas pour Godot ».
+**Les deux chiffres mis côte à côte disent l'inverse** :
+
+```
+marge gpt-oss:20b   1 011 Mo
+coût de Godot       - 246 Mo
+                    ---------
+reste                 765 Mo
+```
+
+**Godot cohabite avec `gpt-oss:20b`.** Le problème qui justifiait de
+changer de modèle n'existe pas — il reposait sur un coût Godot supposé
+en gigaoctets, jamais mesuré.
+
+Là où la marge devient réellement contraignante, c'est le **VLM**
+(`llava`, `VLM_NEEDS_VRAM_MO = 4700`, coupé aujourd'hui, prévu v1.1) :
+
+| Modèle | Godot (246 Mo) | + VLM (4 700 Mo) |
+|---|---|---|
+| `granite4.1:8b` | oui | **oui** |
+| `gemma4:latest` | oui | **oui** |
+| `gemma3:12b` | oui | non (4 493 Mo) |
+| `qwen3:14b` | oui | non |
+| `gpt-oss:20b` | oui | non |
+| `gemma4:26b` | limite | non |
+
+### Le candidat le plus rapide échoue au test de contrôle
+
+`granite4.1:8b` est le plus réactif de très loin — 0,10 s au premier
+token, réponse complète en 0,9 s, 8,4 Go de marge. C'est le candidat que
+Cyril pressentait.
+
+**Il rouvre le problème réglé le 05/08** : 4 à 6 tirages sur 15 avec du
+vrai guichet commercial — « n'hésite pas », « si tu as d'autres
+questions » — et il préfixe ses réponses de « `Luca :` », un artefact de
+mise en forme.
+
+Vérification de l'instrument avant de conclure : le premier relevé
+donnait 6/15 avec pour exemple « Salut Cyril ! Comment vas-tu ? », qui
+n'est **pas** du guichet mais une question amicale rendue. Le détecteur
+du 05/08 mélangeait les deux sous une seule étiquette. Ventilé en deux
+familles, le vrai guichet commercial reste à 4/15 chez granite et à 0-2
+partout ailleurs : la régression est réelle, pas un artefact.
+
+**Variance mesurée** : deux campagnes identiques donnent ±2/15 d'écart
+(gpt-oss 0 puis 1, qwen3 1 puis 0, gemma3 1 puis 2). Un écart de 1 ou 2
+est du bruit ; les 4-6 de granite sont au-dessus.
+
+### Recommandation
+
+**Ne pas changer de modèle maintenant.** `gpt-oss:20b` reste le meilleur
+choix tant que le VLM est coupé :
+
+- le motif du changement — la cohabitation Godot — **est levé par la
+  mesure** (765 Mo restants) ;
+- le gain de fluidité réel est de **~1 seconde** au premier token contre
+  `gemma3:12b` (1,30 s → 0,34 s), et de 0,5 s sur la réponse complète.
+  Perceptible, pas transformant ;
+- `gpt-oss:20b` a le **meilleur débit** des six (170 tok/s) et le
+  meilleur score de guichet.
+
+**Si Cyril veut malgré tout la réactivité maintenant** : `gemma3:12b`,
+pas granite. Premier token 3,8× plus rapide, marge 4,4× plus grande,
+guichet dans le bruit de gpt-oss. Coût : la qualité de français un cran
+en dessous (§5.39 relevait déjà un piège raté).
+
+**Quand le VLM reviendra (v1.1), la décision change** : ni `gpt-oss:20b`
+ni `gemma3:12b` ne laissent la place à `llava`. Les seuls candidats
+mesurés qui la laissent sont `gemma4:latest` (9,7 Go de marge, 0/15 de
+guichet, mais 3,27 s au premier token) et `granite4.1:8b` (disqualifié
+sur le style). **Ce sera un vrai arbitrage, à refaire à ce moment-là.**
+
+### Reste sur le disque
+
+`gemma4:26b` (17 Go) et `granite4.1:8b` (5,3 Go) ont été tirés pour ces
+mesures. 237 Go libres, donc sans urgence — mais 22,3 Go récupérables
+sur demande, aucun des deux n'étant retenu.
+
+**Aucune bascule en production n'a été faite** : `MODEL_NAME` reste
+`gpt-oss:20b`, conformément à la consigne.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
