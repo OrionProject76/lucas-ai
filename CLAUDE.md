@@ -703,6 +703,28 @@ rattache.
     **Quoi** : rechercher sur internet les modèles LLM et VLM récents
     disponibles sur Ollama, adaptés à la config (RTX 5080, 16 Go).
 
+    ⚠️ **LLM et VLM ne se traitent JAMAIS séparément.** À *chaque*
+    occurrence — jalon ou intervalle régulier — les **deux** listes de
+    candidats se remettent à jour **ensemble, dans la même passe** :
+
+    1. **Les LLM récents**, à chaque veille — pas seulement quand on
+       envisage de changer, même si `gpt-oss:20b` reste probablement le
+       bon choix.
+    2. **Les VLM récents, dans la même passe** — pas seulement à la
+       réactivation du chantier vision. Le but est que la liste soit
+       **déjà à jour le jour où ce chantier s'ouvre**, au lieu d'une
+       recherche improvisée à ce moment-là.
+    3. **Les deux listes dans le même rapport**, daté, pour que Cyril
+       ait en permanence une vue d'ensemble du meilleur compromis
+       **LLM + VLM** pour SA machine, prête à trancher.
+
+    **Ce n'est pas qu'une commodité de méthode : les deux choix sont
+    liés par la VRAM.** Avec `VLM_NEEDS_VRAM_MO = 4700`, ni
+    `gpt-oss:20b` (1 011 Mo de marge mesurés) ni `gemma3:12b` (4 493 Mo)
+    ne laissent la place à un VLM résident. Choisir le LLM seul, c'est
+    présélectionner le VLM sans le savoir — et inversement. Les deux se
+    tranchent ensemble ou pas du tout (`ROADMAP.md` §5.56).
+
     **Comment — la méthode éprouvée les 05/08** : mesurer RÉELLEMENT sur
     cette machine — VRAM avec un contexte réaliste (pas un modèle vide),
     latence au premier token, débit, et régression sur les tests de
@@ -712,8 +734,8 @@ rattache.
     **Ne jamais basculer un modèle en production sans validation
     explicite de Cyril**, même si la mesure est favorable.
 
-    **Documenter chaque comparatif dans `ROADMAP.md`**, y compris les
-    candidats écartés et pourquoi.
+    **Documenter chaque comparatif dans `ROADMAP.md`**, daté, les deux
+    familles ensemble, y compris les candidats écartés et pourquoi.
 
     ⚠️ **Vérifier la disponibilité réelle du tag avant de mesurer** —
     `ollama pull` échoue si le tag n'existe pas côté Ollama, même quand

@@ -5783,9 +5783,16 @@ honnêtement comme tel dans le rapport. La règle 12 impose de le
 c'est exactement le type de chiffre que les comparatifs du 05/08 ont
 appris à ne pas croire sur parole.
 
-**Et rechercher les sorties les plus récentes à CE moment-là** : cette
-liste est figée au 05/08/2026, le paysage VLM bouge vite. Elle sert de
-point de départ, pas de périmètre.
+**Cette liste est datée du 05/08/2026 et le paysage VLM bouge vite** —
+elle sert de point de départ, pas de périmètre.
+
+⚠️ **Mais elle ne doit PAS être rafraîchie seulement le jour J.** La
+règle 12 de `CLAUDE.md` impose de remettre à jour les candidats **LLM et
+VLM ensemble, à chaque veille** (jalon, ou tous les 30 jours), même
+quand aucun changement n'est envisagé. Le but est précisément d'éviter
+la recherche affolée au moment où la webcam arrive : la liste des
+meilleurs VLM du moment doit **déjà être connue et mesurée** quand le
+chantier s'ouvre, exactement comme celle des LLM l'est aujourd'hui.
 
 Rappel du §5.56 ci-dessus qui pèsera dans l'arbitrage : avec
 `VLM_NEEDS_VRAM_MO = 4700`, ni `gpt-oss:20b` (1 011 Mo de marge) ni
