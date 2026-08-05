@@ -4727,6 +4727,77 @@ régénérer et à réaccepter l'avertissement sur le téléphone. En gardant
 connecter à un compte sortent du périmètre d'un agent autonome, et
 ouvrir un accès distant relève du cas 1 de l'Autonomie d'exécution.
 
+## 5.49 Fin de l'audit post-bascule : la catégorisation financière
+
+Dernier module qui lit une sortie du modèle et qui n'avait pas encore été
+confronté à gpt-oss. `categorize_by_llm()` compare la réponse à une liste
+fermée par **égalité stricte** — la même forme que le bug corrigé dans
+`intent.py`.
+
+### Mesuré avant de toucher quoi que ce soit
+
+Sur six libellés bancaires **inventés pour l'occasion** (jamais ceux de
+Cyril — `CLAUDE.md`, précision du 04/08/2026) :
+
+```
+brut='Alimentation'   -> 'Alimentation'
+brut='Logement'       -> 'Logement'
+brut='Transport'      -> 'Transport'
+...
+6/6 catégorisés
+```
+
+**Rien de cassé.** Le prompt contraint bien le modèle, qui répond par une
+catégorie nue. Il n'y avait donc pas de correctif d'urgence à faire, et
+c'est une conclusion aussi utile que l'inverse : quatre audits sur cinq
+avaient trouvé une régression, celui-ci n'en trouve pas.
+
+### Un trou réel quand même, trouvé en sondant la mise en forme
+
+`**Alimentation**` → `Non catégorisé`. Or gpt-oss emploie volontiers le
+gras Markdown ailleurs dans ses réponses (« **Résoudre** au subjonctif
+imparfait… », observé au comparatif). Le prompt le contient aujourd'hui ;
+il suffirait d'une reformulation pour que ça bascule.
+
+Corrigé en retirant `*`, `_` et les guillemets du nettoyage — des
+caractères de mise en forme qui ne portent aucun sens.
+
+### Ce que j'ai délibérément REFUSÉ de corriger
+
+Une catégorie **noyée dans une phrase** (« La catégorie est
+Alimentation ») reste `Non catégorisé`. C'est l'inverse du choix fait
+pour `core/intent.py`, qui repêche un label dans une phrase — et
+l'asymétrie est volontaire :
+
+- Les labels d'intention (`ECRAN`, `DOCUMENTS`, `AUCUN`) sont des mots
+  artificiels : les rencontrer par hasard dans une phrase est improbable.
+- Les catégories financières (`Autre`, `Revenus`, `Santé`) sont des mots
+  **courants**. Un repêchage inventerait une catégorie sur une vraie
+  transaction de Cyril — exactement ce que la docstring du module refuse :
+  « on préfère un trou visible à une catégorie inventée ».
+
+Même problème apparent, deux bonnes réponses opposées. Appliquer
+mécaniquement le correctif d'`intent.py` ici aurait été une régression
+déguisée en cohérence.
+
+### Bilan de l'audit post-bascule
+
+| Module | Verdict |
+|---|---|
+| Règle de sécurité sous historique long | ✅ 18/18, renforcé |
+| `normalize()` / `is_sensitive` / `route_voice` | 🔴 **fuite réelle**, corrigée |
+| `claims_action_success` | 🔴 1/6 → 13/13 |
+| `is_vision_refusal` | 🔴 0/6 → 11/11 |
+| Classifieur d'intention | 🔴 9/12 → 11/12 |
+| `local_llm` / `llm_worker` (champ `thinking`) | 🔴 corrigé |
+| Catégorisation financière | ✅ 6/6, un trou de mise en forme fermé |
+
+**Six mécanismes sur sept touchés par un changement qui ne modifiait
+qu'une ligne de `config.py`.** Aucun ne l'aurait signalé de lui-même :
+un détecteur qui cesse de détecter redevient silencieux.
+
+Suite complète : **1199 passés**.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

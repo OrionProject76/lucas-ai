@@ -111,10 +111,27 @@ def categorize_by_llm(label: str, ask: Callable[[list[dict]], str] | None = None
         # faire échouer tout un import de relevé.
         return UNCATEGORIZED
 
-    cleaned = _normalize(answer).strip(" .\n\t")
+    # ⚠️ `*` et `_` retirés depuis le 05/08/2026, après la bascule sur
+    # gpt-oss:20b. Ce modèle emploie volontiers le gras Markdown dans ses
+    # réponses (« **Résoudre** au subjonctif… »), et `**Alimentation**`
+    # retombait alors sur UNCATEGORIZED — mesuré.
+    #
+    # Le prompt le contient bien aujourd'hui (6 libellés sur 6 catégorisés
+    # avec une réponse nue), donc ce n'est pas un correctif d'urgence :
+    # c'est retirer un caractère de mise en forme qui ne porte aucun sens.
+    cleaned = _normalize(answer).strip(" .*_\n\t\"'")
+
     for category in CATEGORIES:
         if _normalize(category) == cleaned:
             return category
+
+    # ⚠️ Pas de repêchage d'une catégorie NOYÉE DANS UNE PHRASE, contrairement
+    # à ce qui a été fait pour le classifieur d'intention (core/intent.py).
+    # La différence est réelle : « Autre » et « Revenus » sont des mots
+    # courants, qu'une phrase explicative peut contenir sans les désigner.
+    # Un faux positif inventerait une catégorie sur une vraie transaction
+    # de Cyril — exactement ce que la docstring ci-dessus refuse : « on
+    # préfère un trou visible à une catégorie inventée ».
     return UNCATEGORIZED
 
 

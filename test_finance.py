@@ -75,6 +75,50 @@ def test_llm_verbose_answer_is_rejected() -> None:
     assert categorize_by_llm("x", ask=lambda messages: verbose) == UNCATEGORIZED
 
 
+# ── Mise en forme du modèle (ajouté le 05/08/2026, bascule gpt-oss:20b) ──
+#
+# Audit de ce que le changement de modèle pouvait casser silencieusement.
+# La comparaison à la liste fermée se fait par ÉGALITÉ STRICTE : toute
+# décoration autour du mot fait retomber sur UNCATEGORIZED.
+#
+# Mesuré sur le vrai modèle : 6 libellés sur 6 correctement catégorisés,
+# avec une réponse nue — le prompt le contient bien. Ce n'était donc PAS
+# un correctif d'urgence. Mais gpt-oss emploie volontiers le gras
+# Markdown ailleurs dans ses réponses (« **Résoudre** au subjonctif… »),
+# et `**Alimentation**` retombait bel et bien sur UNCATEGORIZED.
+
+
+@pytest.mark.parametrize(
+    "reponse, attendu",
+    [
+        ("**Alimentation**", "Alimentation"),   # gras Markdown
+        ("_Transport_", "Transport"),           # italique
+        ('"Loisirs"', "Loisirs"),               # guillemets
+        ("Revenus.", "Revenus"),                # point final
+        ("Logement ", "Logement"),         # espace fine insécable
+        ("alimentation", "Alimentation"),       # casse
+    ],
+)
+def test_formatting_around_the_category_is_ignored(reponse: str, attendu: str) -> None:
+    assert categorize_by_llm("x", ask=lambda messages: reponse) == attendu
+
+
+def test_a_category_buried_in_a_sentence_is_still_refused() -> None:
+    """
+    ⚠️ Choix DÉLIBÉRÉ, et différent de celui fait pour le classifieur
+    d'intention (core/intent.py), qui repêche un label noyé dans une
+    phrase.
+
+    La différence est réelle : « Autre » et « Revenus » sont des mots
+    courants, qu'une phrase explicative peut contenir sans les désigner.
+    Un faux positif inventerait une catégorie sur une vraie transaction
+    de Cyril — exactement ce que ce module refuse : « on préfère un trou
+    visible à une catégorie inventée ».
+    """
+    assert categorize_by_llm("x", ask=lambda m: "La catégorie est Alimentation") == UNCATEGORIZED
+    assert categorize_by_llm("x", ask=lambda m: "Sans doute Autre, mais je ne suis pas sûr") == UNCATEGORIZED
+
+
 def test_llm_failure_does_not_break_the_import() -> None:
     def broken(messages):
         raise ConnectionError("Ollama injoignable")
