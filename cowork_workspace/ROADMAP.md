@@ -4902,6 +4902,45 @@ en dur, c'est supposer que le monde tape comme un clavier américain.*
 `test_dependance_forme.py` — 26 tests, dont ceux qui verrouillent les
 deux fuites. Suite complète : **1225 passés**.
 
+### Second balayage : les comparaisons SANS regex
+
+Le premier balayage ne couvrait que `re.*`. Un `startswith()` ou un
+`split()` appliqué à une sortie de modèle relève exactement de la même
+classe. Recensement de `.startswith` / `.endswith` / `.split` dans le
+code de production, puis tri par ce sur quoi ils opèrent :
+
+| Emplacement | Opère sur | Verdict |
+|---|---|---|
+| `reasoning_engine` — balise `AUCUN` | **sortie du modèle** | testé en réel, **fonctionne** |
+| `lucas_core` — `description.startswith("Erreur")` | nos propres chaînes | sans risque |
+| `intent` — `ligne.startswith("Cyril :")` | notre propre format | sans risque |
+| `weather_manager` — `split("|")` | réponse de wttr.in | format externe, hors sujet |
+| `dates` / `semantic_desktop` — `split(",")` | nos métadonnées stockées | sans risque |
+
+Le seul qui parse vraiment une sortie de modèle est le **Reasoning
+Engine**, et il est **dormant** (`REASONING_ENGINE_ENABLED=False`,
+décision de Cyril). Testé quand même avec gpt-oss, puisqu'une
+réactivation future se ferait sinon à l'aveugle :
+
+```
+« Quelle heure est-il ? »                    -> used_reasoning=False  (balise vue)
+« Bonjour »                                  -> used_reasoning=False  (balise vue)
+« Compare deux stratégies d'épargne… »       -> plan réel produit
+```
+
+**Il fonctionne.** Aucune correction — et c'est une conclusion utile :
+elle évite qu'une réactivation soit reportée par précaution infondée.
+
+### Couverture des modules touchés
+
+| Module | Couverture |
+|---|---|
+| `core/text_utils.py` | **100 %** |
+| `core/dates.py` | **100 %** |
+| `core/router.py` | 99 % |
+| `modules/web_search.py` | 98 % |
+| `core/lucas_core.py` | 97 % |
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
