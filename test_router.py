@@ -527,6 +527,15 @@ class _FakeWebSearch:
     def get_summary(self, query: str, max_results: int = 3) -> str:
         return f"Résultats pour « {query} » :\n1. Exemple - http://exemple.test\n   Un extrait réel."
 
+    def get_summary_with_outcome(self, query: str, max_results: int = 3) -> tuple[str, str]:
+        """
+        Ajouté le 05/08/2026 : `core/lucas_core.py` a besoin de distinguer
+        succès / vide / échec / refus, pas seulement d'un texte (§5.39).
+        Un double qui n'expose que `get_summary` simulerait une interface
+        que le code appelant n'utilise plus.
+        """
+        return self.get_summary(query, max_results), "ok"
+
 
 @requires_core
 def test_cloud_never_receives_websearch_context(core_with_history: LucasCore, monkeypatch) -> None:

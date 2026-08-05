@@ -231,4 +231,7 @@ if __name__ == "__main__":
     vm = VoiceManager()
     print("Voix edge disponibles:", vm.list_voices())
     print("Modèle Piper disponible:", vm.piper.is_available())
-    vm.speak("Bonjour Cyril, je suis Luca's. Comment puis-je vous aider aujourd'hui ?")
+    # Phrase de démonstration alignée sur le ton réel (05/08/2026) : Luca
+    # se présente par son prénom et tutoie Cyril. Une démo qui vouvoie
+    # donne une fausse idée de ce que le produit dit vraiment.
+    vm.speak("Salut Cyril, c'est Luca. Tu m'entends bien ?")

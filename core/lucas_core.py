@@ -656,13 +656,55 @@ class LucasCore:
         if not is_cloud and should_use_websearch(user_message):
             from modules.web_search import WebSearch
 
-            summary = WebSearch(log_event=self.log_event).get_summary(user_message)
-            websearch_context = (
-                "RECHERCHE WEB RÉELLE (DuckDuckGo) :\n\n" + summary + "\n\n"
-                "Appuie-toi UNIQUEMENT sur ces résultats réels. INTERDIT : "
-                "inventer un résultat, un lien ou un fait absent de cette recherche."
-            )
-            _emit(on_activity, "websearch_performed", "recherche web — résultats reçus")
+            # ⚠️ Corrigé le 05/08/2026 (audit « silence qui laisse le modèle
+            # deviner », ROADMAP.md §5.39). Avant : les QUATRE issues
+            # possibles — résultats, zéro résultat, panne réseau, refus pour
+            # donnée identifiante — étaient injectées sous la même étiquette
+            # « RECHERCHE WEB RÉELLE » suivie de « appuie-toi uniquement sur
+            # ces résultats réels ».
+            #
+            # Un refus de confidentialité arrivait donc au modèle présenté
+            # comme de vrais résultats de recherche, avec l'ordre de s'en
+            # servir. Ce n'est pas un silence, c'est une étiquette fausse —
+            # plus trompeur encore, parce que rien n'invite à s'en méfier.
+            summary, issue = WebSearch(
+                log_event=self.log_event
+            ).get_summary_with_outcome(user_message)
+
+            if issue == "ok":
+                websearch_context = (
+                    "RECHERCHE WEB RÉELLE (DuckDuckGo) :\n\n" + summary + "\n\n"
+                    "Appuie-toi UNIQUEMENT sur ces résultats réels. INTERDIT : "
+                    "inventer un résultat, un lien ou un fait absent de cette "
+                    "recherche."
+                )
+                _emit(on_activity, "websearch_performed", "recherche web — résultats reçus")
+            elif issue == "empty":
+                websearch_context = (
+                    "RECHERCHE WEB EFFECTUÉE : AUCUN RÉSULTAT.\n\n"
+                    "Dis-le à Cyril. INTERDIT : inventer un résultat, un lien "
+                    "ou un fait — tu n'as rien trouvé."
+                )
+                _emit(on_activity, "websearch_performed", "recherche web — aucun résultat")
+            elif issue == "refused":
+                websearch_context = (
+                    "RECHERCHE WEB REFUSÉE : la question contenait une donnée "
+                    "personnelle identifiante, elle n'a donc JAMAIS été envoyée "
+                    "sur Internet.\n\n"
+                    "Explique-le à Cyril — c'est une protection volontaire, pas "
+                    "une panne. Propose-lui de reformuler sans la donnée "
+                    "personnelle. INTERDIT : prétendre avoir cherché, ou "
+                    "inventer un résultat."
+                )
+                _emit(on_activity, "websearch_performed", "recherche web — refusée (donnée personnelle)")
+            else:  # "failed"
+                websearch_context = (
+                    "LA RECHERCHE WEB A ÉCHOUÉ (réseau ou service "
+                    "indisponible). Tu n'as AUCUN résultat.\n\n"
+                    "Dis-le à Cyril. INTERDIT : répondre de mémoire générale "
+                    "en laissant croire que ça vient d'une recherche."
+                )
+                _emit(on_activity, "websearch_performed", "recherche web — échec")
 
         # Météo (modules/weather_manager.py, câblé le 04/08/2026). Jamais
         # deviner une ville absente de la question — même principe que le

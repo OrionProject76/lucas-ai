@@ -106,8 +106,57 @@ class WebSearch:
                 "body": f"Impossible de rechercher : {e}",
             }]
 
+    def get_summary_with_outcome(
+        self, query: str, max_results: int = 3
+    ) -> tuple[str, str]:
+        """
+        Résumé texte ET issue réelle de la recherche.
+
+        ⚠️ Pourquoi cette méthode existe (05/08/2026, audit « silence qui
+        laisse le modèle deviner », ROADMAP.md §5.39).
+
+        `get_summary()` rend une chaîne dans TOUS les cas — succès, zéro
+        résultat, panne réseau, ou refus pour données identifiantes. Vue
+        de l'appelant, ces quatre situations étaient indiscernables. Et
+        `core/lucas_core.py` les injectait toutes sous la même étiquette :
+
+            « RECHERCHE WEB RÉELLE (DuckDuckGo) : ...
+              Appuie-toi UNIQUEMENT sur ces résultats réels. »
+
+        Autrement dit, un refus de confidentialité ou une panne DNS
+        arrivaient au modèle présentés comme de vrais résultats de
+        recherche, avec l'ordre de s'en servir. Ce n'est pas un silence,
+        c'est pire : une étiquette fausse. Même famille que §5.31 —
+        l'appelant ne doit jamais avoir à deviner ce qui s'est passé.
+
+        Issues possibles : "ok", "empty", "failed", "refused".
+        """
+        results = self.search(query, max_results)
+
+        if not results:
+            return f'Aucun résultat pour « {query} ».', "empty"
+
+        # `search()` encode ces deux situations dans un faux résultat plutôt
+        # que par une exception (choix d'origine : ne jamais faire tomber
+        # l'appelant). On les redistingue ici, à la source, plutôt que de
+        # laisser chaque appelant renifler des chaînes.
+        premier_titre = (results[0].get("title") or "").lower()
+        if premier_titre == "recherche annulée":
+            return results[0].get("body") or REFUSAL_MESSAGE, "refused"
+        if premier_titre == "erreur":
+            return results[0].get("body") or "Recherche impossible.", "failed"
+
+        return self.get_summary(query, max_results), "ok"
+
     def get_summary(self, query: str, max_results: int = 3) -> str:
-        """Résumé texte des résultats, prêt à afficher ou à prononcer."""
+        """
+        Résumé texte des résultats, prêt à afficher ou à prononcer.
+
+        ⚠️ Ne distingue PAS succès, échec et refus — voir
+        `get_summary_with_outcome()`, à préférer dès qu'on doit agir
+        différemment selon l'issue. Conservé tel quel pour les appelants
+        qui ne veulent qu'un texte à montrer.
+        """
         results = self.search(query, max_results)
 
         if not results:

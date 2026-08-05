@@ -3782,6 +3782,113 @@ un préalable**, pas une option. Godot et Ollama se partagent la RTX 5080,
 et un doublon fausserait toute corrélation VRAM ↔ fermeture — qui est la
 piste la plus prometteuse sur le blocage principal.
 
+## 5.39 Tutoiement partout + audit « aucune capacité ne doit échouer en silence »
+
+### Où vit la consigne de tutoiement (question posée explicitement)
+
+**`config.py`**, dans `SYSTEM_PROMPT`, à deux endroits complémentaires :
+
+1. **section « Ta façon de parler »**, en tête du prompt — la consigne de
+   fond, avec la raison (« vous vous parlez en confiance, pas comme un
+   service client à un client ») ;
+2. **bloc « RÈGLE DE STYLE »**, tout à la fin — la répétition qui résiste à
+   l'historique, avec les formes exactes montrées.
+
+Les deux sont nécessaires : mesuré le 05/08/2026, la première seule donne
+15/15 sur conversation neuve et **0/15** face à l'historique réel (§5.32).
+
+Aucun garde-fou déterministe, sur demande explicite de Cyril : le
+tutoiement est du style, pas de la sécurité. `claims_action_success()`
+existe parce qu'une fausse confirmation d'action ment sur l'état de la
+machine ; un « vous » ne ment sur rien.
+
+### Les blocs injectés étaient déjà au tutoiement — sauf deux restes
+
+Audit de toutes les chaînes en dur (`core/`, `modules/`, `api/`,
+`memory/`, `ui/`, `config.py`). Les blocs de contexte récents (vision
+mobile, refus d'action, `FALSE_CLAIM_CORRECTION`, échec RAG) s'adressent au
+modèle *à propos de* Cyril, à la troisième personne — correct par
+construction. Deux exceptions trouvées et corrigées :
+
+- `config.py` : la description du bloc `[Contexte]` disait « quand vous
+  vous parlez ». Un prompt ne doit modéliser aucune forme d'adresse qu'il
+  ne veut pas voir ressortir.
+- `modules/voice_manager.py` : la phrase de démonstration `__main__`
+  disait « je suis Luca's. Comment puis-je vous aider ? ». Devenue
+  « Salut Cyril, c'est Luca. Tu m'entends bien ? ».
+
+### Mesure après durcissement — et ce qui résiste
+
+15 tirages, base isolée (isolation vérifiée : 38 messages avant = 38 après).
+
+| | Avant | Après |
+|---|---|---|
+| vouvoiement | 15/15 | **0/15** |
+| exemple recopié hors contexte | — | 1/15 |
+| relance de guichet | 14/15 | **8/15** |
+
+**L'objectif de Cyril est atteint** : plus aucun vouvoiement, y compris
+dans les blocs injectés (« sur ton PC » vérifié en conversation réelle).
+
+Deux défauts trouvés en test réel et corrigés au passage :
+- **le modèle recopiait un exemple hors contexte** — « Salut Luca »
+  recevait « Salut Cyril. Tu veux que je l'ouvre ? », alors que rien
+  n'était à ouvrir. Un exemple littéral pèse assez pour corriger le
+  vouvoiement (0/15 → 12/15) ; il pèse donc aussi assez pour être recopié.
+  Le prompt dit désormais que les exemples montrent une forme et ne se
+  recopient pas. 1/15 résiduel.
+- **« n'hésite pas » passait à travers** — la règle ne citait que la forme
+  vouvoyée « N'hésitez pas ». Les deux formes sont maintenant nommées.
+
+⚠️ **Ce qui résiste : la relance de guichet, à 8/15.** Le prompt l'interdit
+nommément, sous les deux formes, en fin de prompt. Le modèle continue. Ce
+n'est plus un problème de formulation — c'est la même limite que celle déjà
+mesurée le 02/08 (qwen2.5:7b à 1/5 sur une question introspective, contre
+4/5 pour gemma4 et qwen3.6), et Cyril a choisi de garder qwen2.5:7b en
+connaissance de cause. **Aucun mécanisme déterministe construit** : sa
+consigne était explicite, ne pas sur-ingénieriser un sujet de style.
+
+### Audit : où une capacité échoue-t-elle encore en silence ?
+
+Revue de tous les chemins de `_build_messages()` qui peuvent ne pas
+s'exécuter. **Finance, calculatrice et météo sont sains** — chacun injecte
+déjà un bloc explicite sur le cas vide ou en échec, et aucun ne peut lever
+(`load_directory` rend un manager vide, `get_current` rend `None`).
+
+**Un cas réel trouvé, et c'est le pire de la famille** : la recherche web.
+`get_summary()` rend une chaîne dans les **quatre** situations — résultats,
+zéro résultat, panne réseau, et **refus pour donnée identifiante**. Toutes
+étaient injectées sous la même étiquette :
+
+```
+RECHERCHE WEB RÉELLE (DuckDuckGo) : ...
+Appuie-toi UNIQUEMENT sur ces résultats réels.
+```
+
+Autrement dit : un refus de confidentialité — le mécanisme qui empêche
+l'IBAN de Cyril de partir chez DuckDuckGo — arrivait au modèle **présenté
+comme de vrais résultats de recherche, avec l'ordre de s'en servir**. Une
+panne DNS aussi.
+
+Ce n'est pas un silence, c'est **une étiquette fausse**, et c'est plus
+trompeur qu'un silence : rien n'invite à s'en méfier. `_build_messages`
+appelle désormais `get_summary_with_outcome()` et injecte quatre blocs
+distincts. Le refus dit explicitement que c'est une protection volontaire,
+pas une panne.
+
+`test_silent_failures.py` (nouveau, 7 tests) réunit les trois visages de
+cette famille — §5.31 (action non exécutée), §5.32 (RAG qui fait tomber la
+requête), §5.39 (étiquette fausse) — pour qu'une régression sur l'un fasse
+échouer un test nommé d'après le motif, pas d'après le module.
+
+**Règle qui s'en dégage, à opposer aux prochains câblages** : *toute
+capacité qui peut ne pas s'exécuter doit injecter un contexte explicite
+quand elle ne s'exécute pas — et ce contexte doit dire LAQUELLE des issues
+s'est produite.* Le silence n'est jamais neutre ; une étiquette fausse est
+pire.
+
+Suite complète : **1089 passés**.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
