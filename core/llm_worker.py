@@ -48,16 +48,30 @@ class LLMWorker(QThread):
                 except json.JSONDecodeError:
                     continue
                 
+                # ⚠️ `content` SEULEMENT, jamais `thinking` (05/08/2026).
+                # Les modèles à raisonnement explicite streament leur
+                # brouillon dans un champ séparé : l'afficher à Cyril
+                # ferait défiler des hésitations en anglais à la place de
+                # la réponse. Voir core/ollama_reply.py.
                 token = chunk.get("message", {}).get("content", "")
                 if token:
                     full_response += token
                     self.token_received.emit(token)
-                
+
                 if chunk.get("done"):
                     break
 
             if self._is_running:
-                self.response_complete.emit(full_response)
+                if not full_response.strip():
+                    # Raisonnement sans conclusion : mesuré 2 fois sur 16
+                    # avec gpt-oss:20b (ROADMAP.md §5.44). Un flux vide se
+                    # voit comme une panne muette — on le dit.
+                    self.error_occurred.emit(
+                        "[Erreur] Le modèle a raisonné sans produire de "
+                        "réponse exploitable. Reformule ta question."
+                    )
+                else:
+                    self.response_complete.emit(full_response)
 
         except OllamaModelMissing as e:
             self.error_occurred.emit(f"[Erreur] {e}")

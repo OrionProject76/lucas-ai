@@ -38,7 +38,16 @@ OLLAMA_URL = f"{OLLAMA_HOST}/api/chat"
 # cause des « 404 model not found » intermittents au démarrage.
 # qwen2.5:7b et qwen2.5:latest ont le même digest : même modèle, celui
 # que ROADMAP.md donne comme validé en usage réel.
-MODEL_NAME = "qwen2.5:7b"
+# ⚠️ Passé de qwen2.5:7b à gpt-oss:20b le 05/08/2026, sur décision de
+# Cyril après le comparatif de 5 modèles mesurés sur cette machine
+# (ROADMAP.md §5.44). Ce qui a décidé : 0/15 de relance de guichet contre
+# 9/15, le plus rapide des cinq (165,8 tok/s), et le seul à répondre juste
+# aux deux questions de français vérifiables.
+#
+# Trois adaptations étaient nécessaires AVANT la bascule, toutes faites :
+# lecture du champ `thinking` (core/ollama_reply.py), INTENT_MAX_TOKENS
+# relevé à 256, et la contrainte VRAM du VLM documentée plus bas.
+MODEL_NAME = "gpt-oss:20b"
 
 # Liste des modèles disponibles (pour futur sélecteur)
 AVAILABLE_MODELS = ["qwen2.5", "llama3.2", "mistral", "codellama"]
@@ -81,6 +90,26 @@ TTS_ALLOW_CLOUD_ON_SENSITIVE: bool = False
 # Modèle vision local, servi par Ollama. « llava » est installé sur cette
 # machine ; internvl2 est envisagé en v1.1 (voir CLAUDE.md, tableau LLM).
 VLM_MODEL = "llava"
+
+# ⚠️ CONTRAINTE VRAM À CONNAÎTRE AVANT DE RÉACTIVER LE VLM (05/08/2026).
+#
+# La RTX 5080 a 16 Go, et ils sont désormais presque entièrement pris.
+# Mesuré sur cette machine, modèle de chat + embeddings RAG chargés :
+#
+#   MODEL_NAME       VRAM occupée   marge   llava (~4,7 Go) tiendrait ?
+#   qwen2.5:7b          8 037 Mo   8 347 Mo            oui
+#   gpt-oss:20b        15 291 Mo   1 093 Mo            NON
+#
+# Avec gpt-oss:20b, activer VLM_ENABLED ne provoquera pas d'erreur
+# visible : Ollama déchargera simplement le modèle de chat pour charger
+# llava, puis l'inverse à la réponse suivante — soit ~3 s de rechargement
+# à chaque va-et-vient (mesuré §5.44). La dégradation serait silencieuse
+# et attribuée à « Luca est lente », pas à ce réglage.
+#
+# Si le VLM redevient nécessaire, deux issues, aucune gratuite :
+#   - revenir à un modèle de chat plus petit (qwen2.5:7b, qwen3:14b) ;
+#   - accepter le va-et-vient, et le DIRE dans l'interface.
+VLM_NEEDS_VRAM_MO: int = 4700
 
 # ── Le VLM est DÉSACTIVÉ en v1.0 — décision de Cyril, 01/08/2026 ──────
 #
@@ -359,11 +388,49 @@ RAG_CONFIDENT_DISTANCE: float = 0.20
 # La décision de sécurité — donnée sensible, donc local forcé — reste aux
 # mots-clés déterministes de router.is_sensitive(). Voir CLAUDE.md règle 3.
 INTENT_CLASSIFIER_ENABLED: bool = True
-INTENT_MODEL = "qwen2.5:7b"
+# ⚠️ DOIT rester identique à MODEL_NAME (05/08/2026).
+#
+# Le classifieur est appelé AVANT chaque réponse. Deux modèles différents
+# ne tiennent pas ensemble dans 16 Go : chaque message paierait alors
+# DEUX rechargements. Mesuré sur cette machine :
+#
+#   INTENT=qwen2.5 + CHAT=gpt-oss : 8,6 → 13,3 s par message
+#   les deux sur gpt-oss          : 3,5 → 5,9 s
+#   les deux sur qwen2.5          : 0,3 s
+#
+# Garder deux modèles distincts est donc le pire des trois choix, alors
+# que c'est la configuration qui semble la plus naturelle sur le papier.
+INTENT_MODEL = MODEL_NAME
 
 # Court volontairement : au-delà, le repli sur les mots-clés est préférable
 # à faire attendre Cyril. Le classifieur ne doit jamais bloquer une réponse.
 INTENT_TIMEOUT_SECONDS: float = 5.0
+
+# Tokens accordés au classifieur pour rendre son label (05/08/2026).
+#
+# Valait 5, codé en dur : suffisant pour un modèle qui répond « ECRAN »
+# directement, FATAL pour un modèle à raisonnement explicite. gpt-oss:20b
+# consomme ces 5 tokens dans son champ `thinking`, rend un `content`
+# vide, et le classifieur repart en repli mots-clés SANS LE DIRE — il
+# ratait alors « c'est écrit quoi ? », la formulation même pour laquelle
+# il a été construit.
+#
+# ⚠️ Ce nombre se paie à CHAQUE message de Cyril — mais seulement pour
+# un modèle qui raisonne : un modèle direct émet son label puis un token
+# de fin et s'arrête, quel que soit le plafond. C'est donc un plafond, pas
+# un coût fixe.
+#
+# 256, mesuré (05/08/2026, gpt-oss:20b sur 4 formulations du corpus) :
+#
+#   num_predict  64 : 0/4 — le raisonnement n'aboutit jamais, repli
+#                     mots-clés systématique et silencieux
+#   think: false    : 0/4 — Ollama l'ignore pour ce modèle, il raisonne
+#                     quand même
+#   think: "low"    : 3/4
+#   num_predict 256 : 4/4, en 0,7 à 1,5 s
+#
+# Pour qwen2.5:7b, aucun changement mesurable : il répond en 0,1 s.
+INTENT_MAX_TOKENS: int = 256
 
 # Contexte conversationnel donné au classifieur, pour les questions
 # elliptiques. « Et en décembre 2025 ? » après une question sur un

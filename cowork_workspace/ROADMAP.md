@@ -4353,6 +4353,132 @@ sur l'IPv4, donc Luca parle à la bonne — c'est pourquoi RAG et vision
 sont réapparus. **Le doublon reste à régler** : si l'instance manuelle
 s'arrête, on retombe sur celle qui ne voit que 2 modèles.
 
+## 5.45 Bascule sur gpt-oss:20b — les 3 points corrigés, plus un 4e trouvé en route
+
+Cyril a validé l'option A. `MODEL_NAME = "gpt-oss:20b"`, en production.
+
+### Le 4e problème, absent du comparatif et pourtant décisif
+
+Trouvé en préparant la bascule, pas après : **`INTENT_MODEL` était sur
+`qwen2.5:7b`**, et le classifieur d'intention est appelé **avant chaque
+réponse**. Deux modèles qui ne tiennent pas ensemble dans 16 Go, c'est
+donc **deux rechargements par message**.
+
+| Configuration | Latence par message |
+|---|---|
+| `INTENT=qwen2.5` + `CHAT=gpt-oss` | **8,6 → 13,3 s** |
+| les deux sur gpt-oss | 3,5 → 5,9 s |
+| les deux sur qwen2.5 *(avant)* | 0,3 s |
+
+La configuration qui semble la plus naturelle sur le papier — un petit
+modèle rapide pour classer, un gros pour répondre — est **la pire des
+trois** sur cette machine. `INTENT_MODEL` vaut désormais `MODEL_NAME`,
+avec le tableau en commentaire pour que personne ne « corrige » ça.
+
+### Point 1 — le `content` vide : `core/ollama_reply.py`
+
+Nouveau module, un seul rôle : rendre `content`, et seulement s'il est
+vide, tenter de récupérer une conclusion dans `thinking`.
+
+⚠️ Il ne **concatène jamais** les deux. Le raisonnement d'un modèle n'est
+pas destiné à Cyril : il est en anglais, il hésite à voix haute, et il
+contient des pistes explicitement abandonnées. L'afficher ferait passer
+un brouillon pour une réponse. Au-delà de 600 caractères sans conclusion
+isolable, la fonction rend une chaîne vide — et l'appelant le **dit**
+plutôt que d'afficher du blanc.
+
+Câblé dans `local_llm.py` (non-streaming), `intent.py` (classifieur), et
+`llm_worker.py` (streaming UI, où seul `content` est diffusé pour que le
+brouillon ne défile pas à l'écran).
+
+**Un test existant a attrapé une régression que j'avais introduite** :
+j'avais confondu « Ollama a renvoyé une forme inattendue » et « le modèle
+a raisonné sans conclure ». Deux pannes différentes, deux messages
+différents — la première renvoie à l'installation, la seconde à la
+reformulation. Corrigé dans le code, pas dans le test.
+
+### Le classifieur, cassé puis réparé — trois mesures pour y arriver
+
+Le vrai coupable n'était pas le modèle mais **`num_predict: 5`**, codé en
+dur dans `intent.py` : assez pour un modèle qui répond « ECRAN »
+directement, **fatal** pour un modèle qui raisonne d'abord. gpt-oss
+consommait ces 5 tokens dans son `thinking` et le classifieur repartait
+en repli mots-clés **sans le dire** — il ratait « c'est écrit quoi ? »,
+la formulation même pour laquelle il a été construit.
+
+| Réglage | Classification correcte |
+|---|---|
+| `num_predict: 5` *(avant)* | 0/4 |
+| `think: false` | 0/4 — Ollama l'ignore pour ce modèle |
+| `think: "low"` | 3/4 |
+| **`num_predict: 256`** | **4/4**, en 0,7 à 1,5 s |
+
+Sur le corpus complet de 12 formulations : gpt-oss passe de **9/12 à
+11/12**, exactement le score de qwen2.5:7b, avec la même unique erreur
+(« ouvre le bloc-notes » classé ECRAN — sans effet, la demande d'action
+déterministe prime depuis §5.32).
+
+⚠️ **Au passage, j'ai cassé le classifieur pour qwen2.5** (11/12 → 9/12)
+en oubliant un import : le `except Exception` large de `_ask_classifier`
+a avalé le `NameError` et l'a transformé en repli silencieux. Le même
+mécanisme qui protège d'une panne d'Ollama masque aussi les bugs du
+projet. Attrapé parce que la mesure était rejouée avant/après, pas parce
+qu'un test l'a signalé.
+
+### Point 2 — la marge VRAM, rendue explicite
+
+Rien à « corriger » : 16 Go sont 16 Go. Mais le mode de défaillance est
+sournois, donc il est écrit dans `config.py`, à côté de `VLM_MODEL` :
+activer `VLM_ENABLED` avec gpt-oss ne produira **aucune erreur** —
+Ollama déchargera le chat pour charger llava, puis l'inverse, soit ~3 s
+par va-et-vient. La dégradation serait attribuée à « Luca est lente »,
+jamais à ce réglage.
+
+### Point 3 — l'appel d'outil : vérifié en réel, sans effet
+
+Le 1/3 du comparatif ne concerne que l'API `tools` d'Ollama, que Luca
+**n'utilise pas**. Vérifié de bout en bout avec le nouveau modèle :
+
+```
+Message : 'Bonjour , ouvre le bloc note'
+Réponse : Notepad est maintenant ouvert sur ton PC.
+NOUVEAU process créé : 1  ['3288']
+action_log : ('launch_notepad', 'chat', 'executed', '2026-08-05 10:29:49')
+```
+
+Un vrai Notepad, une vraie entrée au journal. Le chemin reste
+déterministe (`extract_app_name` + liste blanche + DecisionEngine) ;
+`core/decision_engine.py` n'a pas été touché.
+
+### Validation conversationnelle réelle
+
+```
+Salut Luca            (2,8 s) : Quoi de neuf ? Tu veux qu'on ouvre un fichier… ?
+Il est quelle heure ? (2,0 s) : Il est 12 h 30.
+Ouvre spotify         (3,3 s) : Spotify n'est pas parmi les applications que je
+                                peux ouvrir sur ton PC. Les seules apps
+                                autorisées sont : Chrome, l'Explorateur, Notepad
+                                et la calculatrice.
+Merci beaucoup        (2,7 s) : Avec plaisir !
+```
+
+Tutoiement partout, aucune relance de guichet, refus correct avec la
+liste blanche réellement citée.
+
+### Deux choses à dire honnêtement
+
+**1. C'est plus lent.** 2,0 à 3,3 s par message, contre 0,3 à 1,3 s
+avant. Le gain de qualité se paie en latence, et ça se sent en
+conversation. C'est le compromis que Cyril a accepté en choisissant
+l'option A — il est utile qu'il soit chiffré ici plutôt que ressenti.
+
+**2. La qualité du français est moins constante que le comparatif ne le
+laissait croire.** Au banc, gpt-oss était le seul à répondre
+« qu'il résolût » (correct). En validation réelle, sur la même question,
+il a répondu **« qu'il résolvât »** — faux. Un tirage unique ne suffisait
+donc pas à établir cet avantage. Ce qui reste solide et reproductible :
+0/15 de relance de guichet, la vitesse, et le fait vérifiable HNSW.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

@@ -43,12 +43,14 @@ from dataclasses import dataclass
 
 from config import (
     INTENT_CLASSIFIER_ENABLED,
+    INTENT_MAX_TOKENS,
     INTENT_MODEL,
     CONTEXT_MAX_CHARS,
     CONTEXT_TURNS,
     INTENT_TIMEOUT_SECONDS,
     OLLAMA_URL,
 )
+from core.ollama_reply import extract_reply
 
 # Les trois seules réponses acceptées. Toute autre sortie du modèle est
 # traitée comme un échec et bascule sur les mots-clés — on ne devine pas
@@ -259,18 +261,37 @@ def _ask_classifier(question: str, context: str = "") -> str | None:
                 # temperature 0 : la même question doit donner la même
                 # réponse d'une fois sur l'autre, sinon le corpus de test
                 # ne mesure rien.
-                "options": {"temperature": 0, "num_predict": 5},
+                # ⚠️ `num_predict` était figé à 5 : assez pour un modèle
+                # qui répond directement, FATAL pour un modèle à
+                # raisonnement explicite. gpt-oss:20b consomme ces 5
+                # tokens dans son champ `thinking` et rend un `content`
+                # vide — le classifieur repartait alors en repli
+                # mots-clés SANS LE DIRE, et ratait « c'est écrit
+                # quoi ? », la formulation même pour laquelle il avait
+                # été construit (ROADMAP.md §5.45).
+                "options": {"temperature": 0, "num_predict": INTENT_MAX_TOKENS},
                 "keep_alive": "30m",
             },
             timeout=INTENT_TIMEOUT_SECONDS,
         )
-        raw = response.json()["message"]["content"]
+        # Lit `thinking` en dernier recours — voir core/ollama_reply.py.
+        raw = extract_reply(response.json().get("message", {}))
     except Exception:  # noqa: BLE001 — voir docstring
         return None
 
     # Le modèle ajoute parfois un point ou une majuscule accentuée.
     answer = raw.strip().upper().strip(".").strip()
-    return answer if answer in LABELS else None
+    if answer in LABELS:
+        return answer
+
+    # ⚠️ Repêchage d'un label noyé dans une phrase. Un modèle à
+    # raisonnement récupéré via `thinking` rend rarement le mot seul : il
+    # écrit « the answer is ECRAN » ou « donc ECRAN ». Exiger l'égalité
+    # stricte jetait une classification correcte pour une question de
+    # mise en forme. Un seul label doit être présent — deux signifient
+    # que le modèle hésite encore, et l'appelant préfère alors le repli.
+    trouves = [label for label in LABELS if label in answer]
+    return trouves[0] if len(trouves) == 1 else None
 
 
 # ⚠️ Ce cache n'est pas une optimisation, il est nécessaire à la
