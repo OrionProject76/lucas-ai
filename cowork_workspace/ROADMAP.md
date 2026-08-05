@@ -3707,6 +3707,15 @@ signaler de ce côté.
 
 Priorités 6 et 7 de la session de nuit.
 
+### ⚠️ CETTE SECTION EST FAUSSE — corrigée quelques heures plus tard, voir §5.41
+
+Le diagnostic ci-dessous conclut que la couverture est devenue
+impossible à mesurer sur le cœur du projet. **C'est faux, et l'erreur
+était de mon fait** : la couverture se mesure très bien, à condition de
+désigner la cible par un **chemin** (`--cov=core`) et non par un **nom de
+module pointé** (`--cov=core.router`). Le texte est conservé tel quel
+pour la traçabilité du raisonnement ; les chiffres réels sont en §5.41.
+
 ### 🔴 La couverture de test n'est plus mesurable sur le cœur du projet
 
 Trouvé en voulant produire les chiffres demandés. Toute exécution de
@@ -3958,6 +3967,90 @@ observé. Quatre entrées de cadrage ajoutées à `IDEAS.md` :
   mobile. Aggravée ici, puisqu'une webcam filme la pièce et donc
   potentiellement des personnes qui n'ont rien accepté. Le pilotage PTZ
   est une action système, donc hors périmètre sans validation de Cyril.
+
+## 5.41 Couverture : je m'étais trompé, et le vrai chiffre est 97,2 %
+
+### La correction d'abord
+
+En §5.38 j'ai écrit que la couverture n'était plus mesurable sur le cœur
+du projet, et que les 96 %/98 % des campagnes précédentes n'étaient plus
+reproductibles. **C'était faux.** L'erreur venait de la façon dont
+j'appelais l'outil, pas de l'outil.
+
+Ce qui casse :
+
+```
+pytest --cov=core.router     ->  ImportError: cannot load module more than once
+pytest --cov=core            ->  core\router.py   88   1   99%
+```
+
+La forme **pointée** fait importer le module par `coverage` lui-même,
+pour le résoudre en chemin — et ce second import de l'extension Rust de
+ChromaDB (PyO3) échoue. La forme **répertoire** ne résout rien par
+import : elle marche.
+
+Le diagnostic précédent était juste sur les faits observés (l'erreur est
+réelle, elle est bien préexistante) et faux sur la conclusion. J'avais
+même une contre-preuve sous les yeux sans la voir :
+`pytest test_router.py --cov=api.log_scrub` passait, alors que ce test
+importe chromadb — la variable n'était donc pas chromadb, mais la cible.
+
+La section §5.38 est laissée en place avec un avertissement en tête
+plutôt que réécrite : le raisonnement erroné a autant de valeur que sa
+correction pour qui relira.
+
+### Le vrai état de la couverture
+
+| Périmètre | Instructions | Non couvertes | Couverture |
+|---|---|---|---|
+| **Hors `index_documents`** | 2 755 | 76 | **97,2 %** |
+| Brut, tout compris | 2 999 | 320 | 89 % |
+
+`memory/index_documents.py` (244 instructions) pèse à lui seul l'écart :
+il est à **0 %** parce que `python-docx` n'est pas installé, donc ni le
+module ni ses tests ne s'importent. C'est le même 6-échecs-préexistants
+signalé depuis des jours. Non corrigé ici : `pip install` est un accès
+réseau externe, donc hors autonomie.
+
+### Ce que la mesure a révélé — et c'était le motif traqué
+
+`set_state`, `get_state` et `minutes_since_last_exchange`, écrits cette
+nuit pour rendre le mode Deep Focus réellement collant, étaient exercés
+**uniquement par les doubles de test** — c'est-à-dire par des
+dictionnaires Python, jamais par SQLite. Couverture réelle : **0 %**.
+
+C'est le motif « tests verts, comportement jamais réel » dans sa forme la
+plus ironique : ces méthodes existent précisément pour **survivre à la
+destruction de l'objet**, et un dictionnaire simule cette propriété
+parfaitement sans rien prouver.
+
+`test_app_state.py` (10 tests) les confronte au vrai `MemoryManager` sur
+une base temporaire, dont le scénario réel de bout en bout : commande
+Deep Focus → nouvel objet → mode toujours actif → désactivation **sans
+accent** → nouvel objet → mode éteint.
+
+`test_presence_context.py` (21 tests) couvre les quatre branches du bloc
+`[Contexte]`, dont trois n'étaient jamais exécutées — les doubles
+rendaient tous `None`. Y compris la propriété qui avait déjà régressé une
+fois : **aucune forme d'adresse dans le bloc**, vérifiée sur les douze
+combinaisons.
+
+| Module | Avant | Après |
+|---|---|---|
+| `memory/memory_manager.py` | 86 % | **100 %** |
+| `core/lucas_core.py` | 95 % | **97 %** |
+| `core/aura_modes.py` | 97 % | **99 %** |
+
+### Dette corrigée au passage
+
+`datetime.utcnow()`, que j'avais utilisé cette nuit dans
+`minutes_since_last_exchange`, est **déprécié depuis Python 3.12 et
+programmé pour disparaître**. Remplacé par
+`datetime.now(UTC).replace(tzinfo=None)` — le `.replace()` est
+nécessaire, `precedent` étant naïf et soustraire un *aware* d'un *naïf*
+levant une exception.
+
+Suite complète : **1120 passés**.
 
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 

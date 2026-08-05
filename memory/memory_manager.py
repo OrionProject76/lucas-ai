@@ -2,7 +2,7 @@
 # + événements système significatifs (voir VISION_LONG_TERME.md, mémoire 3 niveaux)
 
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from config import MAX_HISTORY_MESSAGES
@@ -409,7 +409,13 @@ class MemoryManager:
         # created_at est écrit par CURRENT_TIMESTAMP, donc en UTC : la
         # comparaison se fait en UTC aussi, sinon l'écart vaudrait le
         # décalage horaire (2 h en été) même sur un message à l'instant.
-        return (datetime.utcnow() - precedent).total_seconds() / 60
+        #
+        # `datetime.now(UTC)` et non `utcnow()` : ce dernier est déprécié
+        # depuis Python 3.12 et programmé pour disparaître. Le `.replace(
+        # tzinfo=None)` ramène à un datetime naïf, parce que `precedent`
+        # l'est aussi — soustraire un aware d'un naïf lève.
+        maintenant = datetime.now(UTC).replace(tzinfo=None)
+        return (maintenant - precedent).total_seconds() / 60
 
     def close(self):
         self.conn.close()
