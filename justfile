@@ -52,10 +52,41 @@ ollama:
 serve:
     uvicorn api.server:app --reload --host 0.0.0.0 --port 8000 --ssl-certfile data/cert.pem --ssl-keyfile data/key.pem
 
-# Lancer FastAPI en HTTP local seul — sans le pont mobile (micro/caméra
-# indisponibles), pour un dépannage rapide sans certificat.
+# ⚠️ Sans le pont mobile : micro et caméra sont indisponibles en HTTP.
+#
+# Dépannage local rapide, sans certificat
 serve-http:
     uvicorn api.server:app --reload --host 127.0.0.1 --port 8000
+
+# Régénérer le certificat HTTPS avec l'adresse Tailscale
+#
+# À lancer APRÈS `tailscale up` sur le PC, quand l'adresse 100.x.y.z est
+# connue. Exemple :
+#     just cert-tailscale 100.101.102.103
+#
+# ⚠️ Les IP existantes sont conservées volontairement. Sans elles, Luca
+# deviendrait injoignable À LA MAISON en gagnant l'accès à distance —
+# régression silencieuse, découverte le soir venu. Un certificat coûte la
+# même chose avec trois adresses qu'avec une.
+#
+# Le certificat actuel couvre 192.168.1.12, 192.168.1.14, 127.0.0.1 et
+# localhost. 192.168.1.14 est l'ancienne adresse du 05/08/2026, gardée
+# tant que la réservation DHCP n'est pas confirmée — la retirer avant
+# aurait rouvert la panne du matin même.
+#
+# Après régénération : le téléphone redemandera d'accepter le certificat
+# (il a changé), une seule fois par adresse.
+#
+# Régénérer le certificat HTTPS avec l'adresse Tailscale (just cert-tailscale 100.x.y.z)
+cert-tailscale ip:
+    tools\mkcert.exe -cert-file data\cert.pem -key-file data\key.pem {{ip}} 192.168.1.12 192.168.1.14 127.0.0.1 localhost
+    @echo "Certificat regenere. Relancer le serveur pour qu'il le charge :"
+    @echo "  - tache planifiee LucasAPIServer, ou"
+    @echo "  - just serve"
+
+# Afficher ce que couvre le certificat actuel (diagnostic)
+cert-info:
+    python -c "import ssl; d = ssl._ssl._test_decode_cert(r'data/cert.pem'); print('Valide jusqu au', d.get('notAfter')); [print(' ', k, '=', v) for k, v in d.get('subjectAltName', ())]"
 
 # Lancer le daemon (arrière-plan Windows)
 daemon:

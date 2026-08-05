@@ -4649,6 +4649,84 @@ signale jamais lui-même qu'il a cessé de fonctionner.
 
 Suite complète : **1192 passés**.
 
+## 5.48 Accès distant — procédure Tailscale préparée, rien d'installé
+
+Cyril a voulu se connecter à Luca **depuis son travail**. Diagnostic
+côté serveur : zéro tentative reçue en 4 minutes d'écoute, alors que le
+serveur répondait HTTP 200 sur `127.0.0.1` **et** `192.168.1.12`, pare-feu
+ouvert, réseau local fonctionnel.
+
+**Rien n'était cassé.** `192.168.1.12` est une adresse privée : depuis
+l'extérieur, elle est injoignable par construction. L'absence totale de
+requête dans le log l'a montré immédiatement — un problème de certificat
+ou de cache aurait laissé une trace, une adresse privée n'en laisse
+aucune.
+
+Ce diagnostic vaut d'être noté : **l'absence de trace est une
+information**, au même titre qu'une trace. Elle a écarté d'un coup la
+PWA, le service worker, le jeton et le certificat.
+
+### Le tunnel était décidé depuis deux jours, jamais exécuté
+
+Tailscale, tranché par Cyril le 03/08/2026 (§2). Le code n'a besoin
+d'**aucune modification** — audité le 03/08, revérifié aujourd'hui :
+`API_HOST="0.0.0.0"`, la PWA construit son URL depuis `location.host`,
+le jeton fonctionne. Seul le certificat HTTPS est à régénérer.
+
+### Préparé (documentation et outillage uniquement)
+
+- `just cert-tailscale <IP>` — régénère le certificat en **conservant**
+  les adresses existantes. ⚠️ Sans elles, Luca deviendrait injoignable
+  **à la maison** en gagnant l'accès à distance : une régression qu'on ne
+  découvrirait que le soir venu.
+- `just cert-info` — affiche ce que couvre le certificat actuel.
+  (Vérifié : `192.168.1.12`, `192.168.1.14`, `127.0.0.1`, `localhost`,
+  valide jusqu'au 02/11/2028.)
+- `cowork_workspace/PROCEDURE_TAILSCALE.md` — procédure complète, dont
+  la revue de sécurité.
+
+Deux descriptions de recettes `just` étaient tronquées dans `just --list`
+(le commentaire retenu est celui qui précède immédiatement la recette,
+pas le paragraphe entier) — corrigé, y compris un cas préexistant sur
+`serve-http`.
+
+### La revue de sécurité, qui est le vrai contenu
+
+Le tunnel rend atteignables, depuis n'importe quel appareil du compte
+Tailscale : `GET /history` (tout l'historique de conversation),
+`GET /documents`, `GET /finance/summary`, `POST /chat`, et le lancement
+d'applications. **Le jeton d'API est la seule barrière** — et c'est
+exactement pourquoi sa régénération, ouverte depuis §5.30 (il a séjourné
+en clair dans les logs), passe de « bonne hygiène » à « prérequis ».
+
+Trois points listés pour Cyril : régénérer le jeton, resserrer
+`allow_origins` (aujourd'hui `["*"]`, annoté provisoire dans le code) une
+fois l'origine Tailscale connue, et décider des ACL Tailscale avant
+d'ajouter un troisième appareil.
+
+⚠️ **Ce que le tunnel ne change pas**, et qui méritait d'être écrit noir
+sur blanc : il change **QUI peut joindre Luca, jamais ce qu'elle envoie
+dehors**. Le routage local/cloud, le refus d'envoyer une donnée sensible,
+le TTS local sur contenu sensible sont décidés côté serveur et ne
+dépendent pas du chemin d'accès. Cohérent avec `VISION_LONG_TERME.md`
+§4 : « la sécurité vient du contrôle de *ce qui* est envoyé et *quand*,
+pas du canal utilisé. »
+
+### Réservation DHCP — en cours côté Cyril
+
+Cause directe de la panne du matin (§5.32) : le PC est en DHCP, son
+adresse peut changer. Éléments fournis — interface Ethernet (Realtek
+PCIe 5GbE), MAC `34-5A-60-D2-A8-A6`, adresse à réserver **`192.168.1.12`**.
+
+⚠️ Réserver l'adresse **actuelle** et non une autre : le certificat HTTPS
+est émis pour `192.168.1.12`. Une adresse différente obligerait à le
+régénérer et à réaccepter l'avertissement sur le téléphone. En gardant
+`.12`, il n'y a rien d'autre à faire.
+
+**Rien n'est installé ni configuré.** Installer un logiciel et se
+connecter à un compte sortent du périmètre d'un agent autonome, et
+ouvrir un accès distant relève du cas 1 de l'Autonomie d'exécution.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
