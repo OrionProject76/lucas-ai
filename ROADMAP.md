@@ -5454,6 +5454,142 @@ le VPN reconnecté, **les deux actifs simultanément** :
 Le point 4 compte autant que les autres : sans lui, un test « réussi »
 pourrait simplement refléter un VPN déconnecté.
 
+## 5.55 Ollama — le magasin amputé, cause réelle trouvée et fermée
+
+Luca s'est retrouvée **cassée en pleine utilisation** : un vrai échange
+via Tailscale a renvoyé « Modèle gpt-oss:20b introuvable ». Le réseau
+fonctionnait (HTTP 200, en-tête CORS correct) — c'était Ollama.
+
+L'application tray avait repris la main et servait le magasin imbriqué de
+§5.36 : **2 modèles sur 13**, sans `gpt-oss:20b`, sans `llava`, sans
+`nomic-embed-text`. Donc ni chat, ni vision, ni RAG.
+
+### Ce que ce n'était PAS — vérifié avant de conclure
+
+Cyril a demandé de « désactiver le démarrage automatique de l'appli
+tray ». **Il n'y en avait aucun à désactiver** :
+
+| Piste | Résultat |
+|---|---|
+| `Ollama.lnk` dans Startup | **absent** — toujours dans `Startup-Disabled` depuis le 02/08 |
+| Clés `Run` / `RunOnce` (HKCU, HKLM, Wow6432Node) | aucune mention d'Ollama |
+| Tâches planifiées | aucune |
+| `~/.ollama/server.json` | ne contient que `disable_ollama_cloud` |
+
+Seule trace : une entrée orpheline dans `StartupApproved\StartupFolder`
+pour `Ollama.lnk` — **sans effet**, le raccourci n'étant plus dans
+Startup. Laissée telle quelle : la nettoyer serait une modification de
+registre purement cosmétique.
+
+Le correctif du 02/08 tenait donc parfaitement. Chercher un démarrage
+automatique à désactiver aurait consisté à retirer une chose déjà
+retirée, et le problème serait revenu.
+
+### Le vrai mécanisme, établi par test dans les deux sens
+
+**La CLI Ollama réveille l'application tray quand aucun serveur ne
+répond.** Vérifié :
+
+```
+serveur en écoute + `ollama list`  -> aucune appli tray lancée
+aucun serveur      + toute commande -> l'appli tray réapparaît
+```
+
+C'est ce qui explique tout l'historique : l'instance manuelle de Cyril
+(10:57) tenait le port ; quand elle est morte, la première commande
+Ollama venue a réveillé l'appli tray, qui sert le mauvais magasin.
+
+### Le correctif : garantir qu'un serveur répond toujours
+
+Pas de désactivation — une **présence**. Tâche `LucasOllamaServer`,
+même mécanisme que `LucasAPIServer` et `LucasCoworkRequests` :
+déclenchement à l'ouverture de session, fenêtre cachée via `.vbs`,
+journal dédié.
+
+`ollama_server_runner.ps1` porte deux gardes :
+
+1. **Ne démarre rien si un serveur écoute déjà.** Un second
+   `ollama serve` échouerait à prendre le port et sortirait en erreur —
+   bruit inutile, et surtout un « échec » trompeur alors que tout va bien.
+2. **Compte les modèles visibles après démarrage** et alerte dans le
+   journal en dessous de 5. C'est exactement le symptôme d'origine :
+   un magasin amputé ne produit aucune erreur, juste une réponse
+   « modèle introuvable » plus tard, au pire moment.
+
+Vérifié dans les deux états :
+
+```
+serveur déjà présent : « un serveur ecoute deja sur 11434 (PID 38620) — rien a faire »
+démarrage à froid    : « serveur demarre (PID 34744) » / « modeles visibles : 14 »
+                       aucune appli tray relancée
+```
+
+Puis par le Planificateur lui-même : `LastTaskResult: 0`.
+
+### Un troisième process, identifié avant d'être touché
+
+Pendant l'arrêt de l'arbre tray, un `ollama.exe` inattendu (PID 28308)
+est apparu. Vérification faite avant toute action : c'était
+`ollama run gpt-oss:20b`, un **client** lancé par Cyril depuis son
+terminal, ne tenant aucun port. Laissé intact.
+
+C'est précisément la discipline que `CLAUDE.md` impose depuis l'incident
+du 03/08 — vérifier l'arbre et ce que tient réellement chaque process
+avant de décider qui arrêter.
+
+### ⚠️ La leçon la plus utile : j'ai laissé des orphelins qui tenaient la VRAM
+
+Après la remise en état, un échange réel prenait **19 à 58 secondes**,
+contre 2-3 s mesurées plus tôt. Diagnostic :
+
+```
+nvidia-smi : 15 318 / 16 303 MiB  — quasi saturée
+llama-server.exe : TROIS process
+   16052  parent 38620  -> parent MORT   (orphelin)
+   33312  parent 38620  -> parent MORT   (orphelin)
+   38524  parent 34744  -> parent VIVANT (serveur actuel)
+```
+
+En arrêtant les instances Ollama, j'avais tué les `ollama.exe` **mais pas
+leurs petits-enfants `llama-server.exe`**, qui sont les process portant
+réellement les poids en VRAM. Ils survivaient à leur parent et retenaient
+la mémoire, forçant un rechargement du modèle à presque chaque requête.
+
+C'est **exactement la leçon du 03/08** — « un process qui ne sert
+directement aucune requête peut quand même être le parent de celui qui en
+sert » — appliquée un cran plus bas dans l'arbre. Je l'avais respectée
+pour `ollama.exe`, oubliée pour ses enfants.
+
+Deux orphelins arrêtés (le troisième, appartenant au serveur vivant,
+laissé intact après vérification de la parenté). VRAM libérée, et la
+latence redescend :
+
+| | Latence d'un échange réel |
+|---|---|
+| Avec les orphelins | 19,6 s / 27,3 s / 33,5 s / 58,3 s |
+| Après nettoyage | 7,7 s (chargement) puis **3,5 s** puis **2,3 s** |
+
+⚠️ **Ce que ça implique pour la suite** : arrêter un serveur Ollama ne
+suffit pas à libérer la VRAM. Tout redémarrage doit vérifier
+`llama-server.exe` et arrêter ceux dont le parent a disparu — sinon la
+machine se dégrade silencieusement, sans erreur, et la lenteur est
+attribuée au modèle plutôt qu'à des restes.
+
+Un tirage a par ailleurs produit un refus inattendu (« je ne peux pas
+répondre à cette demande » sur « dis-moi bonjour »). Trois relances ont
+donné des réponses normales : tirage isolé, pas un défaut reproductible.
+Noté sans être traité — sur-réagir à un échantillon de un serait le
+travers inverse de celui traqué toute la journée.
+
+### Ce qui reste
+
+Le **magasin imbriqué** (~26,7 Go sous
+`...\library\qwen2.5\{blobs,manifests}`) existe toujours. Il n'est plus
+servi, donc plus nuisible, mais il occupe de la place et reste une
+bombe à retardement si un jour un serveur le reprend pour racine. Sa
+suppression demande de confirmer qu'il ne contient rien d'unique —
+décision de Cyril, non prise ici.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
