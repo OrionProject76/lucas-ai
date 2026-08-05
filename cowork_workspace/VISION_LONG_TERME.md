@@ -132,7 +132,8 @@ construis exactement ça, mais en vrai."*
 - Un seul cerveau, deux fenêtres d'accès — pas deux IA séparées
 - PC (RTX 5080 + Ryzen 7 9800X3D) = serveur/cerveau, traitement lourd
 - S25 Ultra = capteurs sensoriels (caméra, micro, GPS) puisque le PC n'a
-  ni webcam ni micro — contrainte matérielle confirmée et définitive
+  ni webcam ni micro — ~~contrainte matérielle confirmée et définitive~~
+  **RÉVISÉ le 05/08/2026, voir l'encadré juste en dessous**
 - Tunnel chiffré permanent entre les deux (protocole à définir en Phase
   Mobile — Tailscale/WireGuard envisagés), pour que Luca's soit
   disponible en continu, peu importe le réseau (WiFi maison, 4G/5G au
@@ -140,6 +141,35 @@ construis exactement ça, mais en vrai."*
 - Mémoire synchronisée : ce qui est capté sur mobile dans la journée
   (notes, contexte) alimente le même cerveau que celui consulté le soir
   sur PC
+
+> **⚠️ RÉVISION — le PC gagne ses propres capteurs (Cyril, 05/08/2026).**
+>
+> La phrase barrée ci-dessus disait « contrainte matérielle confirmée et
+> définitive ». Elle était vraie quand elle a été écrite, et elle ne l'est
+> plus : Cyril a décidé d'équiper le PC. Elle est **corrigée, pas
+> supprimée** — savoir qu'une contrainte a existé explique pourquoi tout
+> le pont mobile a été construit d'abord, ce qui reste la bonne décision.
+>
+> **Ce qui change** : le PC aura ses propres capteurs, en complément et
+> non en remplacement.
+>
+> | | Rôle | Usage |
+> |---|---|---|
+> | **S25 Ultra** | capteurs sensoriels **à l'extérieur** | mobilité — inchangé |
+> | **Speakerphone USB** (Jabra Speak2 55 MS ou équivalent) | micro + audio **PC** | à la maison, sans dépendre du téléphone |
+> | **Webcam PTZ motorisée** (OBSBOT Tiny 2/SE ou équivalent) | vision **PC** | à la maison, sans dépendre du téléphone |
+>
+> **Ce qui ne change pas** : « un seul cerveau, deux fenêtres d'accès ».
+> Un troisième jeu de capteurs n'ajoute pas une troisième IA. Le pont
+> audio reste unique (voir la précision du 02/08 ci-dessous) — le
+> speakerphone devient une source de plus qui y entre, pas un chemin
+> parallèle.
+>
+> **Matériel pas encore arrivé au 05/08/2026.** Rien n'est construit :
+> ni détection de mot de réveil, ni intégration webcam PC. Le cadrage
+> vit dans `IDEAS.md` (#90 à #93) et les prérequis de sécurité y sont
+> posés **avant** la construction, délibérément — voir #92, qui doit être
+> résolu sous peine que Luca déclenche une alerte sur son propre matériel.
 
 > **Précision — un seul pont audio, quelle que soit l'interface qui
 > écoute (clarifié le 02/08/2026, avant le scaffold de la PWA).**

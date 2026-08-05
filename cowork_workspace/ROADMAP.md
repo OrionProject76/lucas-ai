@@ -3782,6 +3782,183 @@ un préalable**, pas une option. Godot et Ollama se partagent la RTX 5080,
 et un doublon fausserait toute corrélation VRAM ↔ fermeture — qui est la
 piste la plus prometteuse sur le blocage principal.
 
+## 5.39 Tutoiement partout + audit « aucune capacité ne doit échouer en silence »
+
+### Où vit la consigne de tutoiement (question posée explicitement)
+
+**`config.py`**, dans `SYSTEM_PROMPT`, à deux endroits complémentaires :
+
+1. **section « Ta façon de parler »**, en tête du prompt — la consigne de
+   fond, avec la raison (« vous vous parlez en confiance, pas comme un
+   service client à un client ») ;
+2. **bloc « RÈGLE DE STYLE »**, tout à la fin — la répétition qui résiste à
+   l'historique, avec les formes exactes montrées.
+
+Les deux sont nécessaires : mesuré le 05/08/2026, la première seule donne
+15/15 sur conversation neuve et **0/15** face à l'historique réel (§5.32).
+
+Aucun garde-fou déterministe, sur demande explicite de Cyril : le
+tutoiement est du style, pas de la sécurité. `claims_action_success()`
+existe parce qu'une fausse confirmation d'action ment sur l'état de la
+machine ; un « vous » ne ment sur rien.
+
+### Les blocs injectés étaient déjà au tutoiement — sauf deux restes
+
+Audit de toutes les chaînes en dur (`core/`, `modules/`, `api/`,
+`memory/`, `ui/`, `config.py`). Les blocs de contexte récents (vision
+mobile, refus d'action, `FALSE_CLAIM_CORRECTION`, échec RAG) s'adressent au
+modèle *à propos de* Cyril, à la troisième personne — correct par
+construction. Deux exceptions trouvées et corrigées :
+
+- `config.py` : la description du bloc `[Contexte]` disait « quand vous
+  vous parlez ». Un prompt ne doit modéliser aucune forme d'adresse qu'il
+  ne veut pas voir ressortir.
+- `modules/voice_manager.py` : la phrase de démonstration `__main__`
+  disait « je suis Luca's. Comment puis-je vous aider ? ». Devenue
+  « Salut Cyril, c'est Luca. Tu m'entends bien ? ».
+
+### Mesure après durcissement — et ce qui résiste
+
+15 tirages, base isolée (isolation vérifiée : 38 messages avant = 38 après).
+
+| | Avant | Après |
+|---|---|---|
+| vouvoiement | 15/15 | **0/15** |
+| exemple recopié hors contexte | — | 1/15 |
+| relance de guichet | 14/15 | **8/15** |
+
+**L'objectif de Cyril est atteint** : plus aucun vouvoiement, y compris
+dans les blocs injectés (« sur ton PC » vérifié en conversation réelle).
+
+Deux défauts trouvés en test réel et corrigés au passage :
+- **le modèle recopiait un exemple hors contexte** — « Salut Luca »
+  recevait « Salut Cyril. Tu veux que je l'ouvre ? », alors que rien
+  n'était à ouvrir. Un exemple littéral pèse assez pour corriger le
+  vouvoiement (0/15 → 12/15) ; il pèse donc aussi assez pour être recopié.
+  Le prompt dit désormais que les exemples montrent une forme et ne se
+  recopient pas. 1/15 résiduel.
+- **« n'hésite pas » passait à travers** — la règle ne citait que la forme
+  vouvoyée « N'hésitez pas ». Les deux formes sont maintenant nommées.
+
+⚠️ **Ce qui résiste : la relance de guichet, à 8/15.** Le prompt l'interdit
+nommément, sous les deux formes, en fin de prompt. Le modèle continue. Ce
+n'est plus un problème de formulation — c'est la même limite que celle déjà
+mesurée le 02/08 (qwen2.5:7b à 1/5 sur une question introspective, contre
+4/5 pour gemma4 et qwen3.6), et Cyril a choisi de garder qwen2.5:7b en
+connaissance de cause. **Aucun mécanisme déterministe construit** : sa
+consigne était explicite, ne pas sur-ingénieriser un sujet de style.
+
+### Audit : où une capacité échoue-t-elle encore en silence ?
+
+Revue de tous les chemins de `_build_messages()` qui peuvent ne pas
+s'exécuter. **Finance, calculatrice et météo sont sains** — chacun injecte
+déjà un bloc explicite sur le cas vide ou en échec, et aucun ne peut lever
+(`load_directory` rend un manager vide, `get_current` rend `None`).
+
+**Un cas réel trouvé, et c'est le pire de la famille** : la recherche web.
+`get_summary()` rend une chaîne dans les **quatre** situations — résultats,
+zéro résultat, panne réseau, et **refus pour donnée identifiante**. Toutes
+étaient injectées sous la même étiquette :
+
+```
+RECHERCHE WEB RÉELLE (DuckDuckGo) : ...
+Appuie-toi UNIQUEMENT sur ces résultats réels.
+```
+
+Autrement dit : un refus de confidentialité — le mécanisme qui empêche
+l'IBAN de Cyril de partir chez DuckDuckGo — arrivait au modèle **présenté
+comme de vrais résultats de recherche, avec l'ordre de s'en servir**. Une
+panne DNS aussi.
+
+Ce n'est pas un silence, c'est **une étiquette fausse**, et c'est plus
+trompeur qu'un silence : rien n'invite à s'en méfier. `_build_messages`
+appelle désormais `get_summary_with_outcome()` et injecte quatre blocs
+distincts. Le refus dit explicitement que c'est une protection volontaire,
+pas une panne.
+
+`test_silent_failures.py` (nouveau, 7 tests) réunit les trois visages de
+cette famille — §5.31 (action non exécutée), §5.32 (RAG qui fait tomber la
+requête), §5.39 (étiquette fausse) — pour qu'une régression sur l'un fasse
+échouer un test nommé d'après le motif, pas d'après le module.
+
+**Règle qui s'en dégage, à opposer aux prochains câblages** : *toute
+capacité qui peut ne pas s'exécuter doit injecter un contexte explicite
+quand elle ne s'exécute pas — et ce contexte doit dire LAQUELLE des issues
+s'est produite.* Le silence n'est jamais neutre ; une étiquette fausse est
+pire.
+
+Suite complète : **1089 passés**.
+
+## 5.40 Voix : état technique réel, et capteurs propres au PC — cadrage seul
+
+Aucun code écrit dans cette section. Deux sujets, tous deux vérifiés puis
+documentés, sur demande explicite de Cyril.
+
+### Prosodie et émotion — vérifié dans le code, pas supposé
+
+Détail complet en `IDEAS.md` #94. Le fait qui compte :
+
+⚠️ **`modules/voice_manager.py` appelle `edge_tts.Communicate(text,
+self.voice)` — sans `rate`, sans `pitch`, sans `volume`.** Les trois
+réglages existent dans la bibliothèque installée (7.2.8) et **aucun n'est
+utilisé**. Luca parle aujourd'hui avec zéro contrôle prosodique, alors que
+trois boutons sont disponibles gratuitement.
+
+Et une limite dure, vérifiée dans la source : le SSML d'`edge_tts` est
+construit en dur et ne contient **que** `<prosody pitch rate volume>`.
+Aucun `<mstts:express-as>` — la balise de style émotionnel d'Azure. **Le
+style émotionnel n'est pas atteignable** avec cette bibliothèque, quelle
+que soit la manière de l'appeler. Piper, de son côté, offre
+`length_scale` (vitesse) et deux paramètres de variabilité, ni pitch ni
+émotion.
+
+Conséquence pour la feuille de route : « prosodie émotionnelle » reste un
+objectif réel (Layer 4 des specs d'origine), mais il faut distinguer un
+palier 1 **faisable aujourd'hui et non construit** (moduler
+vitesse/hauteur selon le mode AURA et l'heure — ce n'est PAS de
+l'émotion) d'un palier 2 qui exigerait de changer de moteur. ⚠️ Et la
+plupart des moteurs locaux expressifs sont des modèles de **clonage
+vocal**, interdits par la règle 11 — la contrainte réduit fortement le
+champ et devra être vérifiée moteur par moteur.
+
+### Le PC gagne ses propres capteurs — révision du Pilier 3
+
+`VISION_LONG_TERME.md` disait : « le PC n'a ni webcam ni micro —
+contrainte matérielle **confirmée et définitive** ». Cyril l'a révisée le
+05/08/2026. La phrase est **barrée et corrigée sur place, pas
+supprimée** : savoir que cette contrainte a existé explique pourquoi tout
+le pont mobile a été construit d'abord, ce qui reste la bonne décision.
+
+Le S25 Ultra n'est pas remplacé — il garde les capteurs *à l'extérieur*.
+Le PC gagne les siens (speakerphone USB, webcam PTZ) pour l'usage *à la
+maison*. Un seul cerveau, une source de capteurs de plus.
+
+**Matériel pas encore arrivé, aucun code écrit.** Coder à l'aveugle un
+pilote audio qu'on ne peut pas brancher produirait exactement le motif
+traqué depuis deux jours : des tests verts sur un comportement jamais
+observé. Quatre entrées de cadrage ajoutées à `IDEAS.md` :
+
+- **#90** — le matériel, les rôles, ce qui ne change pas
+- **#91** — mot de réveil : openWakeWord / Porcupine / Vosk comparés,
+  Whisper en fenêtre glissante écarté d'avance (transcrire en continu
+  pour détecter un mot est précisément ce qu'on veut éviter). Prérequis
+  posé : **valider d'abord la chaîne micro**, dont le bug du 05/08 montre
+  qu'elle n'est pas fiable — sinon on débuguera deux problèmes à la fois.
+- **#92** — ⚠️ **le prérequis de sécurité, et c'est le point important.**
+  Quand Luca ouvrira elle-même le micro pour guetter son mot de réveil,
+  elle deviendra, du point de vue de `privacy_shield.py`, exactement le
+  comportement qu'il doit signaler. Deux échecs symétriques et également
+  graves : la fausse alerte permanente (qui entraîne à ignorer les
+  vraies), et la liste blanche « c'est Luca » qui crée un angle mort où
+  un vrai espion passe — pire que pas de surveillance, parce que Cyril se
+  croirait protégé. Ce n'est pas le *périphérique* qui est légitime, c'est
+  **l'accès par un processus identifié, à un moment identifié, pour une
+  raison identifiée**. À résoudre AVANT activation.
+- **#93** — webcam PC : jamais de capture silencieuse, même règle que le
+  mobile. Aggravée ici, puisqu'une webcam filme la pièce et donc
+  potentiellement des personnes qui n'ont rien accepté. Le pilotage PTZ
+  est une action système, donc hors périmètre sans validation de Cyril.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

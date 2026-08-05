@@ -3889,6 +3889,76 @@ pire.
 
 Suite complète : **1089 passés**.
 
+## 5.40 Voix : état technique réel, et capteurs propres au PC — cadrage seul
+
+Aucun code écrit dans cette section. Deux sujets, tous deux vérifiés puis
+documentés, sur demande explicite de Cyril.
+
+### Prosodie et émotion — vérifié dans le code, pas supposé
+
+Détail complet en `IDEAS.md` #94. Le fait qui compte :
+
+⚠️ **`modules/voice_manager.py` appelle `edge_tts.Communicate(text,
+self.voice)` — sans `rate`, sans `pitch`, sans `volume`.** Les trois
+réglages existent dans la bibliothèque installée (7.2.8) et **aucun n'est
+utilisé**. Luca parle aujourd'hui avec zéro contrôle prosodique, alors que
+trois boutons sont disponibles gratuitement.
+
+Et une limite dure, vérifiée dans la source : le SSML d'`edge_tts` est
+construit en dur et ne contient **que** `<prosody pitch rate volume>`.
+Aucun `<mstts:express-as>` — la balise de style émotionnel d'Azure. **Le
+style émotionnel n'est pas atteignable** avec cette bibliothèque, quelle
+que soit la manière de l'appeler. Piper, de son côté, offre
+`length_scale` (vitesse) et deux paramètres de variabilité, ni pitch ni
+émotion.
+
+Conséquence pour la feuille de route : « prosodie émotionnelle » reste un
+objectif réel (Layer 4 des specs d'origine), mais il faut distinguer un
+palier 1 **faisable aujourd'hui et non construit** (moduler
+vitesse/hauteur selon le mode AURA et l'heure — ce n'est PAS de
+l'émotion) d'un palier 2 qui exigerait de changer de moteur. ⚠️ Et la
+plupart des moteurs locaux expressifs sont des modèles de **clonage
+vocal**, interdits par la règle 11 — la contrainte réduit fortement le
+champ et devra être vérifiée moteur par moteur.
+
+### Le PC gagne ses propres capteurs — révision du Pilier 3
+
+`VISION_LONG_TERME.md` disait : « le PC n'a ni webcam ni micro —
+contrainte matérielle **confirmée et définitive** ». Cyril l'a révisée le
+05/08/2026. La phrase est **barrée et corrigée sur place, pas
+supprimée** : savoir que cette contrainte a existé explique pourquoi tout
+le pont mobile a été construit d'abord, ce qui reste la bonne décision.
+
+Le S25 Ultra n'est pas remplacé — il garde les capteurs *à l'extérieur*.
+Le PC gagne les siens (speakerphone USB, webcam PTZ) pour l'usage *à la
+maison*. Un seul cerveau, une source de capteurs de plus.
+
+**Matériel pas encore arrivé, aucun code écrit.** Coder à l'aveugle un
+pilote audio qu'on ne peut pas brancher produirait exactement le motif
+traqué depuis deux jours : des tests verts sur un comportement jamais
+observé. Quatre entrées de cadrage ajoutées à `IDEAS.md` :
+
+- **#90** — le matériel, les rôles, ce qui ne change pas
+- **#91** — mot de réveil : openWakeWord / Porcupine / Vosk comparés,
+  Whisper en fenêtre glissante écarté d'avance (transcrire en continu
+  pour détecter un mot est précisément ce qu'on veut éviter). Prérequis
+  posé : **valider d'abord la chaîne micro**, dont le bug du 05/08 montre
+  qu'elle n'est pas fiable — sinon on débuguera deux problèmes à la fois.
+- **#92** — ⚠️ **le prérequis de sécurité, et c'est le point important.**
+  Quand Luca ouvrira elle-même le micro pour guetter son mot de réveil,
+  elle deviendra, du point de vue de `privacy_shield.py`, exactement le
+  comportement qu'il doit signaler. Deux échecs symétriques et également
+  graves : la fausse alerte permanente (qui entraîne à ignorer les
+  vraies), et la liste blanche « c'est Luca » qui crée un angle mort où
+  un vrai espion passe — pire que pas de surveillance, parce que Cyril se
+  croirait protégé. Ce n'est pas le *périphérique* qui est légitime, c'est
+  **l'accès par un processus identifié, à un moment identifié, pour une
+  raison identifiée**. À résoudre AVANT activation.
+- **#93** — webcam PC : jamais de capture silencieuse, même règle que le
+  mobile. Aggravée ici, puisqu'une webcam filme la pièce et donc
+  potentiellement des personnes qui n'ont rien accepté. Le pilotage PTZ
+  est une action système, donc hors périmètre sans validation de Cyril.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

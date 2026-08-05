@@ -929,3 +929,189 @@ que les actions s'exécutent sur le PC — le seul exécuteur existant
 aujourd'hui, quel que soit l'appareil depuis lequel Cyril les demande —
 pour que ce soit dit clairement plutôt que supposé par Cyril ou deviné
 par le modèle.
+
+---
+
+## #90 — Capteurs propres au PC (speakerphone + webcam PTZ) — cadrage, 05/08/2026
+
+**Décision actée par Cyril le 05/08/2026**, matériel pas encore arrivé.
+`VISION_LONG_TERME.md` Pilier 3 est révisé en conséquence : la contrainte
+« le PC n'a ni webcam ni micro, confirmée et définitive » n'est plus vraie.
+
+| Périphérique | Rôle | Statut |
+|---|---|---|
+| Speakerphone USB (Jabra Speak2 55 MS ou équiv.) | micro + audio PC | pas encore reçu |
+| Webcam PTZ motorisée (OBSBOT Tiny 2/SE ou équiv.) | vision PC | pas encore reçu |
+
+**Le S25 Ultra n'est pas remplacé** : il reste les capteurs *à
+l'extérieur* (mobilité). Le PC gagne les siens pour l'usage *à la
+maison*, sans dépendre du téléphone. Un seul cerveau, une source de
+capteurs de plus — pas une troisième IA.
+
+⚠️ **Aucun code écrit, délibérément.** Coder à l'aveugle un pilote audio
+ou une capture vidéo qu'on ne peut pas brancher pour tester produirait
+exactement le motif que ce projet traque depuis deux jours : des tests
+verts sur un comportement jamais observé en réel. Les entrées suivantes
+cadrent ce qu'il faudra construire **quand le matériel sera là**.
+
+---
+
+## #91 — Détection de mot de réveil (« Luca ») — options, rien de construit
+
+**Brique entièrement nouvelle**, elle n'existe pas dans le projet. Le
+micro du speakerphone doit écouter en permanence, **mais uniquement pour
+reconnaître un mot-clé** — aucune transcription complète tant que le mot
+n'est pas détecté. La distinction n'est pas une optimisation, c'est la
+condition pour qu'un micro ouvert en continu reste acceptable
+(`VISION_LONG_TERME.md` §4 identifie déjà « toujours écouter partout »
+comme le point de bascule à ne pas franchir sans garde-fou).
+
+### Options à comparer quand le matériel arrivera
+
+| Option | Empreinte | Mot personnalisé | Remarque |
+|---|---|---|---|
+| **openWakeWord** | CPU seul, quelques Mo, ONNX | oui (entraînement synthétique, sans enregistrer Cyril) | open source, actif, s'aligne sur Piper déjà en ONNX |
+| **Porcupine** (Picovoice) | très léger, très précis | oui, via un portail en ligne | licence gratuite limitée, dépendance à un service tiers — à peser contre le « local par défaut » |
+| **Whisper en fenêtre glissante** | GPU/CPU lourd | n/a | **écarté d'avance** : transcrire en continu pour détecter un mot est exactement ce qu'on veut éviter, et mobiliserait la VRAM déjà partagée entre Ollama et Godot |
+| **Vosk** (petit modèle) | CPU, ~50 Mo | via grammaire restreinte | intermédiaire, moins spécialisé que les deux premiers |
+
+**Piste privilégiée à ce stade : openWakeWord** — CPU seul (la RTX 5080
+est déjà disputée), open source, et le format ONNX est déjà présent dans
+le projet via Piper. À confirmer par un test réel, pas par cette ligne.
+
+### Compromis à mesurer, pas à supposer
+
+- **Latence** entre le mot prononcé et le début de l'écoute réelle.
+- **Faux positifs** : « Luca » est court et proche de mots courants. Un
+  faux réveil ouvre le micro pour de vrai — c'est le coût qui compte,
+  pas le taux brut.
+- **Faux négatifs** : devoir répéter trois fois tue l'usage.
+- **VRAM** : l'objectif est zéro. Toute option qui en consomme part avec
+  un handicap.
+
+⚠️ **Prérequis** : le bug micro du 05/08 (Cyril devait parler fort,
+`autoGainControl` rendu explicite) montre que la chaîne d'entrée n'est
+pas encore fiable. La valider **avant** d'empiler un détecteur dessus —
+sinon on débuguera deux problèmes à la fois.
+
+---
+
+## #92 — PRÉREQUIS SÉCURITÉ : Guardian doit reconnaître le matériel de Luca
+
+**À résoudre AVANT d'activer la détection micro/caméra sur ce nouveau
+matériel — pas après.**
+
+`security/privacy_shield.py` a pour mission (specs d'origine, et §4 de
+`VISION_LONG_TERME.md`) de **détecter tout accès non autorisé au micro et
+à la caméra**. Le jour où Luca ouvre elle-même le micro du speakerphone
+pour guetter son mot de réveil, elle devient, du point de vue de ce
+module, **exactement le comportement qu'il est censé signaler**.
+
+Deux échecs symétriques, et les deux sont graves :
+
+- **Fausse alerte** : Luca signale son propre micro comme un accès
+  suspect. Au-delà du ridicule, une alerte qui crie au loup en
+  permanence entraîne à ignorer les vraies.
+- **Angle mort** : on met le micro en liste blanche « parce que c'est
+  Luca », et un vrai logiciel espion qui l'ouvre passe inaperçu. Ce
+  serait pire que de ne rien surveiller, parce que Cyril se croirait
+  protégé.
+
+**Ce qu'il faudra donc établir** : ce n'est pas *le périphérique* qui est
+légitime, c'est **l'accès par un processus identifié, à un moment
+identifié, pour une raison identifiée**. Piste à instruire — corréler
+l'accès avec l'état interne de Luca (elle sait si elle écoute) plutôt que
+de se fier au seul nom du processus, qu'un logiciel malveillant peut
+usurper.
+
+Ce point rejoint la doctrine déjà posée dans `CLAUDE.md` : « la liberté
+d'action de Luca's est conditionnée à sa capacité de protection ». Un
+micro toujours ouvert est une extension de liberté ; Guardian et Privacy
+Shield en sont la contrepartie, et ils doivent la précéder.
+
+---
+
+## #93 — Vision webcam PC : jamais de capture silencieuse
+
+Même principe que celui **déjà acté pour la caméra mobile** le 02/08/2026
+(`allow_screen_capture`) et re-vérifié le 05/08 (§5.31) : **pas de vision
+continue par défaut**. La webcam PTZ ne capture que sur déclenchement
+explicite — bouton, demande formulée, ou mot de réveil.
+
+Une webcam motorisée aggrave l'enjeu par rapport à une capture d'écran :
+elle filme la pièce, donc potentiellement d'autres personnes que Cyril,
+qui n'ont rien accepté. La règle vaut donc au moins aussi fort ici, et
+probablement plus.
+
+À décider avec Cyril quand le matériel arrivera : témoin lumineux
+physique ou indication à l'écran pendant une capture ? Le pilotage PTZ
+(orientation motorisée) est un cas d'**action système**, donc une entrée
+de liste blanche Decision Engine — **hors périmètre tant que Cyril ne l'a
+pas validée**.
+
+---
+
+## #94 — Prosodie et émotion dans la voix — état technique réel, 05/08/2026
+
+Vérifié dans le code des bibliothèques installées, pas supposé. Objectif
+**confirmé réel** (Layer 4 des specs d'origine), **séquencé après** la
+stabilisation du socle vocal — les correctifs mute / micro / barge-in du
+05/08 doivent d'abord être validés par Cyril en usage réel.
+
+### Ce que les deux moteurs permettent aujourd'hui
+
+**edge_tts 7.2.8** — `Communicate(text, voice, rate, volume, pitch)` :
+
+| Paramètre | Défaut | Effet |
+|---|---|---|
+| `rate` | `"+0%"` | vitesse d'élocution |
+| `volume` | `"+0%"` | volume |
+| `pitch` | `"+0Hz"` | hauteur de voix |
+
+Ces trois-là deviennent un `<prosody>` SSML. **Il n'y a rien d'autre** :
+le SSML est construit en dur dans `communicate.py`, et ne contient
+**aucun** `<mstts:express-as>` — la balise de *style émotionnel* d'Azure
+(« cheerful », « sad », « empathetic »). Elle existe dans le service
+Azure payant, elle n'est **pas atteignable** par cette bibliothèque.
+
+**Piper** — `SynthesisConfig(speaker_id, length_scale, noise_scale,
+noise_w_scale)` :
+
+| Paramètre | Effet |
+|---|---|
+| `length_scale` | durée des phonèmes = vitesse |
+| `noise_scale`, `noise_w_scale` | variabilité de l'intonation |
+| `speaker_id` | voix, sur les modèles multi-locuteurs |
+
+Ni pitch, ni émotion. Piper synthétise une voix neutre par conception.
+
+### Où on en est vraiment
+
+⚠️ **`modules/voice_manager.py` appelle `edge_tts.Communicate(text,
+self.voice)`** — sans `rate`, sans `pitch`, sans `volume`. **Aucun des
+trois réglages disponibles n'est utilisé.** Luca parle donc aujourd'hui
+avec zéro contrôle prosodique, alors que trois boutons existent
+gratuitement.
+
+### Trois paliers, du réel au lointain
+
+1. **Palier 1 — prosodie mécanique (faisable aujourd'hui, non construit).**
+   Brancher `rate`/`pitch`/`volume` sur le contexte déjà détecté : plus
+   vite en mode Working, plus lentement en Learning, plus bas le soir.
+   Suite naturelle du ton adaptatif textuel. **Ce ne sera pas de
+   l'émotion** — une voix plus rapide n'est pas une voix joyeuse — mais
+   c'est réel, gratuit, et testable.
+2. **Palier 2 — style émotionnel.** Hors de portée des deux moteurs
+   actuels. Exigerait Azure Speech payant (donc du texte chez Microsoft
+   sous contrat, à confronter à la règle 3) ou un moteur local expressif.
+   ⚠️ La plupart des candidats locaux expressifs sont des modèles de
+   **clonage vocal**, interdits par la règle 11 de `CLAUDE.md`. Cette
+   contrainte réduit fortement le champ et doit être vérifiée moteur par
+   moteur avant toute évaluation.
+3. **Palier 3 — émotion *choisie* par Luca** selon ce qu'elle comprend de
+   la situation. Suppose les deux précédents, plus un modèle de décision
+   sur le ton. Objectif réel du projet, pas un chantier ouvert.
+
+**Rien n'est construit ici** — état des lieux uniquement, pour que Cyril
+sache exactement où ça en est plutôt que de croire que c'est déjà fait ou
+que c'est trivial.
