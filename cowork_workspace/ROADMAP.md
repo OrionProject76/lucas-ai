@@ -4941,6 +4941,107 @@ elle évite qu'une réactivation soit reportée par précaution infondée.
 | `modules/web_search.py` | 98 % |
 | `core/lucas_core.py` | 97 % |
 
+## 5.51 Le traitement des demandes sort de Cowork — tâche locale, 05/08/2026
+
+La tâche Cowork de 22 h (vérification de `cowork_workspace/requests/`) ne
+pouvait **structurellement** pas fonctionner : les sessions Cowork
+tournent dans le cloud, sans accès au pont bureau, donc sans accès à
+`C:\OrionAI`. Ce n'était pas une panne réseau à dépanner — la bonne
+réponse était de sortir le traitement de Cowork, pas de le forcer.
+
+### Vérifié avant de construire, comme demandé
+
+`claude` en ligne de commande (v2.1.222) possède bien un mode
+non-interactif. Testé pour de vrai avant d'écrire quoi que ce soit :
+
+```
+claude -p "…" --allowedTools "Read" --permission-mode dontAsk
+  -> réponse correcte, code retour 0
+```
+
+Options confirmées : `-p/--print`, `--allowedTools`,
+`--disallowedTools`, `--permission-mode` (`acceptEdits`, `auto`,
+`bypassPermissions`, `manual`, `dontAsk`, `plan`), `--add-dir`.
+
+⚠️ **`workflow_requests_reports.md` est introuvable dans le dépôt** —
+recherché à la racine et récursivement. Il doit vivre côté Cowork, hors
+de portée d'ici. La documentation a donc été portée là où elle est
+lisible et versionnée : `cowork_workspace/requests/README.md` et cette
+section.
+
+### Trois gardes, par ordre d'importance
+
+Confier à une tâche automatique le droit d'invoquer Claude Code sans
+personne devant l'écran mérite plus qu'un script qui marche.
+
+1. **Aucune invocation s'il n'y a rien à traiter.** C'est la garde
+   principale : la tâche s'exécute à chaque ouverture de session et tous
+   les soirs, mais Claude Code n'est lancé **que** si un fichier attend.
+   Sans demande, le script lit un dossier et s'arrête — zéro jeton, zéro
+   écriture, zéro risque. Vérifié : `aucune demande en attente`.
+2. **Outils restreints** — `Read`, `Glob`, `Grep`, `Write` autorisés ;
+   `Bash`, `Edit`, `NotebookEdit` explicitement refusés. Il ne peut donc
+   ni modifier un fichier existant par l'outil d'édition, ni lancer une
+   commande.
+3. **Le renommage en `_DONE` est mécanique**, fait par le script. Le
+   confier au modèle l'exposerait à être oublié, ou appliqué à tort à une
+   demande qui n'a rien produit.
+
+Plus un contrôle après coup : les quatre documents de référence sont
+empreintés **avant et après**. Toute modification est signalée dans le
+journal — le protocole les déclare en lecture seule.
+
+Et une règle qui compte autant que les gardes : **une demande qui ne
+produit aucun rapport reste en attente**, elle n'est pas marquée traitée.
+Sinon elle disparaîtrait du radar sans avoir rien produit — exactement le
+motif « échec silencieux » traqué toute la journée (§5.39).
+
+### Validé de bout en bout, par le Planificateur lui-même
+
+Une vraie demande a été déposée, puis traitée :
+
+```
+15:13:06  1 demande(s) en attente
+15:13:06  --- traitement : request_20260805_test_mecanisme.md
+15:14:00      rapport déposé : Verification_Mecanisme_2026-08-05.md
+15:14:00      demande marquée : request_20260805_test_mecanisme_DONE.md
+```
+
+Le rapport produit est **exact** — il compte correctement les 50 sections
+`## 5.x`, identifie la plus récente, et cite les deux erreurs
+d'instrument demandées avec leurs numéros de section. `git status`
+confirme qu'aucun document protégé n'a bougé.
+
+Puis lancement **par le Planificateur** (`Start-ScheduledTask`), qui est
+le seul test prouvant la chaîne complète : `LastTaskResult: 0`.
+
+### Ce qui a coincé, et qui vaut d'être noté
+
+Le script a d'abord refusé de s'analyser : `Accolade fermante manquante`
+sur une ligne parfaitement valide. Cause — **PowerShell 5.1 lit un `.ps1`
+en ANSI quand il n'y a pas de BOM**, et les caractères accentués et
+box-drawing du fichier étaient alors mal décodés, cassant l'analyse
+syntaxique. Réécrit en UTF-8 **avec BOM**.
+
+C'est la même famille que tout le reste de la journée : un mécanisme qui
+dépend d'un encodage implicite plutôt que déclaré.
+
+### Fichiers et désactivation
+
+- `cowork_request_runner.ps1` — le traitement (UTF-8 **avec BOM**, requis)
+- `start_cowork_requests_hidden.vbs` — fenêtre cachée. Attend la fin
+  (`True`), contrairement au lanceur du serveur : le traitement est
+  ponctuel, et attendre permet au Planificateur de connaître le vrai code
+  de retour
+- Tâche **`LucasCoworkRequests`** — deux déclencheurs : ouverture de
+  session **et** 22 h. Le second reprend l'horaire de l'ancienne tâche
+  Cowork, pour qu'une demande déposée dans la journée ne dorme pas
+  jusqu'au prochain logon
+- Journal : `data/logs/cowork_requests.log`
+
+**Désactiver** : `Disable-ScheduledTask -TaskName "LucasCoworkRequests"`.
+**Supprimer** : `Unregister-ScheduledTask -TaskName "LucasCoworkRequests" -Confirm:$false`.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
