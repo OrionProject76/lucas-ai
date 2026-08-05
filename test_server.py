@@ -188,8 +188,15 @@ def test_status_confirms_the_server_runs(client) -> None:
 def test_system_returns_the_world_model_snapshot(client) -> None:
     response = client.get("/system")
     assert response.status_code == 200
+    # `active_process` ajouté le 05/08/2026 (détection AURA — un terminal
+    # affiche ce que Cyril y écrit, jamais son propre nom). Exposé ici au
+    # même titre qu'`active_window`, et strictement moins révélateur que
+    # lui : « chrome » ne dit rien, « releve_bancaire.pdf » si. Cette route
+    # sert le téléphone de Cyril sur le réseau local, jamais le cloud —
+    # la règle 3 de CLAUDE.md porte sur ce qui SORT de la machine.
     assert set(response.json()) == {
-        "cpu_percent", "ram_percent", "gpu_percent", "active_window", "local_time",
+        "cpu_percent", "ram_percent", "gpu_percent", "active_window",
+        "active_process", "local_time",
     }
 
 

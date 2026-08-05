@@ -3438,6 +3438,101 @@ en clair dans `data/logs/server_startup.log`. La régénérer dans `.env`
 reste à la main de Cyril — et c'est le moment logique pour le faire, en
 même temps qu'un éventuel changement d'appairage.
 
+## 5.34 Modes AURA — les 8 modes détectés, 05/08/2026
+
+Priorité 3 de la session de nuit. Le MVP du 04/08 (§5.13) en couvrait 2 ;
+son commentaire d'en-tête réservait les 6 autres à une session avec Cyril.
+Il a levé cette réserve explicitement.
+
+### Le titre de fenêtre ne suffisait pas — trouvé sur la vraie machine
+
+Avant d'écrire une seule liste de marqueurs, relevé de ce que Windows
+produit réellement ici (`Get-Process | Where MainWindowTitle`) :
+
+```
+windowsterminal   ⠐ Valider avatar Godot et relancer serveur API
+notepad           *Nouveau Document texte (0).txt – Bloc-notes
+chrome            Intégration HERMES au projet Luca's - Claude - Google Chrome
+systemsettings    Paramètres
+```
+
+Le premier règle la question : **un terminal affiche ce que Cyril y écrit,
+jamais son propre nom.** Le marqueur `"windows terminal"` de la liste
+existante ne pouvait donc pas le voir, et n'aurait jamais pu. Aucune
+quantité de marqueurs de titre ne corrige ça.
+
+D'où l'ajout de `active_process` au snapshot (`core/world_model.py`) :
+le nom du process est stable quoi que l'utilisateur écrive. Les deux
+sources sont conservées, parce qu'aucune ne remplace l'autre — pour tout
+ce qui vit dans un navigateur (YouTube, Netflix, une doc), le process vaut
+toujours « chrome » et seul le titre porte l'information.
+
+`_get_active_process_name()` est en **lecture seule** :
+`GetWindowThreadProcessId` interroge une fenêtre, il n'en manipule aucune.
+Rien à voir avec le registre d'API interdit par `CLAUDE.md`
+(`SetForegroundWindow`, `ShowWindow`, hooks) — et le module appelait déjà
+`win32gui.GetForegroundWindow()` deux lignes plus haut.
+
+### Précédence explicite entre modes simultanés
+
+Un Discord ouvert par-dessus un jeu, une doc à côté d'une visio : plusieurs
+modes correspondent souvent. L'ordre est écrit, pas laissé au hasard de
+l'ordre de déclaration :
+
+`MEETING` → `GAMING` → `CREATING` → `WORKING` → `LEARNING` → `SOCIAL` →
+`ENTERTAINMENT`
+
+Le critère est le **coût d'une interruption mal placée** : quelqu'un attend
+en face (meeting) prime sur du plein écran (gaming), qui prime sur une
+concentration fragile (creating), et le divertissement ferme la marche
+parce qu'il est le plus interruptible. `DEEP_FOCUS` reste au-dessus de
+tout : il vient d'une commande explicite, et aucune fenêtre ne doit pouvoir
+annuler silencieusement une demande de concentration.
+
+**Un cas ambigu traité à part** : YouTube sert autant un clip qu'un cours.
+Un titre contenant « tutoriel », « tutorial », « how to », « cours »
+bascule vers `LEARNING`. L'exception ne s'applique qu'à `ENTERTAINMENT` —
+un tutoriel ouvert pendant une visio reste une visio (testé).
+
+### Deux pièges évités, dont un déjà payé
+
+- **Marqueurs spécifiques** — leçon du 04/08 : « excel » en sous-chaîne nue
+  déclenchait WORKING sur « Wordle - The New York Times ». Les nouveaux
+  marqueurs suivent la même discipline, et les faux positifs connus sont
+  verrouillés par des tests.
+- **Process comparés en ÉGALITÉ, pas en sous-chaîne** : `steamwebhelper`
+  tourne en permanence dès que Steam est ouvert, y compris quand Cyril ne
+  joue pas. En sous-chaîne, « steam » l'aurait fait passer pour du jeu en
+  continu.
+
+### Vérifié sur l'état réel, pas seulement sur des chaînes
+
+Les 8 fenêtres réellement ouvertes sur la machine ont été passées au
+détecteur : **une seule déclenche un mode** (le terminal → WORKING, via le
+process), et aucune ne produit de faux positif. `test_aura_real_windows.py`
+(nouveau) fige ces titres relevés tels quels — la distinction avec
+`test_aura_modes.py` (mécanique, titres inventés) est délibérée : le bug de
+« Wordle » était invisible aux tests synthétiques, qui n'écrivaient que des
+titres ressemblant à ce que le code attendait.
+
+Deux tests existants ont été rectifiés parce que leur prémisse a changé,
+pas parce qu'ils échouaient à tort : ils utilisaient « YouTube - Google
+Chrome » et « ...- Reddit » comme exemples de fenêtres **neutres**. YouTube
+est désormais ENTERTAINMENT et Reddit SOCIAL, par conception. Remplacés par
+« Paramètres », un titre relevé sur la machine qui ne décrit aucune des 8
+situations.
+
+### Périmètre verrouillé
+
+Un mode ne donne droit qu'à **un ton différent** (`MODE_TONE_HINTS`).
+Aucune action système : filtrer des notifications, régler un volume,
+fermer des onglets seraient autant d'entrées de plus dans la liste blanche
+de `core/decision_engine.py`, où une seule existe (§5.25). `IDEAS.md` §3
+est mis à jour dans ce sens — et une ligne Deep Focus dupliquée y a été
+supprimée au passage.
+
+Suite complète : **1074 passés**.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

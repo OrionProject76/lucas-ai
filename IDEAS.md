@@ -162,13 +162,20 @@ Visage low-poly stylisé, shaders néon cyan/bleu avec glow. Flottement organiqu
 
 ### Les 8 Modes AURA Luca's
 
-**MVP réduit construit et testé le 04/08/2026** (`core/aura_modes.py`,
-voir `ROADMAP.md` §5.13) : Working et Deep Focus, DÉTECTION uniquement —
-ni l'un ni l'autre n'a son "Comportement" câblé (notifications filtrées,
-musique lo-fi, compte à rebours...), ce sont de vraies actions système
-qui n'existent pas encore. Les 6 autres modes ci-dessous restent
-catalogués, prêts à suivre le même patron (une liste de déclencheurs ->
-un `AuraMode`), mais ne sont pas construits.
+**Les 8 modes sont détectés depuis le 05/08/2026** (`core/aura_modes.py`,
+voir `ROADMAP.md` §5.34). Working et Deep Focus dataient du 04/08 (§5.13,
+MVP réduit) ; les 6 autres ont été construits sur demande explicite de
+Cyril, avec une précédence documentée entre modes simultanés et une
+détection à deux sources (titre de fenêtre + nom du process).
+
+⚠️ **DÉTECTION uniquement — aucun "Comportement" de la colonne de droite
+n'est câblé, et c'est délibéré.** Filtrer des notifications, lancer une
+musique, régler une luminosité, fermer des onglets : ce sont de vraies
+actions système. Chacune serait une entrée de plus dans la liste blanche
+de `core/decision_engine.py`, où une seule existe à ce jour (lancement
+d'application, §5.25). Un mode détecté ne donne droit qu'à **un ton
+différent** dans les réponses de Luca — rien d'autre, tant que Cyril n'a
+pas validé d'élargir la liste blanche.
 
 | Mode | Déclencheur | Comportement |
 |---|---|---|
@@ -180,7 +187,6 @@ un `AuraMode`), mais ne sont pas construits.
 | 📚 Learning | Tutoriel/doc | Explications adaptatives, flashcards, quiz |
 | 💬 Social | Messages/réseaux | Réponses suggérées, résumé conversations |
 | 🧘 Deep Focus | Commande "focus" | **Détection ✅ (04/08/2026)** — Tout bloqué, musique lo-fi, compte à rebours : non câblé |
-| 🧘 Deep Focus | Commande "focus" | Tout bloqué, musique lo-fi, compte à rebours |
 
 ---
 

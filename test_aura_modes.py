@@ -38,7 +38,7 @@ def test_working_is_detected_for_various_professional_apps(engine, window_title)
 
 
 def test_no_mode_for_an_unrelated_window(engine) -> None:
-    assert engine.detect("YouTube - Google Chrome") == AuraMode.NONE
+    assert engine.detect("Paramètres") == AuraMode.NONE
 
 
 def test_no_mode_for_an_empty_window_title(engine) -> None:
@@ -59,7 +59,7 @@ def test_detection_is_case_insensitive(engine) -> None:
     [
         "Wordle - The New York Times - Mozilla Firefox",
         "Word Search Puzzle - jeu gratuit - Google Chrome",
-        "Terminal illness support group - Reddit",
+        "Terminal illness support group - Google Chrome",
         "Excel dans la vie - blog motivation - Google Chrome",
     ],
 )
@@ -94,7 +94,7 @@ def test_deep_focus_stays_active_regardless_of_the_window_afterwards(engine) -> 
     silencieusement par un simple changement de fenêtre.
     """
     engine.handle_command("concentre-toi")
-    assert engine.detect("YouTube - Google Chrome") == AuraMode.DEEP_FOCUS
+    assert engine.detect("Paramètres") == AuraMode.DEEP_FOCUS
     assert engine.detect("main.py - Visual Studio Code") == AuraMode.DEEP_FOCUS
 
 
@@ -103,7 +103,7 @@ def test_an_explicit_command_deactivates_deep_focus(engine) -> None:
     change = engine.handle_command("désactive le mode focus")
 
     assert change == AuraModeChange(AuraMode.NONE, "commande explicite")
-    assert engine.detect("YouTube - Google Chrome") == AuraMode.NONE
+    assert engine.detect("Paramètres") == AuraMode.NONE
 
 
 def test_deactivating_deep_focus_lets_working_resume(engine) -> None:
@@ -115,7 +115,7 @@ def test_deactivating_deep_focus_lets_working_resume(engine) -> None:
 
 def test_an_unrelated_sentence_does_not_change_anything(engine) -> None:
     assert engine.handle_command("quel temps fait-il ?") is None
-    assert engine.detect("YouTube - Google Chrome") == AuraMode.NONE
+    assert engine.detect("Paramètres") == AuraMode.NONE
 
 
 def test_command_matching_is_case_insensitive(engine) -> None:

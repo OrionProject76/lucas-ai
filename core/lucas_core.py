@@ -253,7 +253,9 @@ class LucasCore:
         """
         morceaux: list[str] = []
 
-        mode = self.aura.detect(snapshot.get("active_window", ""))
+        mode = self.aura.detect(
+            snapshot.get("active_window", ""), snapshot.get("active_process", "")
+        )
         indication = tone_hint(mode)
         if indication:
             morceaux.append(indication)

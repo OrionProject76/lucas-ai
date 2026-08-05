@@ -34,6 +34,16 @@ def get_snapshot() -> dict:
         "ram_percent": psutil.virtual_memory().percent,
         "gpu_percent": _get_gpu_load(),
         "active_window": _get_active_window_title(),
+        # ⚠️ Ajouté le 05/08/2026 en construisant les modes AURA. Le titre
+        # SEUL ne suffit pas : sur cette machine, le terminal actif
+        # s'intitulait « ⠐ Valider avatar Godot et relancer serveur API » —
+        # aucune trace de « terminal », donc invisible pour une détection
+        # par titre. Le nom du process, lui, est stable quoi que
+        # l'utilisateur écrive dans sa fenêtre. Les deux sont conservés :
+        # le titre reste indispensable pour tout ce qui vit dans un
+        # navigateur (YouTube, Netflix, une doc), où le process vaut
+        # toujours « chrome ».
+        "active_process": _get_active_process_name(),
         # ⚠️ Trouvé en usage réel (Cyril, 02/08/2026) : Luca's n'avait
         # accès à l'heure réelle NULLE PART dans son contexte. Face à une
         # question sur l'heure, elle inventait une valeur plausible ("il
@@ -84,6 +94,35 @@ def _get_active_window_title() -> str:
     except Exception:  # noqa: BLE001 — le World Model ne doit jamais faire
         # tomber l'appelant : une info moins précise vaut mieux qu'un crash.
         return "Inconnu"
+
+
+def _get_active_process_name() -> str:
+    """
+    Nom du process propriétaire de la fenêtre active, sans extension
+    (« chrome », « notepad »), chaîne vide si illisible.
+
+    LECTURE SEULE. `GetWindowThreadProcessId` interroge une fenêtre, il
+    n'en manipule aucune : rien à voir avec le registre d'API interdit par
+    CLAUDE.md (`SetForegroundWindow`, `ShowWindow`, hooks). Le module
+    utilise déjà `win32gui.GetForegroundWindow()` juste au-dessus, dans le
+    même esprit.
+
+    Toute panne rend "" : le World Model ne doit jamais faire tomber son
+    appelant, une info manquante vaut mieux qu'une exception.
+    """
+    try:
+        import psutil
+        import win32gui
+        import win32process
+
+        hwnd = win32gui.GetForegroundWindow()
+        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+        if not pid:
+            return ""
+        nom = psutil.Process(pid).name()
+        return nom[:-4].lower() if nom.lower().endswith(".exe") else nom.lower()
+    except Exception:  # noqa: BLE001 — voir docstring
+        return ""
 
 
 # Événements internes à Lucas : ils décrivent sa propre plomberie, pas
