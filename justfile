@@ -140,6 +140,25 @@ clean:
 forget-last:
     python -c "from memory.memory_manager import MemoryManager; m=MemoryManager(); print(f'{m.forget_last_exchange()} message(s) oublié(s)')"
 
+# Resynchroniser les copies de travail Cowork avec les vrais documents
+#
+# cowork_workspace/ contient des COPIES des 4 documents de référence, pour
+# que l'outil Cowork y accède sans avoir de droits sur la racine du projet
+# (permissions volontairement réduites). Elles divergent dès qu'un document
+# racine est modifié — c'était le cas de 95 000 caractères sur ROADMAP.md
+# au 05/08/2026.
+#
+# ⚠️ Sens unique, racine -> cowork, jamais l'inverse : la racine est la
+# source de vérité. Une copie modifiée dans cowork_workspace sera écrasée,
+# c'est voulu — l'alternative serait deux originaux, donc aucun.
+#
+# Non automatisé à chaque commit délibérément : un hook qui réécrit des
+# fichiers pendant un commit laisse l'arbre de travail sale ou modifie
+# silencieusement ce qui est validé. Une commande explicite est plus sûre
+# qu'un automatisme surprenant — voir ROADMAP.md §5.37.
+sync-docs:
+    python -c "import shutil; [shutil.copy2(f, 'cowork_workspace/' + f) for f in ['ROADMAP.md', 'CLAUDE.md', 'IDEAS.md', 'VISION_LONG_TERME.md']]; print('4 documents resynchronises vers cowork_workspace/')"
+
 # Rapport matinal manuel
 report:
     python -c "from lucas_daemon import LucasDaemon; d=LucasDaemon(); d.generate_morning_report()"
