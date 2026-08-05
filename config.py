@@ -22,7 +22,15 @@ except ImportError:
 # résolution : Windows résout « localhost » en IPv6 (::1) d'abord, Ollama
 # n'écoute qu'en IPv4, et chaque appel attend l'échec avant de basculer.
 # Ce surcoût était payé par CHAQUE requête — chat, vision, embeddings.
-OLLAMA_HOST = "http://127.0.0.1:11434"
+#
+# ⚠️ Surchargeable par variable d'environnement depuis le 05/08/2026.
+# La valeur restait codée en dur alors que `OPENAI_API_KEY` et `API_TOKEN`
+# se lisent depuis l'environnement juste en dessous — incohérence trouvée
+# en essayant de mesurer si la suite de tests dépend d'un Ollama vivant :
+# poser `OLLAMA_HOST` dans l'environnement ne changeait rien, et la mesure
+# ne mesurait donc rien (ROADMAP.md §5.42). Le défaut est inchangé, seule
+# la possibilité de le surcharger est ajoutée.
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 OLLAMA_URL = f"{OLLAMA_HOST}/api/chat"
 # ⚠️ Tag explicite obligatoire. « qwen2.5 » sans tag ne correspond à
 # aucun modèle exactement : Ollama devine « qwen2.5:latest », et cette

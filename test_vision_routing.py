@@ -114,6 +114,34 @@ class _FakeMemory(MemoryDouble):
 
 
 @pytest.fixture
+def classifieur_ecran(monkeypatch):
+    """
+    Force le classifieur d'intention à répondre « ÉCRAN ».
+
+    ⚠️ Posé le 05/08/2026. Ces tests-là portent sur CE QUI SE PASSE quand
+    la vision se déclenche — l'ordre des blocs, le plafond d'historique,
+    le refus mobile. Ils ne portent PAS sur la question de savoir si le
+    classifieur se déclenche, qui est le sujet de `test_intent.py`.
+
+    Sans ce stub, ils dépendaient d'un vrai appel à Ollama. Mesuré : avec
+    Ollama injoignable, 11 tests rouges et la suite 13 fois plus lente
+    (452 s contre 35 s), chaque appel attendant un timeout de connexion.
+    Un test qui devient rouge parce qu'un service externe dort ne protège
+    plus rien — on apprend à l'ignorer.
+
+    Le repli mots-clés (imposé globalement par conftest.py) ne suffit pas
+    ici : plusieurs de ces formulations ne nomment l'écran nulle part,
+    c'est précisément pourquoi le classifieur LLM existe.
+    """
+    from core import intent
+
+    intent._CACHE.clear()
+    monkeypatch.setattr(intent, "_ask_classifier", lambda question, context="": "ECRAN")
+    yield
+    intent._CACHE.clear()
+
+
+@pytest.fixture
 def core(monkeypatch):
     monkeypatch.setattr(lucas_core, "get_snapshot", dict)
     monkeypatch.setattr(
@@ -511,7 +539,7 @@ def core_with_history(monkeypatch):
     return instance
 
 
-def test_vision_block_sits_just_before_the_question(core_with_history, monkeypatch):
+def test_vision_block_sits_just_before_the_question(core_with_history, monkeypatch, classifieur_ecran):
     """
     LE test qui manquait. L'observation de l'écran doit être le dernier
     contexte que le modèle lise avant la question — pas le premier.
@@ -532,7 +560,7 @@ def test_vision_block_sits_just_before_the_question(core_with_history, monkeypat
     )
 
 
-def test_history_comes_before_the_observation(core_with_history, monkeypatch):
+def test_history_comes_before_the_observation(core_with_history, monkeypatch, classifieur_ecran):
     """
     L'ordre inverse est celui qui a cassé l'application : 4 messages
     système dont la vision, puis 87 messages d'historique par-dessus.
@@ -571,7 +599,7 @@ def test_the_question_is_kept_when_vision_is_off(core_with_history, monkeypatch)
     assert messages[-1]["content"] == "c'est écrit quoi ?"
 
 
-def test_history_is_shortened_when_vision_fires(core_with_history, monkeypatch):
+def test_history_is_shortened_when_vision_fires(core_with_history, monkeypatch, classifieur_ecran):
     """
     La seconde moitié du bug. Le bloc bien placé ne suffisait pas : avec
     100 messages d'historique — dont douze réponses « pourriez-vous me
@@ -638,6 +666,18 @@ def test_history_without_vision_is_longer_than_with(core_with_history, monkeypat
     déclenche l'écran. C'était l'intention derrière l'ancien test ; c'est
     « tout, sans limite » qui était faux, pas « plus ».
     """
+    # ⚠️ Ce test COMPARE deux questions, une ordinaire et une visuelle :
+    # le stub `classifieur_ecran`, qui répond « ÉCRAN » à tout, le casserait
+    # en faisant déclencher la vision sur les deux. Le classifieur doit donc
+    # répondre selon la question — déterministe, mais pas constant.
+    from core import intent
+
+    intent._CACHE.clear()
+    monkeypatch.setattr(
+        intent, "_ask_classifier",
+        lambda question, context="": "ECRAN" if "écrit" in question else "AUCUN",
+    )
+
     ordinaire = core_with_history._build_messages("quelle heure il est", "local")
     ordinaire_old = [
         m for m in ordinaire
@@ -658,7 +698,7 @@ def test_history_without_vision_is_longer_than_with(core_with_history, monkeypat
     assert ordinaire_old, "elle ne doit pas non plus perdre toute mémoire"
 
 
-def test_the_vlm_is_off_in_v1_and_never_called(core_with_history, monkeypatch):
+def test_the_vlm_is_off_in_v1_and_never_called(core_with_history, monkeypatch, classifieur_ecran):
     """
     llava fabrique : quatre observations réelles sur quatre, dont un
     traceback Python complet pour un bug inexistant. Coupé en v1.0.
@@ -699,7 +739,7 @@ def test_the_vlm_is_off_in_v1_and_never_called(core_with_history, monkeypatch):
     assert "fabriquée" not in block["content"]
 
 
-def test_the_vlm_description_is_capped(core_with_history, monkeypatch):
+def test_the_vlm_description_is_capped(core_with_history, monkeypatch, classifieur_ecran):
     """
     Mesuré en usage réel : llava a rendu 10 270 caractères pour 1 761
     caractères réellement lus à l'écran. L'OCR était borné, pas lui.
@@ -869,7 +909,7 @@ def test_camera_image_failure_block_forbids_a_hypothetical_example(core, monkeyp
 
 def test_ambiguous_screen_question_is_blocked_when_capture_is_disallowed(
     core, monkeypatch
-) -> None:
+, classifieur_ecran) -> None:
     """
     La question elle-même déclenche normalement la vision (voir la
     paramétrisation de test_explicit_requests_trigger_vision) — mais
@@ -915,7 +955,7 @@ def test_ordinary_question_is_unaffected_by_the_capture_restriction(core, monkey
         "c'est quoi cette erreur sur mon ordi ?",
     ],
 )
-def test_explicit_pc_mention_overrides_the_restriction(core, monkeypatch, question) -> None:
+def test_explicit_pc_mention_overrides_the_restriction(core, monkeypatch, question, classifieur_ecran) -> None:
     """
     Demande de Cyril (02/08/2026) : la protection contre le déclenchement
     ACCIDENTEL ne doit pas empêcher une demande EXPLICITE — nommer le PC
@@ -972,7 +1012,7 @@ REAL_VISION_REFUSALS = [
 ]
 
 
-def test_repeated_vision_refusals_are_filtered_from_history(monkeypatch):
+def test_repeated_vision_refusals_are_filtered_from_history(monkeypatch, classifieur_ecran):
     """
     Historique synthétique : 3 tours consécutifs où Cyril redemande
     "Décris ce que tu vois." et reçoit un vrai refus déjà observé. Une

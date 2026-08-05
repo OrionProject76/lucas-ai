@@ -74,8 +74,21 @@ daemon-debug:
 # la suite — il a été réécrit en vrais tests le 01/08/2026.
 
 # Tests auto (avec coverage)
+#
+# ⚠️ NE JAMAIS remplacer `--cov=core` par `--cov=core.router` ou toute
+# autre forme POINTÉE. Un nom de module fait importer ce module par
+# coverage lui-même pour le résoudre en chemin — et ce second import de
+# l'extension Rust de ChromaDB (PyO3) échoue avec « cannot load module
+# more than once per process », ce qui fait tomber toute la collecte.
+# La forme répertoire ne résout rien par import : elle marche.
+# Trouvé le 05/08/2026 après avoir conclu à tort que la couverture
+# n'était plus mesurable (ROADMAP.md §5.41).
+#
+# `security` ajouté le 05/08/2026 : il manquait à la commande standard,
+# alors que c'est le code le plus sensible du projet — il n'était donc
+# mesuré que par des campagnes ponctuelles.
 test:
-    pytest -v --ignore=test_voice.py --cov=core --cov=modules --cov=memory --cov=api --cov-report=term-missing
+    pytest -v --ignore=test_voice.py --cov=core --cov=modules --cov=memory --cov=api --cov=security --cov-report=term-missing
 
 # Tests rapides (sans coverage)
 test-quick:

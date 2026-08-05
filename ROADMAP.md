@@ -4052,6 +4052,79 @@ levant une exception.
 
 Suite complète : **1120 passés**.
 
+## 5.42 La suite « unitaire » dépendait d'un Ollama vivant — 05/08/2026
+
+Le motif traqué depuis deux jours, dans son **miroir** : au lieu de
+« vert alors que ça ne marche pas », on avait **« rouge alors que le code
+est bon »**. Les deux détruisent la même chose — la confiance dans ce
+que le vert veut dire.
+
+### La mesure (et la fausse mesure qui l'a précédée)
+
+⚠️ **Première tentative : nulle et non avenue.** J'ai pointé
+`OLLAMA_HOST` vers un port mort par variable d'environnement, obtenu
+« 1120 passés » et failli conclure que la suite était indépendante
+d'Ollama. Vérification faite ensuite : **`OLLAMA_HOST` était codé en dur
+ligne 25 de `config.py`**, jamais lu depuis l'environnement. Ma variable
+n'avait donc rien changé, et la mesure ne mesurait rien.
+
+C'est la **deuxième fois de la nuit** qu'un instrument est faux (la
+première : le filtre `tasklist notepad.exe`, qui ne voit pas le Notepad
+du Store, §5.31). Les deux ont été attrapées en vérifiant l'instrument
+avant de croire son verdict. C'est la seule parade.
+
+`OLLAMA_HOST` est désormais surchargeable (`os.getenv`), au même titre
+que `OPENAI_API_KEY` et `API_TOKEN` juste en dessous — l'incohérence
+n'avait aucune raison d'être. Défaut inchangé.
+
+**Mesure valide, une fois la surcharge vérifiée effective :**
+
+| | Ollama vivant | Ollama injoignable |
+|---|---|---|
+| Avant | 1120 passés, 35 s | **11 échoués, 452 s** |
+| Après | 1120 passés, **27 s** | 1120 passés, **27 s** |
+
+452 secondes, soit **13×** plus lent : chaque classification attendait un
+timeout de connexion. Un développeur aurait cru la suite bloquée avant de
+comprendre qu'elle échouait.
+
+### La correction
+
+Le classifieur d'intention (`core/intent.py`) est le **seul** point où
+une décision de routage passe par le réseau. Il possédait déjà un repli
+déterministe sur mots-clés, prévu pour le cas où le modèle est absent.
+
+- **`conftest.py`** (nouveau, racine) : une fixture *autouse* rend `None`
+  depuis `_ask_classifier` — exactement la frontière réseau — ce qui force
+  ce repli pour toute la suite. Le cache `_CACHE` est vidé avant ET après :
+  une classification obtenue d'un vrai modèle lors d'un test antérieur
+  survivrait sinon au stub et le rendrait silencieusement inopérant.
+- **11 tests de `test_vision_routing.py`** avaient réellement besoin d'une
+  réponse « ÉCRAN » que les mots-clés ne donnent pas (« c'est écrit
+  quoi ? » ne nomme l'écran nulle part — c'est précisément pourquoi le
+  classifieur LLM existe). Ils reçoivent une fixture `classifieur_ecran`
+  qui la fournit de façon déterministe.
+- **Un cas à part** : `test_history_without_vision_is_longer_than_with`
+  COMPARE une question ordinaire à une question visuelle. Un classifieur
+  qui répond « ÉCRAN » à tout le casse. Il reçoit un stub qui répond
+  **selon la question** — déterministe sans être constant.
+
+Ce que les tests vérifient toujours : le **routage** et l'injection de
+contexte, du code Python déterministe. Ce qu'ils ne prétendent plus
+vérifier, et qui n'était pas leur affaire : la justesse du classifieur
+LLM, mesurée là où c'est sa place — `test_intent.py`, sur un corpus dédié,
+avec son propre stub qui prend le pas sur celui du `conftest`.
+
+### Deux autres dettes réglées au passage
+
+- **`just test` ne mesurait pas `security/`** — le code le plus sensible
+  du projet n'était couvert que par des campagnes ponctuelles. Ajouté.
+- **Le justfile porte désormais l'avertissement** sur la forme `--cov` :
+  jamais un nom de module pointé, toujours un répertoire (§5.41). La
+  leçon est écrite à l'endroit exact où quelqu'un pourrait la défaire.
+
+Suite complète : **1120 passés**, avec ou sans Ollama.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

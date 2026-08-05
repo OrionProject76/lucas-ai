@@ -513,12 +513,33 @@ def test_websocket_mobile_ambiguous_screen_question_does_not_watch(client, fake_
     assert fake_core["asked_allow_screen_capture"] is False
 
 
-def test_websocket_mobile_explicit_pc_mention_still_watches(client, fake_core) -> None:
+def test_websocket_mobile_explicit_pc_mention_still_watches(
+    client, fake_core, monkeypatch
+) -> None:
     """
     Demande de Cyril (02/08/2026) : nommer le PC sans ambiguïté doit
     lever la restriction, même depuis la PWA — WATCHING doit refléter la
     VRAIE capture (décidée dans LucasCore), pas seulement le client.
+
+    ⚠️ `classify` est neutralisé depuis le 05/08/2026. Ce test était
+    INSTABLE : `should_use_vision()` délègue au classifieur d'intention,
+    donc à Ollama. Il échouait ou passait selon l'état du serveur de
+    modèles au moment de la campagne — observé en échec puis en succès la
+    même nuit, sans qu'une ligne de code ait changé entre les deux.
+
+    Un test rouge par intermittence est pire qu'un test absent : on
+    apprend à l'ignorer, et il ne protège plus rien. Ce qu'il DOIT
+    vérifier est déterministe — que `mentions_pc_explicitly()` lève bien
+    la restriction mobile. Le classifieur est donc figé sur la réponse
+    qu'il est censé donner ici, et sa propre justesse est mesurée là où
+    c'est sa place : `test_intent.py`, sur un corpus dédié.
     """
+    class _Intention:
+        needs_screen = True
+        needs_documents = False
+
+    monkeypatch.setattr("core.intent.classify", lambda text, context="": _Intention())
+
     with client.websocket_connect("/ws") as ws:
         ws.send_json({"type": "hello", "client": "lucas_pwa", "version": "1.0"})
         _next_of_type(ws, "chat")
