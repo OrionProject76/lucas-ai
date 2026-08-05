@@ -23,11 +23,33 @@ if (-not $bd) {
     exit 1
 }
 Write-Output "  interface : $($bd.Status) / $($bd.MediaConnectionState)"
+Write-Output "  --- toutes les routes par defaut, par metrique ---"
+Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
+    Sort-Object RouteMetric |
+    ForEach-Object { Write-Output "    $($_.InterfaceAlias.PadRight(16)) metrique $($_.RouteMetric)" }
+
 $defaut = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
     Sort-Object RouteMetric | Select-Object -First 1
-Write-Output "  route par defaut tenue par : $($defaut.InterfaceAlias) (metrique $($defaut.RouteMetric))"
-if ($defaut.InterfaceAlias -notlike "*bdvpn*") {
-    Write-Output "  !! Le VPN ne tient PAS la route par defaut — conditions du test non reunies."
+
+# ⚠️ Ce releve TRANCHE une question restee ouverte (ROADMAP.md §5.54) :
+# le mecanisme du conflit a ete DECRIT comme une capture de la route par
+# defaut, mais jamais MESURE — la table n'avait pas ete relevee pendant
+# que le VPN etait connecte. Deux issues, deux mecanismes differents :
+#
+#   - le VPN tient 0.0.0.0/0  -> capture de route confirmee
+#   - il ne la tient pas       -> c'est un FILTRAGE APPLICATIF
+#     (bdntwrk ou le kill-switch), et l'explication d'origine etait
+#     fausse meme si le correctif reste le bon
+#
+# Le profil observe (UDP mort, TCP vers les memes destinations vivant)
+# penche deja vers le filtrage : une capture de route enverrait l'UDP
+# DANS le tunnel, ou il fonctionnerait generalement.
+if ($defaut.InterfaceAlias -like "*bdvpn*") {
+    Write-Output "  => MECANISME : capture de la route par defaut CONFIRMEE"
+} else {
+    Write-Output "  => MECANISME : le VPN ne tient PAS 0.0.0.0/0."
+    Write-Output "     L'explication par capture de route est donc FAUSSE :"
+    Write-Output "     il s'agit d'un filtrage applicatif (bdntwrk / kill-switch)."
 }
 
 # ── 2. Tailscale se voit-il en ligne ? ────────────────────────────────

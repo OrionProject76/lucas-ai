@@ -5273,14 +5273,41 @@ Aucune option côté Tailscale ne traite d'ailleurs ce cas :
 dans les préférences actuelles ne veut pas dire « capture tout le
 trafic », mais « accepte les routes des autres nœuds ».
 
-**Bitdefender, lui, capture `0.0.0.0/0`** : à la connexion, son tunnel
-WireGuard (`bdvpnservice_2`) devient la route par défaut et emporte tout
-le trafic sortant — y compris celui de `tailscaled` vers son serveur de
-coordination.
+**Bitdefender, lui, interfère** — mais ⚠️ **le mécanisme exact n'est PAS
+établi, et la première rédaction de cette section l'affirmait à tort.**
 
-Preuve par l'absence : VPN déconnecté, l'interface disparaît entièrement
-de la table de routage, et Tailscale redevient sain immédiatement (plus
-de `offline`, plus d'avertissement de santé).
+Ce qui est **mesuré** :
+
+| Fait | Preuve |
+|---|---|
+| Le problème apparaît à la connexion du VPN | journal système : service tunnel installé à **21:29:48**, alors que `tailscaled` tournait depuis **21:16:51** et fonctionnait |
+| VPN déconnecté → Tailscale sain | l'interface disparaît de la table de routage, plus de `offline`, plus d'avertissement |
+| VPN connecté → UDP mort | `netcheck` : `UDP: false`, `IPv4: (no addr found)` |
+| Le réseau, lui, est ouvert | `controlplane.tailscale.com:443` joignable **depuis PowerShell**, relais DERP à 36 ms |
+| La plage CGNAT n'est PAS détournée | Bitdefender ne tient qu'un `/32` pour son adresse |
+
+Ce qui est **inféré, jamais observé** : que le tunnel capture
+`0.0.0.0/0`. C'est plausible — un VPN grand public route tout par
+défaut — mais je n'ai pas relevé la table des routes par défaut pendant
+que le VPN était connecté. Quand je l'ai enfin regardée, Cyril l'avait
+déjà déconnecté.
+
+⚠️ **Et un détail suggère même que cette explication est incomplète** :
+une simple capture de route enverrait l'UDP *dans* le tunnel, où il
+fonctionnerait généralement. Or l'UDP est mort tandis que le TCP vers
+les mêmes destinations passe. Ce profil ressemble davantage à un
+**filtrage applicatif** (`bdntwrk`, ou le pare-feu/kill-switch du VPN)
+qu'à un simple détournement de route.
+
+**Cela ne change pas l'option retenue** — le split tunneling par
+application sort `tailscaled` du traitement Bitdefender quel que soit le
+mécanisme, capture de route ou filtrage. Mais la cause exacte reste à
+confirmer, et le script de vérification relève désormais la route par
+défaut pendant que le VPN est actif, ce qui tranchera la question.
+
+Le rappeler ici plutôt que de laisser une explication propre et non
+vérifiée : c'est le même travers que les cinq instruments fautifs de la
+journée — une conclusion vraisemblable prise pour une mesure.
 
 ### Le symptôme, et pourquoi il trompait
 
