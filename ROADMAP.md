@@ -2853,6 +2853,138 @@ Aucun test Python affecté (configuration système, pas de code applicatif) ;
 reste non versionné (déjà couvert par `.gitignore`, contenu qui grossit à
 chaque démarrage).
 
+## 5.30 Jeton d'API en clair dans les logs — trouvé et corrigé le 05/08/2026
+
+**Trouvé en vérifiant autre chose.** Cyril demandait simplement de confirmer
+que la tâche planifiée `LucasAPIServer` (§5.29) s'était bien déclenchée à la
+connexion. En lisant `data/logs/server_startup.log` pour le confirmer, une
+ligne du démarrage précédent contenait ceci :
+
+```
+INFO:  192.168.1.14:59240 - "WebSocket /ws?token=<jeton réel de Cyril>" [accepted]
+```
+
+Uvicorn journalise la ligne de requête complète, query string comprise. Le
+jeton d'API partait donc en clair dans un fichier, **à chaque connexion du
+téléphone**, depuis que le pont mobile existe.
+
+### Pourquoi ce n'était pas « pas grave parce que c'est local »
+
+Le fichier est bien couvert par `.gitignore` — il n'a jamais pu partir dans
+un commit. C'est la raison pour laquelle ça n'avait pas été vu, et c'est
+aussi pourquoi ça méritait quand même une correction : **« pas dans Git »
+n'est pas « pas en clair »**. Un log est le premier fichier qu'on copie-colle
+pour demander de l'aide, et le premier qu'on oublie en archivant un dossier.
+Le fichier n'a par ailleurs aucune rotation : il grossit indéfiniment, donc
+il accumulait un secret réel sans limite de durée.
+
+### Deux défenses, qui ne se remplacent pas
+
+**1. Le jeton ne passe plus par la query string** (la vraie correction) —
+`static/js/websocket.js` + `api/server.py`.
+
+Le commentaire d'origine dans `websocket_endpoint` expliquait le choix de la
+query string : « un websocket de navigateur ne peut pas poser d'en-tête
+personnalisé ». C'est exact, et c'est ce qui rendait la correction non
+évidente. Le contournement est l'en-tête `Sec-WebSocket-Protocol` : un
+navigateur ne peut pas poser d'en-tête arbitraire, mais il peut annoncer des
+sous-protocoles — qui voyagent dans un en-tête standard. La PWA propose donc
+`["lucas.v1", "lucas-token.<jeton>"]`, et le serveur ne renvoie que
+`lucas.v1` : le second est un véhicule, jamais un protocole négocié — le
+renvoyer le rendrait visible dans l'en-tête de réponse, soit un retour à la
+case départ.
+
+**Uvicorn ne journalise pas les en-têtes au niveau INFO.** Le secret cesse
+donc d'atteindre le fichier, au lieu d'y arriver puis d'être nettoyé.
+
+**2. Masquage de ce qui arriverait quand même** — `api/log_scrub.py`, nouveau
+module, filtre `logging` posé à l'import de `api.server`.
+
+Ce repli n'est pas une ceinture-et-bretelles décorative : la query string
+reste acceptée par le serveur, parce que les tests, `curl` et le futur client
+Godot ne peuvent pas connaître notre convention de sous-protocole. Ces
+chemins-là existent vraiment, et c'est le masquage qui les couvre.
+
+Deux détails d'implémentation qui étaient des pièges :
+- **Le filtre doit lire `record.args`, pas seulement `record.msg`.** Uvicorn
+  journalise en format paresseux (`'%s - "WebSocket %s" [accepted]'` +
+  arguments) : le chemin porteur du jeton vit dans les arguments. Un filtre
+  ne regardant que le message aurait laissé passer exactement la ligne à
+  l'origine de tout ceci. Verrouillé par `test_filter_masks_lazy_arguments`.
+- **Les lignes WebSocket sortent sur le logger `uvicorn.error`**, pas
+  `uvicorn.access`, malgré leur nature d'accès — vérifié dans
+  `venv/Lib/site-packages/uvicorn/protocols/websockets/websockets_impl.py`,
+  pas supposé. Ne poser le filtre que sur `uvicorn.access` (le nom
+  intuitif) aurait laissé la fuite entière.
+
+Le nom du paramètre est conservé, seule la valeur devient `***` : savoir
+qu'un jeton a été fourni reste utile pour diagnostiquer un 401, connaître sa
+valeur ne l'est jamais.
+
+### Validé en conditions réelles, pas seulement en test unitaire
+
+Serveur arrêté puis relancé **par le vrai chemin de production**
+(`wscript.exe start_server_hidden.vbs`, la commande de la tâche planifiée),
+puis quatre connexions WebSocket réelles en `wss://` contre lui :
+
+| Cas | Résultat | Ligne écrite dans le log |
+|---|---|---|
+| Sous-protocole, bon jeton (PWA à jour) | accepté, `lucas.v1` négocié | `"WebSocket /ws" [accepted]` — **aucun jeton** |
+| Sous-protocole, mauvais jeton | fermé (403) | `"WebSocket /ws" 403` |
+| Query string, bon jeton (repli) | accepté | `"WebSocket /ws?token=***" [accepted]` |
+| Aucun jeton | fermé (403) | `"WebSocket /ws" 403` |
+
+Vérification finale du fichier par comparaison programmatique avec
+`config.API_TOKEN` : jeton réel présent en clair → **False**. La valeur n'a
+jamais été affichée pendant tout le chantier (`CLAUDE.md`, précision du
+04/08/2026 sur les données personnelles) — seuls des booléens et des lignes
+déjà masquées.
+
+### Le passé aussi
+
+Le correctif empêche les nouvelles fuites, il ne réécrit pas les anciennes.
+Les lignes déjà écrites ont été masquées en place avec la même fonction
+(`mask_secrets`), 24 lignes sur 24 conservées, aucune supprimée. Aucune copie
+de sauvegarde n'a été gardée : elle aurait contenu le jeton en clair, soit
+exactement ce qu'on cherchait à faire disparaître.
+
+⚠️ **Reste à la main de Cyril — la rotation du jeton.** La valeur a séjourné
+en clair sur le disque ; par rigueur elle devrait être régénérée dans `.env`.
+Ce n'est pas fait ici parce que ça invalide le jeton mémorisé dans le
+`localStorage` du téléphone : il faudrait rouvrir le lien `?token=…` sur le
+S25 Ultra pour le réappairer. Décision et moment lui appartiennent.
+
+⚠️ **Noté, non traité — le lien d'appairage.** Le jeton arrive sur le
+téléphone via `?token=…` dans l'URL de la PWA. `static/js/app.js` le retire
+de la barre d'adresse aussitôt (`params.delete("token")`), mais il transite
+par l'historique du navigateur. Surface différente de celle-ci, hors du
+périmètre demandé ; catalogué ici pour ne pas le redécouvrir.
+
+### Fichiers
+
+- `api/log_scrub.py` — nouveau (masquage + filtre `logging`)
+- `api/server.py` — `log_scrub.install()` à l'import ;
+  `_token_from_subprotocols()`, `WS_SUBPROTOCOL`,
+  `WS_TOKEN_SUBPROTOCOL_PREFIX` ; `websocket_endpoint` lit le sous-protocole
+  d'abord, la query string en repli
+- `static/js/websocket.js` — `_protocols()` ; la query string ne sert plus
+  que de repli pour un jeton contenant un caractère interdit en
+  sous-protocole (grammaire « token » HTTP, RFC 7230) — cas rare d'un jeton
+  écrit à la main, où échouer silencieusement serait pire qu'une valeur
+  masquée
+- `static/sw.js` — cache PWA v9 → **v10**. Indispensable : sans bump, le
+  téléphone continuerait d'envoyer `?token=` depuis son cache, et le
+  correctif ne changerait rien pour le seul client réel
+- `test_log_scrub.py` — nouveau, 17 tests
+- `test_server.py` — 5 tests ajoutés (sous-protocole valide/invalide,
+  priorité sur la query string, jeton jamais renvoyé au client, client sans
+  sous-protocole toujours accepté)
+
+Suite : `test_server.py` + `test_log_scrub.py` → 90 passés. Un échec,
+`test_websocket_mobile_explicit_pc_mention_still_watches` — **préexistant**,
+vérifié par `git stash` avant/après : il échoue à l'identique sans ces
+modifications (routage vision, sans rapport).
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

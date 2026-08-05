@@ -9,6 +9,17 @@ window.Lucas = window.Lucas || {};
 (function () {
     const RECONNECT_DELAY_MS = 3000;
 
+    // Doivent rester identiques à WS_SUBPROTOCOL / WS_TOKEN_SUBPROTOCOL_PREFIX
+    // dans api/server.py.
+    const SUBPROTOCOL = "lucas.v1";
+    const TOKEN_SUBPROTOCOL_PREFIX = "lucas-token.";
+
+    // Caractères autorisés dans un sous-protocole WebSocket (« token » HTTP,
+    // RFC 7230). Un jeton produit par secrets.token_urlsafe les respecte
+    // toujours ; un jeton écrit à la main avec un « : » ou un espace, non —
+    // et le navigateur refuserait alors de construire le WebSocket.
+    const HTTP_TOKEN_CHARS = /^[A-Za-z0-9!#$%&'*+\-.^_`|~]+$/;
+
     class LucasSocket {
         constructor({
             onAvatarState,
@@ -30,19 +41,43 @@ window.Lucas = window.Lucas || {};
             this._connect();
         }
 
+        // Jeton optionnel (config.API_TOKEN côté serveur) : vide tant que
+        // Cyril n'a rien configuré, voir ROADMAP.md §2. Lu depuis
+        // localStorage plutôt que codé en dur, pour ne jamais committer un
+        // jeton réel dans ce fichier.
+        _token() {
+            return window.localStorage.getItem("lucas_api_token") || "";
+        }
+
+        // Le jeton voyage dans les sous-protocoles, donc dans l'en-tête
+        // Sec-WebSocket-Protocol — jamais dans l'URL. Uvicorn journalise la
+        // ligne de requête (query string comprise) mais pas les en-têtes :
+        // c'est ce qui empêche le jeton d'atterrir en clair dans
+        // data/logs/server_startup.log. Voir api/log_scrub.py.
+        _protocols() {
+            const token = this._token();
+            const protocols = [SUBPROTOCOL];
+            if (token && HTTP_TOKEN_CHARS.test(token)) {
+                protocols.push(TOKEN_SUBPROTOCOL_PREFIX + token);
+            }
+            return protocols;
+        }
+
         _url() {
             const scheme = location.protocol === "https:" ? "wss:" : "ws:";
-            // Jeton optionnel (config.API_TOKEN côté serveur) : vide tant
-            // que Cyril n'a rien configuré, voir ROADMAP.md §2. Lu depuis
-            // localStorage plutôt que codé en dur, pour ne jamais committer
-            // un jeton réel dans ce fichier.
-            const token = window.localStorage.getItem("lucas_api_token") || "";
-            const query = token ? `?token=${encodeURIComponent(token)}` : "";
+            // Repli : un jeton contenant un caractère interdit en
+            // sous-protocole repart par la query string, sinon la connexion
+            // serait impossible. Cas rare (jeton écrit à la main), mais
+            // échouer silencieusement serait pire qu'une valeur masquée
+            // dans les logs.
+            const token = this._token();
+            const parRequete = token && !HTTP_TOKEN_CHARS.test(token);
+            const query = parRequete ? `?token=${encodeURIComponent(token)}` : "";
             return `${scheme}//${location.host}/ws${query}`;
         }
 
         _connect() {
-            this.socket = new WebSocket(this._url());
+            this.socket = new WebSocket(this._url(), this._protocols());
 
             this.socket.addEventListener("open", () => {
                 this.onConnectionChange(true);

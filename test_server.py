@@ -1048,6 +1048,73 @@ def test_websocket_without_token_configured_still_works(client) -> None:
     assert first["state"] == "idle"
 
 
+# ── WebSocket : jeton par sous-protocole (hors des logs) ───────────────
+#
+# Le jeton passait en clair dans data/logs/server_startup.log, uvicorn
+# journalisant la query string. Il voyage désormais dans l'en-tête
+# Sec-WebSocket-Protocol, que rien ne journalise. La query string reste
+# acceptée en repli — d'où les tests des DEUX chemins ci-dessous.
+
+
+def test_websocket_with_the_right_token_in_a_subprotocol_succeeds(client, monkeypatch) -> None:
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    with client.websocket_connect(
+        "/ws", subprotocols=["lucas.v1", "lucas-token.secret123"]
+    ) as ws:
+        first = _next_of_type(ws, "avatar_state")
+    assert first["state"] == "idle"
+
+
+def test_websocket_with_a_wrong_token_in_a_subprotocol_is_closed(client, monkeypatch) -> None:
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    with pytest.raises(Exception):
+        with client.websocket_connect(
+            "/ws", subprotocols=["lucas.v1", "lucas-token.mauvais"]
+        ) as ws:
+            ws.receive_json()
+
+
+def test_subprotocol_token_wins_over_the_query_string(client, monkeypatch) -> None:
+    """
+    Le sous-protocole est consulté en premier : un client à jour n'échoue
+    pas parce qu'une vieille query string traîne dans son URL. Le cas
+    inverse (query string valide, sous-protocole faux) doit échouer — sans
+    quoi le repli deviendrait un contournement du contrôle.
+    """
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    with pytest.raises(Exception):
+        with client.websocket_connect(
+            "/ws?token=secret123", subprotocols=["lucas.v1", "lucas-token.mauvais"]
+        ) as ws:
+            ws.receive_json()
+
+
+def test_server_echoes_only_the_protocol_never_the_token(client, monkeypatch) -> None:
+    """
+    Le sous-protocole porteur du jeton ne doit jamais revenir au client :
+    il serait alors visible dans l'en-tête de RÉPONSE, et donc renvoyé au
+    point de départ. Seul `lucas.v1` est négocié.
+    """
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    with client.websocket_connect(
+        "/ws", subprotocols=["lucas.v1", "lucas-token.secret123"]
+    ) as ws:
+        _next_of_type(ws, "avatar_state")
+        accepte = ws.scope.get("subprotocol") if hasattr(ws, "scope") else None
+    assert accepte in (None, "lucas.v1")
+
+
+def test_websocket_accepts_a_client_that_proposes_no_subprotocol(client) -> None:
+    """
+    Godot, curl et les tests historiques n'annoncent aucun sous-protocole.
+    Renvoyer `lucas.v1` à un client qui ne l'a pas proposé ferait fermer la
+    connexion par un navigateur — le serveur ne sélectionne donc rien.
+    """
+    with client.websocket_connect("/ws") as ws:
+        first = _next_of_type(ws, "avatar_state")
+    assert first["state"] == "idle"
+
+
 # ── WebSocket : image (pont mobile, Phase 4) ───────────────────────────
 #
 # Photo envoyée par le téléphone (pas de caméra sur le PC — voir

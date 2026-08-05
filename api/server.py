@@ -22,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from api import protocol
+from api import log_scrub, protocol
 from config import API_TOKEN
 from core.lucas_core import LucasCore
 from core.router import mentions_pc_explicitly, should_use_vision
@@ -34,6 +34,13 @@ from modules.voice_manager import VoiceManager
 from security.status import get_status as get_security_status
 
 app = FastAPI(title="Luca's API", version="0.2")
+
+# Masque tout `token=...` avant écriture dans les logs d'uvicorn. Posé ici,
+# à l'import du module d'application, pour s'appliquer quel que soit le mode
+# de lancement (uvicorn en CLI, tâche planifiée LucasAPIServer, tests) sans
+# dépendre d'une option passée en ligne de commande, qu'on oublierait un
+# jour. Voir api/log_scrub.py pour le détail.
+log_scrub.install()
 
 # Instance unique, partagée entre tous les messages « audio » du WebSocket.
 # Contrairement à LucasCore (recréé par appel à cause de SQLite, voir plus
@@ -93,6 +100,37 @@ def _token_is_valid(fourni: str | None) -> bool:
     if not API_TOKEN:
         return True
     return fourni is not None and secrets.compare_digest(fourni, API_TOKEN)
+
+
+# Sous-protocole WebSocket annoncé par la PWA, et préfixe du sous-protocole
+# porteur du jeton. La PWA propose les deux : ["lucas.v1",
+# "lucas-token.<jeton>"]. Le second est un véhicule, pas un protocole — il
+# n'est jamais renvoyé au client.
+#
+# Les caractères autorisés dans un sous-protocole sont ceux d'un « token »
+# HTTP (RFC 6455 §4.1, qui renvoie à la grammaire RFC 7230) : ni espace, ni
+# guillemet, ni virgule. Les jetons produits par secrets.token_urlsafe (le
+# cas normal) n'utilisent que [A-Za-z0-9_-], tous valides. Un jeton écrit à
+# la main avec un caractère interdit rendrait la connexion impossible : le
+# client le détecte et retombe sur la query string plutôt que d'échouer
+# (voir static/js/websocket.js).
+WS_SUBPROTOCOL = "lucas.v1"
+WS_TOKEN_SUBPROTOCOL_PREFIX = "lucas-token."
+
+
+def _token_from_subprotocols(websocket: WebSocket) -> str | None:
+    """
+    Extrait le jeton du sous-protocole `lucas-token.<jeton>`, s'il est là.
+
+    Retourne None si aucun sous-protocole ne porte le préfixe — l'appelant
+    retombe alors sur la query string. Distinguer None (« rien annoncé »)
+    d'une chaîne vide (« annoncé, mais vide ») compte : la seconde est un
+    jeton invalide, qui doit fermer la connexion, pas déclencher le repli.
+    """
+    for propose in websocket.scope.get("subprotocols") or []:
+        if propose.startswith(WS_TOKEN_SUBPROTOCOL_PREFIX):
+            return propose.removeprefix(WS_TOKEN_SUBPROTOCOL_PREFIX)
+    return None
 
 
 def verify_token(authorization: str | None = Header(default=None)) -> None:
@@ -355,15 +393,36 @@ def _save_base64_image(image_base64: str) -> str:
 async def websocket_endpoint(websocket: WebSocket):
     # Vérifié AVANT accept() : un jeton absent/invalide ferme la connexion
     # au niveau protocole (code 1008, violation de politique), sans jamais
-    # l'ouvrir. Par requête (pas par en-tête, comme le REST ci-dessus) —
-    # un websocket de navigateur ne peut pas poser d'en-tête personnalisé,
-    # alors qu'une query string reste lisible par les trois clients visés
-    # (PWA, Godot, tests).
-    if not _token_is_valid(websocket.query_params.get("token")):
+    # l'ouvrir.
+    #
+    # Le jeton arrive par l'en-tête `Sec-WebSocket-Protocol`, pas par la
+    # query string. Un WebSocket de navigateur ne peut pas poser d'en-tête
+    # personnalisé — c'est la raison pour laquelle la query string avait été
+    # retenue au départ — mais il peut annoncer des sous-protocoles, qui
+    # voyagent DANS un en-tête standard. Un en-tête n'est pas journalisé au
+    # niveau INFO, contrairement à la ligne de requête : le jeton cesse donc
+    # d'atterrir en clair dans data/logs/server_startup.log.
+    #
+    # La query string reste acceptée en repli, pour les clients qui ne
+    # peuvent pas connaître cette convention (tests, curl, futur client
+    # Godot). Ce chemin-là est couvert par le masquage de api/log_scrub.py.
+    fourni = _token_from_subprotocols(websocket)
+    if fourni is None:
+        fourni = websocket.query_params.get("token")
+
+    if not _token_is_valid(fourni):
         await websocket.close(code=1008)
         return
 
-    await websocket.accept()
+    # Un navigateur ferme la connexion si le serveur sélectionne un
+    # sous-protocole qu'il n'a pas proposé — d'où le test d'appartenance
+    # plutôt qu'un renvoi inconditionnel. Seul WS_SUBPROTOCOL est renvoyé,
+    # jamais celui qui porte le jeton : il sert de véhicule, pas de
+    # protocole négocié.
+    proposes = websocket.scope.get("subprotocols") or []
+    await websocket.accept(
+        subprotocol=WS_SUBPROTOCOL if WS_SUBPROTOCOL in proposes else None
+    )
     await websocket.send_json(protocol.avatar_state(protocol.STATE_IDLE))
 
     pusher = asyncio.create_task(_push_system_state(websocket))

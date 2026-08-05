@@ -17,7 +17,12 @@
 // phrase, cause probable identifiée en conditions réelles avec Cyril,
 // voir ROADMAP.md §5.28). Même raison que v6 : sans bump, le téléphone
 // garderait l'ancien audio.js en cache malgré le fichier serveur à jour.
-const CACHE_NAME = "lucas-shell-v9";
+// v10 (05/08/2026) : websocket.js transporte le jeton dans l'en-tête
+// Sec-WebSocket-Protocol au lieu de la query string, pour qu'il cesse
+// d'être journalisé en clair (ROADMAP.md §5.29). Bump indispensable ici :
+// sans lui, le téléphone continuerait d'envoyer `?token=` depuis son
+// cache, et le correctif ne changerait rien pour le seul client réel.
+const CACHE_NAME = "lucas-shell-v10";
 const SHELL_FILES = [
     "/app/",
     "/app/index.html",
