@@ -5015,6 +5015,37 @@ confirme qu'aucun document protégé n'a bougé.
 Puis lancement **par le Planificateur** (`Start-ScheduledTask`), qui est
 le seul test prouvant la chaîne complète : `LastTaskResult: 0`.
 
+### Les gardes elles-mêmes, éprouvées
+
+Le chemin nominal validé ne prouve rien sur les gardes : elles ne se
+déclenchent que sur des cas qu'on ne rencontre pas par hasard — et ce
+sont précisément celles qui protègent Cyril. Un script dont seul le
+chemin heureux est testé, c'est exactement le motif traqué toute la
+journée.
+
+Méthode : un faux `claude.cmd` placé en tête de `PATH`, qui masque le
+vrai et simule les comportements à risque. **Aucun appel au vrai modèle.**
+
+| Garde | Simulation | Résultat |
+|---|---|---|
+| Aucun rapport produit | le modèle « lit » et ne dépose rien | demande **laissée en attente**, non marquée `_DONE` |
+| `claude` échoue | code de retour 1 | demande **laissée en attente**, échec journalisé |
+| `README.md` | présent dans le dossier | **jamais** pris pour une demande |
+| Document protégé modifié | le modèle dépose un rapport **et** touche `ROADMAP.md` | **`!! ALERTE : ROADMAP.md a été MODIFIÉ`** |
+
+La dernière méritait un filet : elle exige une modification réelle de
+`ROADMAP.md` pendant le run, puisque les empreintes sont prises avant et
+après. Restauration par `git checkout`, puis **vérification de
+l'empreinte** — sans ce dernier contrôle, on ne saurait pas si le filet a
+tenu. Empreinte identique avant et après, `git status` propre.
+
+⚠️ Une nuance que le tableau ne dit pas : quand un document protégé est
+modifié, la demande **est quand même marquée `_DONE`** (un rapport a bien
+été produit). L'alerte signale le dérapage, elle ne l'annule pas — le
+script ne restaure rien de lui-même. C'est délibéré : restaurer
+automatiquement un fichier que Cyril a peut-être édité entre-temps serait
+pire que de le signaler. Le journal est le point de contrôle.
+
 ### Ce qui a coincé, et qui vaut d'être noté
 
 Le script a d'abord refusé de s'analyser : `Accolade fermante manquante`
