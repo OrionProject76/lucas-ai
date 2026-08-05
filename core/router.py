@@ -100,9 +100,45 @@ def route(text: str, context: str = "") -> str:
     if should_use_vision(text, context):
         return "local"
 
-    if contains_any(text, KEYWORDS_CLOUD):
+    # ⚠️ `cloud_is_available()` ajouté le 05/08/2026 — bug RÉEL, mesuré en
+    # conditions réelles.
+    #
+    # `core/cloud_llm.py` est un STUB de 12 lignes : sans `OPENAI_API_KEY`,
+    # `ask_cloud()` rend un texte de configuration, pas une réponse. Or les
+    # mots-clés cloud (« analyse », « compare », « projection »,
+    # « optimise ») sont des mots français courants. Résultat observé dans
+    # la vraie application :
+    #
+    #   Cyril : « Analyse les avantages du photovoltaïque sur 20 ans »
+    #   Luca  : « [Cloud non configuré] Copie .env.example en .env… »
+    #
+    # 4 questions sur 6 d'un échantillon ordinaire partaient ainsi dans un
+    # cul-de-sac. Et c'est devenu plus coûteux depuis la bascule sur
+    # gpt-oss:20b : le modèle LOCAL est précisément le meilleur des cinq
+    # candidats sur ce type de question analytique (§5.44). On écartait
+    # donc le bon outil au profit d'un mur.
+    #
+    # ⚠️ Ce test ne peut que rendre le routage PLUS conservateur : il
+    # ramène vers le local, jamais l'inverse. Il ne peut donc pas faire
+    # sortir une donnée qui serait restée sur la machine — la règle 3
+    # n'est pas assouplie, elle s'applique simplement à un cloud qui
+    # existe vraiment.
+    if contains_any(text, KEYWORDS_CLOUD) and cloud_is_available():
         return "cloud"
     return "local"
+
+
+def cloud_is_available() -> bool:
+    """
+    Le cloud est-il réellement utilisable, ou seulement documenté ?
+
+    Lu à chaque appel plutôt qu'au chargement du module : Cyril peut
+    renseigner sa clé dans `.env` sans redémarrer, et un routage figé au
+    démarrage lui donnerait l'impression que le réglage n'a rien fait.
+    """
+    from config import OPENAI_API_KEY
+
+    return bool(OPENAI_API_KEY)
 
 
 # Mots-clés qui signalent que la question porte sur ce qui est affiché à

@@ -5073,6 +5073,91 @@ dépend d'un encodage implicite plutôt que déclaré.
 **Désactiver** : `Disable-ScheduledTask -TaskName "LucasCoworkRequests"`.
 **Supprimer** : `Unregister-ScheduledTask -TaskName "LucasCoworkRequests" -Confirm:$false`.
 
+## 5.52 Le routage cloud envoyait les meilleures questions dans un mur
+
+Trouvé en regardant les derniers trous de couverture. `core/cloud_llm.py`
+affichait **40 %** — mais c'est un **stub de 12 lignes**, il n'y avait
+rien à couvrir. Le chiffre était trompeur ; la question qu'il a fait
+poser ne l'était pas : *que reçoit Cyril quand le routeur décide
+« cloud » ?*
+
+### Le bug, mesuré dans la vraie application
+
+```
+Cyril : « Analyse les avantages du photovoltaïque sur 20 ans »
+Luca  : « [Cloud non configuré] Copie .env.example en .env et renseigne
+          OPENAI_API_KEY pour activer ce mode. »
+```
+
+`ask_cloud()` ne parle à aucun service : sans clé, il rend un texte de
+configuration. Et les mots-clés cloud — « analyse », « compare »,
+« projection », « optimise » — sont des mots **français courants**. Sur
+un échantillon de six questions ordinaires, **quatre** finissaient ainsi
+dans un cul-de-sac.
+
+⚠️ **Et c'est devenu plus coûteux depuis la bascule sur gpt-oss:20b** :
+le modèle **local** est précisément celui qui s'est le mieux comporté des
+cinq candidats sur ce type de question analytique (§5.44). On écartait
+donc le meilleur outil disponible au profit d'un mur.
+
+Ce défaut n'est pas né hier — `cloud_llm.py` a toujours été un stub. Mais
+il était invisible : aucun test ne vérifiait ce que Cyril reçoit
+réellement pour une question routée cloud, et la documentation
+(`CLAUDE.md` règle 3) décrit une architecture hybride comme si les deux
+côtés fonctionnaient.
+
+### Le correctif, et pourquoi il ne touche pas à la règle 3
+
+`route()` ne renvoie « cloud » que si `cloud_is_available()` — c'est-à-dire
+si `OPENAI_API_KEY` est réellement renseignée.
+
+⚠️ **Ce test ne peut rendre le routage que PLUS conservateur.** Il ramène
+vers le local, jamais l'inverse : il ne peut donc pas faire sortir une
+donnée qui serait restée sur la machine. La règle 3 n'est pas assouplie —
+elle s'applique désormais à un cloud qui existe vraiment. Un test dédié
+verrouille cette propriété (`test_the_availability_test_can_only_make_routing_more_local`).
+
+La disponibilité est relue **à chaque appel**, pas au chargement du
+module : Cyril peut renseigner sa clé dans `.env` sans redémarrer, et un
+routage figé au démarrage lui donnerait l'impression que le réglage n'a
+rien fait.
+
+### Deux tests rectifiés, pas supprimés
+
+Deux cas affirmaient `route(...) == "cloud"`. Ils testent la **règle de
+routage**, qui reste juste — il leur manquait la précondition. La clé est
+donc posée explicitement par `monkeypatch` plutôt que dépendre du `.env`
+de la machine. C'est le même défaut que celui déjà corrigé pour
+`API_TOKEN` dans `test_server.py` : **un test ne doit jamais dépendre
+d'un secret local.**
+
+### Vérifié en réel, avant/après
+
+Même question, même serveur :
+
+| | Réponse |
+|---|---|
+| Avant | `[Cloud non configuré] Copie .env.example en .env…` |
+| Après | un tableau de 9 avantages chiffrés (ROI, kWh/kWc/an, CO₂ évité), au tutoiement, en **5,5 s** |
+
+### Ce qui reste ouvert, et qui appartient à Cyril
+
+Le cloud n'est toujours **pas implémenté** — `ask_cloud()` reste un stub.
+Deux directions possibles, aucune à trancher seul :
+
+1. **Implémenter réellement l'appel cloud** — accès réseau externe et
+   envoi de contenu hors de la machine : cas 1 de l'Autonomie
+   d'exécution, décision de Cyril.
+2. **Assumer le tout-local** et retirer `KEYWORDS_CLOUD` — défendable
+   maintenant que le modèle local est le plus fort du comparatif sur ces
+   questions. Ce serait une révision de la règle 3, donc aussi sa
+   décision.
+
+En attendant, le comportement est correct : les questions complexes sont
+traitées, en local, par le modèle qui s'en sort le mieux.
+
+Suite complète : **1227 passés**.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

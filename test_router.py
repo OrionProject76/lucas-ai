@@ -57,8 +57,53 @@ requires_core = pytest.mark.skipif(
         ("optimise mon crédit immobilier", "local", "sensible bat cloud"),
     ],
 )
-def test_route(question: str, expected: str, why: str) -> None:
+def test_route(question: str, expected: str, why: str, monkeypatch) -> None:
+    """
+    ⚠️ La clé cloud est posée explicitement depuis le 05/08/2026.
+
+    `route()` ne renvoie « cloud » que si le cloud est RÉELLEMENT
+    utilisable — `core/cloud_llm.py` étant un stub sans clé, y router une
+    question renvoyait à Cyril un message de configuration au lieu d'une
+    réponse (§5.52). Ces cas testent la RÈGLE de routage, pas la présence
+    d'une clé : la précondition est donc rendue explicite ici plutôt que
+    dépendante de ce que contient le `.env` de la machine.
+
+    C'est le même défaut que celui déjà corrigé pour `API_TOKEN` dans
+    `test_server.py` : un test ne doit jamais dépendre d'un secret local.
+    """
+    monkeypatch.setattr("core.router.cloud_is_available", lambda: True)
     assert route(question) == expected, f"« {question} » devrait être {expected} ({why})"
+
+
+def test_a_cloud_question_stays_local_when_the_cloud_is_unusable(monkeypatch) -> None:
+    """
+    Bug réel, mesuré dans la vraie application le 05/08/2026 :
+
+        Cyril : « Analyse les avantages du photovoltaïque sur 20 ans »
+        Luca  : « [Cloud non configuré] Copie .env.example en .env… »
+
+    4 questions sur 6 d'un échantillon ordinaire finissaient ainsi dans
+    un cul-de-sac — alors que le modèle LOCAL est justement le meilleur
+    des cinq candidats sur ce type de question analytique (§5.44).
+    """
+    monkeypatch.setattr("core.router.cloud_is_available", lambda: False)
+    assert route("fais une projection sur 20 ans") == "local"
+    assert route("compare ces deux stratégies") == "local"
+
+
+def test_the_availability_test_can_only_make_routing_more_local(monkeypatch) -> None:
+    """
+    Garde-fou de principe : ce test ne doit JAMAIS pouvoir envoyer au
+    cloud une question qui serait restée locale. Il ramène vers le local,
+    jamais l'inverse — la règle 3 n'est pas assouplie.
+    """
+    monkeypatch.setattr("core.router.cloud_is_available", lambda: True)
+    avec = [route(q) for q in ("analyse mon portfolio", "quelle heure il est",
+                               "résume le document")]
+    monkeypatch.setattr("core.router.cloud_is_available", lambda: False)
+    sans = [route(q) for q in ("analyse mon portfolio", "quelle heure il est",
+                               "résume le document")]
+    assert avec == sans == ["local", "local", "local"]
 
 
 def test_sensitive_beats_cloud_keyword() -> None:
