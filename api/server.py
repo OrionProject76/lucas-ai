@@ -64,13 +64,52 @@ _AUDIO_MIME_TYPES = {".mp3": "audio/mpeg", ".wav": "audio/wav"}
 def _audio_mime_type(path: str) -> str:
     return _AUDIO_MIME_TYPES.get(Path(path).suffix.lower(), "application/octet-stream")
 
-# CORS ouvert pour l'instant (dev local uniquement).
-# À restreindre à l'IP du mobile une fois le PWA en place (S5).
+# ── CORS : resserré le 05/08/2026, une fois l'origine Tailscale connue ─
+#
+# Il était à `["*"]` avec la note « à restreindre une fois le PWA en
+# place ». Le PWA est en place, et l'accès distant vient d'ouvrir.
+#
+# ⚠️ Ce que ce resserrage protège, et ce qu'il ne protège pas — la
+# distinction compte, sinon on croit avoir fermé plus qu'on n'a fermé :
+#
+# - La PWA est SERVIE par ce serveur (`/app`). Ses appels sont donc en
+#   MÊME ORIGINE, et CORS ne s'y applique pas du tout. Ce réglage ne
+#   change rien à son fonctionnement.
+# - Ce qu'il empêche : qu'une page web quelconque, ouverte dans le
+#   navigateur de Cyril, appelle `GET /history` en JavaScript et lise
+#   tout son historique de conversation. Avec `["*"]`, le navigateur
+#   l'autorisait ; désormais il refuse.
+# - Ce qu'il n'empêche PAS : un appel direct hors navigateur (curl, un
+#   script). CORS est une protection du NAVIGATEUR, pas du serveur — la
+#   barrière contre ça reste `API_TOKEN`, et elle seule.
+#
+# Les adresses viennent de ce que cette machine tient réellement
+# (vérifié : `Get-NetIPAddress`), pas d'une supposition :
+#   192.168.1.12    Ethernet, réservation DHCP Livebox
+#   192.168.1.14    Wi-Fi du MÊME PC — active, et elle répond
+#   100.88.249.117  Tailscale, accès distant
+#
+# ⚠️ `.14` n'est PAS l'adresse du téléphone, contrairement à ce qui avait
+# été conclu le matin du 05/08 : c'est la seconde interface de ce PC. Le
+# Wi-Fi était éteint au moment de ce diagnostic, d'où la confusion. La
+# retirer couperait l'accès via cette interface.
+_ORIGINES_AUTORISEES = [
+    "https://192.168.1.12:8000",
+    "https://192.168.1.14:8000",
+    "https://100.88.249.117:8000",
+    "https://127.0.0.1:8000",
+    "https://localhost:8000",
+    # HTTP pour `just serve-http` (dépannage local sans certificat).
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ORIGINES_AUTORISEES,
     # La spec CORS interdit credentials + origine « * » : les navigateurs
-    # rejettent la combinaison. False reflète ce qui se passe réellement.
+    # rejettent la combinaison. Reste False — le jeton voyage par en-tête
+    # `Authorization`, jamais par cookie, donc rien à autoriser ici.
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

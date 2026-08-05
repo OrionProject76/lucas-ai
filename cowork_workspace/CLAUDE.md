@@ -465,7 +465,7 @@ C:/OrionAI/
 ## 🧠 Modèles LLM (Ollama)
 | Rôle | Modèle | Taille VRAM | Usage |
 |------|--------|-------------|-------|
-| Principal | deepseek-coder:33b | ~20 Go | Raisonnement, code, chat |
+| Principal | gpt-oss:20b | ~15,3 Go (mesuré, chat+RAG — ROADMAP.md §5.44) | Raisonnement, code, chat |
 | Vision | internvl2 / llava:13b | ~8 Go | Analyse écran temps réel |
 | Rapide | qwen2.5:7b | ~5 Go | Réponses instantanées, routing |
 | Créatif | mistral-nemo | ~7 Go | Brainstorming, storytelling |

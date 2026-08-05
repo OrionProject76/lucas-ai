@@ -5158,6 +5158,96 @@ traitées, en local, par le modèle qui s'en sort le mieux.
 
 Suite complète : **1227 passés**.
 
+## 5.53 Accès distant ouvert — CORS resserré, et une erreur de ma part corrigée
+
+Cyril a installé Tailscale et régénéré le certificat lui-même. Adresse
+Tailscale du PC : **`100.88.249.117`**.
+
+### ⚠️ Je m'étais trompé sur `192.168.1.14`
+
+Le matin du 05/08, j'avais conclu (§5.32) que `.14` était **l'adresse du
+téléphone**, en me fondant sur une ligne de log WebSocket où elle
+apparaissait comme adresse cliente, et sur une entrée ARP « Incomplete ».
+
+**C'est faux.** `.14` est **l'interface Wi-Fi de ce PC** :
+
+```
+192.168.1.12   Ethernet   Dhcp
+192.168.1.14   Wi-Fi      Dhcp     <- même machine
+100.88.249.117 Tailscale  Manual
+```
+
+Le Wi-Fi était éteint au moment du diagnostic — d'où l'ARP incomplet et
+le timeout, que j'ai interprétés comme « adresse morte appartenant à
+quelqu'un d'autre ». Aujourd'hui l'interface est active et
+`https://192.168.1.14:8000/status` répond.
+
+**Conséquence directe sur la question posée** : `.14` ne peut PAS être
+retirée du certificat. La retirer couperait l'accès par le Wi-Fi du PC.
+Et la réservation DHCP de la Livebox ne change rien à cela — elle porte
+sur la MAC de l'**Ethernet** ; le Wi-Fi a sa propre MAC et son propre
+bail.
+
+À noter au passage : `bdvpnservice_2` détient `100.112.1.249`. Le VPN
+Bitdefender occupe donc la même plage `100.x` (CGNAT) que Tailscale —
+sans conflit ici, mais à savoir avant de diagnostiquer une adresse
+`100.x` en supposant qu'elle vient de Tailscale.
+
+### Le CORS, et ce qu'il protège vraiment
+
+`allow_origins` passe de `["*"]` à une liste explicite. La distinction
+suivante est écrite dans le code, parce que sans elle on croit avoir
+fermé plus qu'on n'a fermé :
+
+- **La PWA est servie par ce serveur** (`/app`) : ses appels sont en
+  **même origine**, CORS ne s'y applique pas. Ce réglage ne change rien
+  à son fonctionnement — vérifié.
+- **Ce qu'il empêche** : qu'une page web quelconque ouverte dans le
+  navigateur de Cyril appelle `GET /history` en JavaScript et lise tout
+  son historique. Avec `["*"]`, le navigateur l'autorisait.
+- **Ce qu'il n'empêche pas** : un appel direct hors navigateur (curl, un
+  script). **CORS protège le navigateur, pas le serveur.** La barrière
+  contre ça reste `API_TOKEN`, et elle seule — ce qui rend sa
+  régénération d'autant plus nécessaire maintenant que l'accès distant
+  est ouvert (§5.30, toujours à la main de Cyril).
+
+### Vérifié par de vrais appels, pas par un démarrage
+
+Deux choses distinctes ont été mesurées — les confondre donnerait une
+fausse assurance. Un serveur peut répondre 200 tout en refusant
+l'origine : c'est le navigateur qui bloque la lecture.
+
+| Origine | Appel `/history` authentifié | En-tête `Access-Control-Allow-Origin` |
+|---|---|---|
+| `192.168.1.12` (Ethernet) | HTTP 200, 6 687 o | `https://192.168.1.12:8000` |
+| `192.168.1.14` (Wi-Fi) | HTTP 200, 6 687 o | `https://192.168.1.14:8000` |
+| **`100.88.249.117` (Tailscale)** | HTTP 200, 6 687 o | `https://100.88.249.117:8000` |
+| `127.0.0.1` | HTTP 200, 6 687 o | `https://127.0.0.1:8000` |
+
+Origines étrangères — `https://evil.example`, `http://192.168.1.99:8000`,
+`null` : **aucun en-tête renvoyé**, donc lecture refusée par le
+navigateur. Le serveur répond quand même 200, ce qui est le
+fonctionnement normal de CORS et confirme le point ci-dessus.
+
+Préflight `OPTIONS /chat` depuis les deux origines principales : 200,
+avec les méthodes annoncées.
+
+Enfin, un **chat réel de bout en bout via Tailscale** : HTTP 200,
+en-tête correct, réponse produite. La PWA se charge sur les trois
+adresses.
+
+### Redémarrage — procédure suivie
+
+`netstat` désignait le PID **36592** comme seul en écoute ; l'arbre
+complet (`cmd.exe` 3896 → stub venv 35428 → 36592) a été arrêté d'un
+bloc, enfant d'abord. Tuer le stub seul aurait fait tomber le service —
+l'incident du 03/08.
+
+Relance par **`Start-ScheduledTask LucasAPIServer`**, jamais en manuel,
+pour rester cohérent avec le démarrage automatique. `LastTaskResult: 0`.
+
+Suite complète : **1227 passés**.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
