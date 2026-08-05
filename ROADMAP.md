@@ -4215,6 +4215,144 @@ pouvait le révéler. Seule la confrontation au vrai moteur l'a fait.
 
 Suite complète : **1129 passés**.
 
+## 5.44 Comparatif de modèles — 5 candidats mesurés sur cette machine, 05/08/2026
+
+Demandé par Cyril après la limite mesurée de `qwen2.5:7b` (relance de
+guichet malgré interdiction explicite du prompt). **Aucun remplacement
+effectué** : `MODEL_NAME` reste `qwen2.5:7b` tant qu'il n'a pas tranché.
+
+Tous les chiffres viennent de cette machine, jamais d'un benchmark
+public. 40 Go téléchargés, 268 Go restants sur C:.
+
+### Le tableau
+
+| | qwen2.5:7b<br>*(actuel)* | **gpt-oss:20b** | qwen3:14b | gemma3:12b | deepseek-r1:14b |
+|---|---|---|---|---|---|
+| **Vitesse** (tok/s) | 156,7 | **165,8** | 87,9 | 89,5 | 84,8 |
+| Chargement | 1,5 s | 4,7 s | 1,9 s | 2,9 s | 1,9 s |
+| **VRAM** chat + RAG | 8 037 Mo | **15 291 Mo** | ~12 700 | ~12 269 | ~12 551 |
+| Marge sur 16 Go | 8 347 Mo | **1 093 Mo** | ~3 600 | ~4 100 | ~3 800 |
+| `llava` cohabite ? | oui | **non** | oui | oui | oui |
+| **Relance de guichet** | **9/15** | **0/15** | 1/15 | 2/15 | 3/15 |
+| Vouvoiement | 0/15 | 0/15 | 0/15 | 0/15 | 0/15 |
+| HNSW (fait vérifiable) | ✗ inventé | **✓** | ✓ | ✓ | ✗ inventé |
+| Subjonctif imparfait | ✗ | **✓ seul correct** | ✗ inventé | ✗ | ✗ inventé |
+| **Appel d'outil** (enum liste blanche) | **3/3** | 1/3 | **3/3** | 0/3 | 0/3 |
+| `content` vide | 0 | **2/16** | 0 | 0 | 0 |
+
+Détail du test de français (attendu : « qu'il résolût ») :
+
+| Modèle | Réponse |
+|---|---|
+| gpt-oss:20b | **« qu'il résolût »** |
+| qwen3:14b | « résolveisse » *(inventé)* |
+| deepseek-r1:14b | « rèsolve » *(inventé, accent fautif, « ce tense »)* |
+| gemma3:12b | « Résoudrait » *(conditionnel)* |
+| qwen2.5:7b | « Il résolvât » |
+
+⚠️ **Mon détecteur de relance de guichet sous-comptait** : il ratait
+« Comment puis-je t'aider aujourd'hui ? » et « qu'est-ce que je peux
+faire pour toi » — deux relances caractérisées, observées chez
+deepseek-r1 et qwen2.5. **Troisième instrument fautif de la session.**
+Le détecteur corrigé est désormais vérifié sur 6 positifs et 5 négatifs
+connus AVANT de mesurer quoi que ce soit ; les chiffres du tableau
+viennent de lui. Le premier passage donnait 6/15 pour qwen2.5 au lieu
+de 9/15.
+
+### Le coût de bascule — mesuré avant de construire quoi que ce soit
+
+C'était la condition posée par Cyril avant d'envisager un routeur.
+
+**Deux modèles 14B ne tiennent pas ensemble dans 16 Go.** Mesuré
+directement : après chargement de qwen3:14b, VRAM à 12 146 Mo ; après
+chargement de deepseek-r1:14b, **11 970 Mo** — elle n'augmente pas,
+parce qu'Ollama a déchargé le premier. Chaque bascule est donc un
+rechargement complet, inévitable.
+
+| Configuration | Latence par question |
+|---|---|
+| Duo routé, en alternance | **5,7 s** (dont 3,2 s de rechargement à chaque fois) |
+| gpt-oss:20b, premier appel | 10,4 s |
+| gpt-oss:20b, **à chaud** | **0,5 – 0,7 s** |
+
+Un routeur qui alterne ne laisse jamais un modèle chaud : il paie les
+3,2 s à *chaque* question qui change de catégorie.
+
+### Recommandation : **Option A — gpt-oss:20b seul**
+
+Cyril demandait une conclusion explicite, pas un tableau ouvert.
+
+**Ce qui décide :** gpt-oss:20b gagne sur le critère qui a motivé tout
+l'exercice (**0/15** de relance de guichet, contre 9/15 pour l'actuel),
+il est **le plus rapide des cinq** (165,8 tok/s, et 0,5 s à chaud), et
+c'est **le seul** à répondre juste aux deux questions de français
+vérifiables. Il est meilleur que l'actuel sur tout ce qui a été mesuré,
+sauf la VRAM et l'appel d'outils.
+
+**Pourquoi l'option B est écartée, et ce n'est pas seulement le coût de
+bascule :** son hypothèse était « deepseek-r1 pour la réflexion
+profonde ». Les mesures ne la soutiennent pas — deepseek-r1:14b est le
+**plus faible** des quatre candidats sur tout ce que j'ai pu mesurer :
+3/15 de guichet, HNSW inventé, conjugaison inventée, 0/3 en appel
+d'outil. Router vers lui pour « réfléchir mieux » n'a aucun appui
+factuel. Et même si on remplaçait deepseek-r1 par un meilleur second
+modèle, les 3,2 s de rechargement par bascule resteraient.
+
+**Le routeur multi-modèles n'a donc pas été construit.** L'instruction
+disait de mesurer le coût avant de s'engager ; le coût dit non.
+
+### Ce qu'il faudra corriger AVANT de basculer, si Cyril choisit A
+
+Trois points concrets, aucun rédhibitoire, mais aucun à découvrir après :
+
+1. **`content` vide 2/16.** gpt-oss:20b émet un champ `thinking` séparé
+   (16/16 des réponses). Sur les questions difficiles, il lui arrive de
+   tout mettre dans `thinking` et de rendre un `content` VIDE — observé
+   avec **11 400 caractères** de raisonnement pour zéro réponse finale.
+   `core/local_llm.py` lit `message.content` : Luca n'afficherait donc
+   **rien**. À traiter explicitement (repli sur `thinking`, ou relance),
+   jamais à laisser silencieux — c'est exactement le motif §5.39.
+2. **VRAM à 1 093 Mo de marge.** `nomic-embed-text` (274 Mo) passe, donc
+   le RAG fonctionne. `llava` (~4,7 Go) **ne passe pas** : si Cyril
+   réactive le VLM en v1.1, gpt-oss devra être déchargé à chaque analyse
+   d'image. Sans conséquence aujourd'hui (`VLM_ENABLED=False`), mais
+   c'est une contrainte réelle pour la suite.
+3. **Appel d'outil 1/3.** Il ignore l'`enum` de la liste blanche et rend
+   « Bloc-Notes » ou « calculator » au lieu de « notepad » /
+   « calculatrice ». ⚠️ **Sans effet sur la sécurité ni sur le
+   fonctionnement actuel** : le chemin d'action de Luca est
+   **déterministe** (`extract_app_name`, regex + liste blanche réelle),
+   le modèle n'émet aucun appel d'outil en production. Ce chiffre
+   n'engage que l'hypothèse où l'on voudrait un jour confier le
+   déclenchement au modèle — ce qui n'est ni fait, ni prévu, ni
+   souhaitable tant que le principe « le code décide, le LLM propose »
+   tient.
+
+**Alternative à mentionner** si la marge VRAM inquiète Cyril :
+`qwen3:14b` seul — 1/15 de guichet, 3/3 en appel d'outil, 3,6 Go de
+marge, mais **1,9× plus lent** (87,9 contre 165,8 tok/s) et une
+conjugaison inventée.
+
+### Sécurité — rien n'a bougé
+
+Le test d'appel d'outil expose au modèle un outil dont les valeurs
+autorisées viennent de la **vraie** `WHITELISTED_APPS`, et n'exécute
+rien : il mesure uniquement la capacité à émettre un appel bien formé.
+Aucun `eval()`, aucun `subprocess(shell=True)`, aucune modification de
+`core/decision_engine.py`. Le remplacement éventuel ne toucherait que
+`MODEL_NAME` dans `config.py`.
+
+### Note d'infrastructure
+
+Pendant ce chantier, l'anomalie Ollama de §5.36 s'est **éclaircie** :
+deux instances écoutent le port 11434 sur des adresses différentes —
+PID 17988 (enfant de l'appli tray, sur `::` IPv6, celle qui servait le
+magasin imbriqué) et PID 30768, lancée manuellement par Cyril à 10:57
+depuis un `cmd.exe`, sur `127.0.0.1` (IPv4). `config.OLLAMA_HOST` pointe
+sur l'IPv4, donc Luca parle à la bonne — c'est pourquoi RAG et vision
+sont réapparus. **Le doublon reste à régler** : si l'instance manuelle
+s'arrête, on retombe sur celle qui ne voit que 2 modèles.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
