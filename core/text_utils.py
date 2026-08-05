@@ -27,13 +27,56 @@ import unicodedata
 # correcteurs automatiques. Toutes ramenées à l'apostrophe droite.
 APOSTROPHES = "’‘ʼ´`"
 
+# Caractères qui RESSEMBLENT à un tiret sans appartenir à la catégorie
+# Unicode des tirets (Pd), et que le repli par catégorie rate donc.
+#
+# U+2212 est le signe moins mathématique : catégorie Sm (symbole math),
+# visuellement identique à un tiret. Élargir le repli à toute la
+# catégorie Sm serait pire que le mal — « + », « = » et « < » y sont
+# aussi, et deviendraient des tirets.
+#
+# ⚠️ Cette liste est l'aveu que le repli par catégorie ne suffit pas
+# TOUJOURS. Elle doit rester courte : chaque ajout signale un caractère
+# rencontré en vrai, jamais une précaution imaginée.
+TIRETS_HORS_CATEGORIE = "−"
+
 
 def normalize(text: str) -> str:
     """
-    Minuscules, sans accents, apostrophes uniformisées.
+    Minuscules, sans accents, apostrophes et ponctuation uniformisées.
 
     « Qu'est-ce que tu vois à l'ÉCRAN ? » et « quest ce que tu vois a
-    lecran » se ramènent au même terrain de comparaison, aux tirets près.
+    lecran » se ramènent au même terrain de comparaison.
+
+    ── ⚠️ Espaces et tirets typographiques (ajouté le 05/08/2026) ──────
+
+    C'est une CORRECTION DE SÉCURITÉ, pas un raffinement cosmétique.
+
+    En passant à gpt-oss:20b, un fait nouveau est apparu : ce modèle écrit
+    avec de la vraie typographie française — espace fine insécable avant
+    les « ! » et « ? » (U+202F), trait d'union insécable dans « Bloc‑notes »
+    (U+2011). Ces caractères ne sont ni l'espace ASCII ni le tiret ASCII.
+
+    Conséquence mesurée AVANT correctif :
+
+        is_sensitive("mon compte bancaire")            -> True
+        is_sensitive("mon compte\\u202fbancaire")       -> False   ⚠️
+        route_voice("Ton compte\\u202fbancaire : 3200") -> "cloud" ⚠️
+
+    Autrement dit : une réponse contenant une donnée bancaire, écrite avec
+    une espace fine, **partait chez Microsoft** (edge_tts) au lieu de
+    rester sur la machine avec Piper. `route_voice()` analyse la RÉPONSE
+    du modèle — c'est donc le modèle lui-même qui pouvait, par sa seule
+    typographie, faire sortir un contenu sensible.
+
+    Le repli se fait par CATÉGORIE Unicode plutôt que par liste :
+    - `Zs` (séparateurs d'espace) → espace ASCII
+    - `Pd` (tirets, tous) → tiret ASCII
+
+    Une liste nommant U+202F et U+2011 aurait corrigé ces deux cas et
+    laissé passer le suivant. La catégorie couvre aussi ceux qu'on n'a pas
+    encore rencontrés — ce qui est exactement le problème : on ne sait pas
+    à l'avance quelle typographie le prochain modèle emploiera.
     """
     lowered = text.lower()
 
@@ -43,7 +86,19 @@ def normalize(text: str) -> str:
     # NFD sépare les lettres de leurs accents ; on retire les accents
     # (catégorie Mn = marque non espaçante) et on garde les lettres.
     decomposed = unicodedata.normalize("NFD", lowered)
-    return "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
+
+    resultat = []
+    for caractere in decomposed:
+        categorie = unicodedata.category(caractere)
+        if categorie == "Mn":
+            continue          # accent détaché par la décomposition NFD
+        if categorie == "Zs":
+            resultat.append(" ")
+        elif categorie == "Pd" or caractere in TIRETS_HORS_CATEGORIE:
+            resultat.append("-")
+        else:
+            resultat.append(caractere)
+    return "".join(resultat)
 
 
 def contains_any(text: str, keywords) -> bool:

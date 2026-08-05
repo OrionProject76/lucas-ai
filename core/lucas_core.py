@@ -144,8 +144,43 @@ def fit_history_to_budget(
 # cette même base. Comparés après normalize() (minuscules, sans accents,
 # apostrophes uniformisées — voir core/text_utils.py) pour ne pas
 # dépendre d'une casse ou d'un accent exacts.
+# ⚠️ Élargi le 05/08/2026 après la bascule sur gpt-oss:20b.
+#
+# Ces motifs avaient été écrits en observant qwen2.5:7b. Confrontés aux
+# formulations RÉELLES du nouveau modèle, ils attrapaient **0 refus sur
+# 6** — le filtre était devenu entièrement aveugle sans qu'aucun test ne
+# le signale, puisqu'aucun test ne confronte une expression régulière au
+# vocabulaire d'un modèle qui n'existait pas quand elle a été écrite.
+#
+# Formulations réellement produites par gpt-oss, toutes ratées :
+#   « je ne peux pas voir ce qu'il y a à ton écran »
+#   « je n'ai aucun moyen de voir ce qui se passe sur ton écran »
+#   « je n'ai aucune visibilité sur ce qui s'affiche »
+#   « il m'est totalement impossible de voir ce qui se passe »
+#   « sans accès à ton poste je ne peux pas voir »
+#
+# Les motifs sont donc découpés en deux idées combinées plutôt qu'en
+# phrases entières : une NÉGATION DE CAPACITÉ, et une MENTION DE L'ÉCRAN.
+# Une phrase entière est un piège — elle ne survit pas au premier
+# changement de modèle, ce que cet épisode démontre.
+_REFUS_CAPACITE = (
+    # `\w* ?` autorise un adverbe intercalé — « je n'ai MALHEUREUSEMENT
+    # aucun moyen », « je n'arrive VRAIMENT pas à ». Observé chez gpt-oss,
+    # et invisible pour un motif qui colle les mots deux à deux.
+    r"(?:ne peux pas|ne suis pas en mesure|n'ai \w* ?pas acces|"
+    r"n'ai \w* ?aucun[e]? (?:acces|moyen|visibilite|maniere|facon)|"
+    r"impossible de|ne peux rien|sans acces|n'arrive \w* ?pas a|ne vois rien)"
+)
+_MENTION_ECRAN = r"(?:ecran|affich|ton poste|contexte visuel|image|ce que tu vois)"
+
 VISION_REFUSAL_PATTERNS = [
-    r"n'ai pas acces a\s+(une|aucune|cette|l'|votre|ton|mon)?\s*(image|ecran|contexte visuel)",
+    # Négation puis mention de l'écran, dans un rayon raisonnable — assez
+    # large pour « je ne peux pas voir ce qu'il y a à ton écran », assez
+    # étroit pour ne pas relier deux phrases sans rapport.
+    rf"{_REFUS_CAPACITE}.{{0,60}}{_MENTION_ECRAN}",
+    # L'ordre inverse : « à l'écran, je ne peux pas voir ».
+    rf"{_MENTION_ECRAN}.{{0,40}}{_REFUS_CAPACITE}",
+    # Formulations historiques, conservées telles quelles.
     r"ne peux pas regarder a distance",
     r"fonctionne localement.*ne peux pas regarder",
 ]
@@ -179,16 +214,45 @@ def is_vision_refusal(content: str) -> bool:
 # supposerait de savoir ce que Luca's voulait dire, ajouter se contente
 # de rétablir le fait. Le texte trompeur reste visible — c'est voulu :
 # Cyril doit pouvoir constater l'écart, pas le découvrir plus tard.
+# ⚠️ Élargi le 05/08/2026 après la bascule sur gpt-oss:20b, et pour la
+# même raison que VISION_REFUSAL_PATTERNS plus haut : ces motifs avaient
+# été écrits en observant qwen2.5. Face aux formulations réelles du
+# nouveau modèle, ils attrapaient **1 fausse confirmation sur 6**, puis
+# **0 sur 6** au second tirage.
+#
+# Un garde-fou qui cesse de détecter ne produit aucune erreur visible. Il
+# redevient simplement silencieux — et c'est le pire mode de défaillance
+# pour un mécanisme dont toute la raison d'être est de rattraper un
+# mensonge.
+#
+# Ce que gpt-oss écrit, et que l'ancienne version ratait :
+#   « Bloc-notes ouvert sur ton PC. »        <- participe SEUL, pas de verbe
+#   « Bloc-notes lancé sur ton PC ! »        <- idem
+#   « Le bloc-notes est déjà lancé. »        <- « déjà » absent des adverbes
+#   « J'ai mis le Bloc-Notes en marche. »    <- tournure inconnue
+_ADVERBES = r"(?:bien |donc |deja |maintenant |desormais |a present )*"
+_PARTICIPES = r"(?:lance|lancee|ouvert|ouverte|demarre|demarree|active|activee)"
+_APPS = r"(?:bloc-?notes?|notepad|chrome|explorateur|calculatrice|application)"
+
 _CLAIMED_ACTION_SUCCESS = re.compile(
-    r"\b(?:"
-    r"est (?:bien |maintenant |desormais )*(?:lance|lancee|ouvert|ouverte|demarre|demarree)"
-    r"|a ete (?:bien )?(?:lance|lancee|ouvert|ouverte|demarre|demarree)"
-    r"|j'ai (?:bien |donc )*(?:lance|ouvert|demarre)"
-    r"|je l'ai (?:bien |donc )*(?:lance|ouvert|demarre)"
-    r"|viens d'(?:ouvrir|ouvrir)|viens de (?:lancer|demarrer)"
-    r"|vient d'etre (?:lance|ouvert|demarre)"
-    r"|voila (?:le |la )?(?:bloc|notepad|chrome|explorateur|calculatrice)"
-    r")\b"
+    r"(?:"
+    rf"\best {_ADVERBES}{_PARTICIPES}\b"
+    rf"|\ba ete {_ADVERBES}{_PARTICIPES}\b"
+    rf"|\bj'ai {_ADVERBES}(?:{_PARTICIPES}|mis)\b"
+    rf"|\bje l'ai {_ADVERBES}{_PARTICIPES}\b"
+    # « vient/viens de » aux deux personnes, et la forme pronominale
+    # « vient tout juste de s'ouvrir » que gpt-oss emploie souvent.
+    r"|\bvien[st] (?:tout juste )?d(?:e |')(?:s')?(?:ouvrir|lancer|demarrer)\b"
+    rf"|\bvient d'etre {_ADVERBES}{_PARTICIPES}\b"
+    r"|\ben marche\b"
+    r"|\bvoila (?:le |la )?(?:bloc|notepad|chrome|explorateur|calculatrice)"
+    # ⚠️ Le participe SEUL, sans verbe : « Bloc-notes ouvert sur ton PC. »
+    # C'est la forme que gpt-oss privilégie, et celle qu'aucun motif
+    # construit autour d'un verbe ne pouvait attraper. Exige le nom d'une
+    # application juste avant, pour ne pas déclencher sur « le fichier
+    # ouvert » ou « le dossier lancé » au fil d'une phrase.
+    rf"|\b{_APPS}\s+{_ADVERBES}{_PARTICIPES}\b"
+    r")"
 )
 
 FALSE_CLAIM_CORRECTION = (

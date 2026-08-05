@@ -4549,6 +4549,106 @@ réseau ne lève jamais.
 
 Suite complète : **1147 passés**.
 
+## 5.47 🔴 La typographie du nouveau modèle ouvrait une fuite — et aveuglait deux garde-fous
+
+Trouvé en auditant ce que la bascule sur gpt-oss:20b avait pu casser
+silencieusement. **Le résultat dépasse largement ce que je cherchais.**
+
+### La faille de sécurité
+
+gpt-oss:20b écrit avec de la **vraie typographie française** : espace
+fine insécable avant les « ! » et « ? » (U+202F), trait d'union
+insécable dans « Bloc‑notes » (U+2011). Ni l'un ni l'autre n'est le
+caractère ASCII correspondant, et `core/text_utils.normalize()` ne
+repliait que les apostrophes et les accents.
+
+Mesuré **avant** correctif :
+
+```
+is_sensitive("mon compte bancaire")                 -> True
+is_sensitive("mon compte bancaire")            -> False   ⚠️
+route_voice("Ton compte bancaire : 3200 euros") -> "cloud" ⚠️
+```
+
+`route_voice()` analyse la **réponse du modèle** pour décider si le texte
+part chez Microsoft (edge_tts) ou reste sur la machine (Piper). Autrement
+dit : **le modèle pouvait, par sa seule typographie, faire sortir une
+donnée bancaire de la machine.** Pas par une formulation habile — par une
+espace.
+
+Corrigé dans `normalize()`, par **catégorie Unicode** plutôt que par
+liste : `Zs` (tout séparateur d'espace) → espace ASCII, `Pd` (tout tiret)
+→ tiret ASCII. Une liste nommant U+202F et U+2011 aurait réparé les deux
+cas connus et laissé passer le suivant — et on ne sait pas quelle
+typographie emploiera le prochain modèle.
+
+Une exception explicite subsiste : U+2212, le signe moins mathématique,
+est de catégorie `Sm` et non `Pd`. Élargir à `Sm` replierait aussi
+« + », « = » et « < ». La liste `TIRETS_HORS_CATEGORIE` est l'aveu que le
+repli par catégorie ne suffit pas toujours ; elle doit rester courte.
+
+`test_typographie_securite.py` (17 tests) verrouille le tout, dont le
+test qui compte : *un contenu sensible reste local quelle que soit la
+façon dont le modèle a tapé ses espaces.*
+
+### Les deux garde-fous devenus aveugles
+
+Même audit, autre découverte. `claims_action_success()` (anti-fausse
+confirmation, §5.31) et `is_vision_refusal()` (filtre les refus de vision
+de l'historique) sont des expressions régulières **écrites en observant
+qwen2.5**. Confrontées aux formulations réelles de gpt-oss :
+
+| Détecteur | Avant | Après typographie seule | Après élargissement |
+|---|---|---|---|
+| `claims_action_success` | **1/6** puis 0/6 | 0/6 | **13/13** |
+| `is_vision_refusal` | **0/6** | 0/6 | **11/11** |
+
+⚠️ **Le correctif typographique n'a rien changé ici** — j'ai d'abord cru
+qu'il expliquerait tout. Le problème était le **vocabulaire**, pas les
+caractères. Deux causes distinctes trouvées dans le même audit ; les
+confondre aurait laissé la seconde entière.
+
+Ce que gpt-oss écrit et que les motifs d'origine ne pouvaient pas voir :
+
+- **« Bloc‑notes ouvert sur ton PC. »** — un participe **seul**, sans
+  verbe. Aucun motif construit autour de « est » ou « a été » ne
+  l'attrape. C'est pourtant la forme que ce modèle privilégie.
+- **« est déjà lancé »** — « déjà » manquait à la liste d'adverbes.
+- **« vient tout juste de s'ouvrir »**, **« j'ai mis en marche »** —
+  tournures absentes.
+- **« je n'ai malheureusement aucun moyen de voir »** — un adverbe
+  intercalé suffisait à casser un motif qui collait les mots deux à deux.
+
+Les motifs sont désormais découpés en **idées combinées** (une négation
+de capacité + une mention de l'écran) plutôt qu'en phrases entières. Une
+phrase entière ne survit pas au premier changement de modèle — cet
+épisode en est la démonstration.
+
+⚠️ **Je me suis arrêté à 6 échantillons par détecteur, délibérément.**
+J'aurais pu continuer à élargir sur chaque raté, mais sur-ajuster à six
+tirages n'est pas de la couverture : c'est de l'apprentissage par cœur.
+Le motif « participe seul » exige d'ailleurs un nom d'application juste
+avant, pour ne pas déclencher sur « le fichier ouvert dans ton éditeur ».
+
+### La leçon, et sa limite honnête
+
+`test_detecteurs_multi_modeles.py` (28 tests) confronte les deux
+détecteurs aux formulations **recopiées telles quelles** des DEUX
+modèles, apostrophes typographiques comprises. Une phrase reformulée
+proprement par un humain ne teste plus rien.
+
+Mais ce fichier **fige le vocabulaire de deux modèles à une date**. Il ne
+garantit rien sur le prochain, et c'est écrit dans son en-tête. La seule
+parade réelle est de **rejouer cette confrontation à chaque changement de
+modèle** — pas d'espérer que les motifs soient devenus universels.
+
+C'est le coût caché d'un changement de modèle, et il n'apparaissait dans
+aucun critère du comparatif : **tout mécanisme déterministe qui reconnaît
+du langage produit par le modèle doit être re-mesuré**, parce qu'il ne
+signale jamais lui-même qu'il a cessé de fonctionner.
+
+Suite complète : **1192 passés**.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
