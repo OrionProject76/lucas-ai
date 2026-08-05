@@ -5248,6 +5248,113 @@ pour rester cohérent avec le démarrage automatique. `LastTaskResult: 0`.
 
 Suite complète : **1227 passés**.
 
+## 5.54 Tailscale et le VPN Bitdefender — faire coexister, pas alterner
+
+Cyril a trouvé la cause : le VPN Bitdefender actif en même temps que
+Tailscale. Objectif posé — une coexistence **durable**, pas un
+basculement manuel à chaque fois.
+
+### Le mécanisme, mesuré des deux côtés
+
+Le conflit est **asymétrique**, et c'est ce qui détermine où le corriger.
+
+**Tailscale ne prend jamais la route par défaut.** Sa table ne contient
+que des `/32` vers les pairs et `100.100.100.100` (son résolveur DNS) :
+
+```
+100.100.100.100/32  Tailscale    métrique 0
+100.91.76.4/32      Tailscale    métrique 0     (le téléphone)
+100.88.249.117/32   Tailscale    métrique 256   (ce PC)
+```
+
+Aucune option côté Tailscale ne traite d'ailleurs ce cas :
+`--accept-routes` concerne les routes annoncées par les pairs,
+`--exit-node` le routage volontaire du trafic Internet. `RouteAll: true`
+dans les préférences actuelles ne veut pas dire « capture tout le
+trafic », mais « accepte les routes des autres nœuds ».
+
+**Bitdefender, lui, capture `0.0.0.0/0`** : à la connexion, son tunnel
+WireGuard (`bdvpnservice_2`) devient la route par défaut et emporte tout
+le trafic sortant — y compris celui de `tailscaled` vers son serveur de
+coordination.
+
+Preuve par l'absence : VPN déconnecté, l'interface disparaît entièrement
+de la table de routage, et Tailscale redevient sain immédiatement (plus
+de `offline`, plus d'avertissement de santé).
+
+### Le symptôme, et pourquoi il trompait
+
+```
+lucas-project       windows  offline
+s25-ultra-de-cyril  android  active; relay "par", tx 4420 rx 11988
+```
+
+⚠️ `offline` ne signifiait **pas** « pas de tunnel ». Le tunnel de
+données fonctionnait — 4 420 octets envoyés, 11 988 reçus via le relais
+de Paris. Ce qui échouait, c'est la liaison au **serveur de
+coordination**, celui qui synchronise l'état du tailnet. D'où le point
+gris sur le téléphone : il lisait un état périmé.
+
+Deux fausses pistes écartées en chemin, toutes deux plausibles :
+- **les deux `tailscaled`** sont parent/enfant (37948 → 20668), motif
+  Windows normal — pas un doublon type Ollama ;
+- **aucun détournement de la plage CGNAT** : Bitdefender ne tient qu'un
+  `/32` pour sa propre adresse `100.112.1.249`. Le partage de la plage
+  `100.64.0.0/10` entre les deux produits est réel mais **sans conflit**.
+
+Le vrai indice était ailleurs : `netcheck` donnait `UDP: false` et
+`IPv4: (no addr found)` alors que les relais DERP répondaient en 36 ms,
+et que `controlplane.tailscale.com:443` était joignable **depuis
+PowerShell** mais pas depuis le démon. Réseau ouvert, application
+détournée.
+
+### Les options étudiées
+
+| Option | Verdict |
+|---|---|
+| Exclure `100.64.0.0/10` côté Bitdefender | **Impossible** — sa v27.3.4.19 ne propose pas d'exclusion par sous-réseau |
+| Régler quelque chose côté Tailscale | **Sans objet** — il ne capture pas la route par défaut, il n'y a rien à désactiver |
+| Baisser la métrique de l'interface Bitdefender | **Écarté** — modification de réglage réseau système, fragile (réinitialisée à chaque reconnexion du VPN) et contournant un produit de sécurité plutôt que le configurant |
+| **Split tunneling par application** — exclure `tailscaled.exe` | **Retenu** |
+
+### Pourquoi le split tunneling par application
+
+Il traite la cause au bon endroit : le trafic de `tailscaled` ne passe
+plus par le tunnel Bitdefender, donc le serveur de coordination, les
+relais DERP et l'UDP redeviennent atteignables. Tout le reste du trafic
+de la machine continue de passer par le VPN — la protection n'est pas
+levée, elle est **précisée**.
+
+⚠️ **Ce que cette exclusion ne coûte pas, et il faut le dire** : le
+trafic Tailscale est **déjà chiffré de bout en bout** (WireGuard). Le
+faire sortir du tunnel Bitdefender ne l'expose donc pas — on retire une
+couche de chiffrement redondante sur un flux qui en a déjà une, pas une
+protection sur un flux en clair.
+
+`bdvpnapp.exe` n'expose aucune interface en ligne de commande, et aucun
+fichier de configuration lisible n'existe sur le disque (cherché sous
+`ProgramData`, `LOCALAPPDATA`, `APPDATA`). Le réglage se fait donc dans
+l'interface Bitdefender, **par Cyril** — un réglage de logiciel de
+sécurité ne se modifie pas à sa place (`CLAUDE.md`, cas 1).
+
+### ⏳ Test en conditions réelles — en attente
+
+Le protocole est prêt et sera exécuté dès que le réglage sera appliqué et
+le VPN reconnecté, **les deux actifs simultanément** :
+
+1. `tailscale status` — `lucas-project` ne doit plus être `offline`,
+   l'avertissement de santé doit disparaître
+2. `tailscale netcheck` — `UDP` doit passer à `true` et une adresse IPv4
+   publique doit être découverte
+3. `tailscale ping <IP du téléphone>` — doit répondre
+4. Vérification que `bdvpnservice_2` détient bien `0.0.0.0/0` pendant le
+   test (sinon le VPN n'est pas réellement actif et le test ne prouve rien)
+5. Appel réel à Luca via l'adresse Tailscale — `/status`, puis un vrai
+   `/chat` de bout en bout
+
+Le point 4 compte autant que les autres : sans lui, un test « réussi »
+pourrait simplement refléter un VPN déconnecté.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
