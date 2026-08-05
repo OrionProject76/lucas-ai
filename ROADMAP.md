@@ -5364,7 +5364,79 @@ fichier de configuration lisible n'existe sur le disque (cherché sous
 l'interface Bitdefender, **par Cyril** — un réglage de logiciel de
 sécurité ne se modifie pas à sa place (`CLAUDE.md`, cas 1).
 
-### ⏳ Test en conditions réelles — en attente
+### ✅ Test en conditions réelles — COEXISTENCE CONFIRMÉE
+
+Cyril a ajouté `tailscaled.exe` au split tunneling et reconnecté le VPN.
+Résultat, **les deux actifs simultanément** :
+
+```
+interface : bdvpnservice_1 — Up / Connected   (100.112.10.167)
+tailscale status : aucun "offline", aucun avertissement de santé
+tailscale ping   : pong en 119 ms
+GET /status      : HTTP 200
+GET /app/        : HTTP 200
+```
+
+Le tunnel vers le téléphone est **direct**, plus par relais :
+`active; direct 192.168.1.10:48332`.
+
+### 🔴 Le mécanisme que j'avais décrit était FAUX — c'est prouvé
+
+Le script relève désormais la table des routes pendant que le VPN
+tourne. Verdict sans ambiguïté :
+
+```
+--- toutes les routes par defaut, par metrique ---
+   Ethernet         metrique 0
+   Wi-Fi            metrique 0
+=> MECANISME : le VPN ne tient PAS 0.0.0.0/0.
+```
+
+**Bitdefender ne capture pas la route par défaut.** L'explication par
+détournement de route, que j'avais écrite comme établie avant de la
+corriger en « inférée », est bel et bien **fausse**. Le conflit était un
+**filtrage applicatif** — `bdntwrk` ou le kill-switch du VPN empêchant
+`tailscaled` d'atteindre le réseau, indépendamment du routage.
+
+Ce qui explique pourquoi le split tunneling par application marche si
+bien : il traite exactement la bonne couche. Retenu pour la bonne raison,
+mais justifié au départ par un raisonnement erroné — la distinction
+mérite d'être notée.
+
+### ⚠️ Un point NON résolu, et son statut est incertain
+
+`netcheck` rapporte toujours **`UDP: false`** et
+`IPv4: (no addr found)`, split tunneling appliqué ou non.
+
+Or la connexion fonctionne : `tailscale ping` répond, d'abord via IPv6
+public (`[2a01:cb06:...]`), puis en direct sur le réseau local. Tailscale
+contourne donc l'absence d'UDP/IPv4 par d'autres chemins.
+
+⚠️ **La cause n'est pas établie, et ce n'est peut-être pas le VPN** : le
+tout premier `netcheck` a été lancé alors que le VPN était déjà connecté.
+Il n'existe aucune mesure de référence sans lui. `UDP: false` pourrait
+donc être une condition permanente de ce réseau (Livebox, pare-feu
+Bitdefender général) et n'avoir jamais eu de rapport avec ce conflit.
+
+Conséquence pratique : aucune aujourd'hui — la connexion passe. Mais sur
+un réseau sans IPv6 et sans accès direct, Tailscale retomberait sur les
+relais DERP, plus lents. À mesurer un jour avec le VPN déconnecté, pour
+savoir si c'est lui ou non.
+
+### Sixième instrument fautif de la journée
+
+Le script a d'abord conclu « VPN déconnecté » alors qu'il tournait :
+il cherchait l'interface `bdvpnservice_2`, **codée en dur**. Or le
+suffixe s'incrémente à chaque reconnexion — elle s'appelait
+`bdvpnservice_1`, et son adresse avait changé aussi (100.112.1.249 →
+100.112.10.167).
+
+Un identifiant volatil figé dans le code, exactement le motif traqué
+toute la journée. Corrigé par un filtre sur le motif `bdvpnservice*` +
+état `Up`. La garde a fonctionné dans le bon sens — elle a **refusé de
+conclure** plutôt que de rendre un faux négatif silencieux.
+
+### ⏳ Ancien état du test — en attente
 
 Le protocole est prêt et sera exécuté dès que le réglage sera appliqué et
 le VPN reconnecté, **les deux actifs simultanément** :

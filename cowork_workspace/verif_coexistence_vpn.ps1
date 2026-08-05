@@ -16,13 +16,24 @@ function Titre($t) { Write-Output ""; Write-Output "=== $t ===" }
 
 # ── 1. Le VPN est-il RÉELLEMENT actif ? ───────────────────────────────
 Titre "1. Le VPN Bitdefender capture-t-il bien la route par defaut ?"
-$bd = Get-NetAdapter -Name "bdvpnservice_2" -ErrorAction SilentlyContinue
+# ⚠️ Filtre sur le MOTIF, jamais sur un nom exact. Premiere version codait
+# "bdvpnservice_2" en dur : au premier test reel, l'interface s'appelait
+# "bdvpnservice_1" et le script a conclu "VPN deconnecte" alors qu'il
+# tournait. Le suffixe change a chaque reconnexion, l'adresse aussi
+# (100.112.1.249 -> 100.112.10.167). Un identifiant volatil code en dur,
+# exactement le motif traque toute la journee.
+$bd = Get-NetAdapter | Where-Object {
+    $_.Name -like "bdvpnservice*" -and $_.Status -eq "Up"
+} | Select-Object -First 1
+
 if (-not $bd) {
-    Write-Output "  !! Interface bdvpnservice_2 ABSENTE — le VPN n'est pas connecte."
+    Write-Output "  !! Aucune interface bdvpnservice* active — le VPN n'est pas connecte."
     Write-Output "  !! Le test ne prouverait rien. Connecte le VPN puis relance."
     exit 1
 }
-Write-Output "  interface : $($bd.Status) / $($bd.MediaConnectionState)"
+Write-Output "  interface : $($bd.Name) — $($bd.Status) / $($bd.MediaConnectionState)"
+$ipVpn = (Get-NetIPAddress -InterfaceAlias $bd.Name -AddressFamily IPv4 -ErrorAction SilentlyContinue).IPAddress
+Write-Output "  adresse   : $ipVpn"
 Write-Output "  --- toutes les routes par defaut, par metrique ---"
 Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue |
     Sort-Object RouteMetric |
