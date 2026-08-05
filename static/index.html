@@ -3,6 +3,13 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- Le lien d'appairage porte le jeton en query string (?token=...).
+         Sans cette ligne, ce jeton partirait dans l'en-tête Referer de
+         toute requête sortante déclenchée depuis cette page. La PWA n'en
+         fait aucune aujourd'hui — c'est justement pour ça que la ligne
+         coûte zéro et doit être posée maintenant plutôt qu'après le
+         premier lien externe ajouté par distraction. Voir ROADMAP.md §5.33. -->
+    <meta name="referrer" content="no-referrer" />
     <title>Luca's</title>
     <link rel="manifest" href="/app/manifest.json" />
     <link rel="icon" href="/app/icons/icon-192.png" />

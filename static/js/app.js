@@ -3,8 +3,27 @@
 (function () {
     // Jeton passé une seule fois par lien (?token=...), pour configurer le
     // téléphone sans écran de réglages à construire. Sauvegardé puis retiré
-    // de l'URL tout de suite : un jeton ne doit pas traîner dans l'historique
-    // ou les favoris du navigateur.
+    // de l'URL tout de suite.
+    //
+    // ⚠️ Ce que replaceState fait, et surtout ce qu'il NE fait PAS
+    // (précisé le 05/08/2026 — la formulation d'origine, « un jeton ne doit
+    // pas traîner dans l'historique », laissait croire le problème réglé).
+    //
+    // Il fait : retirer le jeton de la barre d'adresse, de l'entrée
+    // d'historique de session, et donc de tout partage ou favori créé
+    // ensuite. C'est réel et utile.
+    //
+    // Il ne fait pas : effacer l'URL d'ORIGINE de la base d'historique du
+    // navigateur. Chrome enregistre la navigation avant que ce code ne
+    // s'exécute ; aucun JavaScript ne peut revenir dessus. Le jeton reste
+    // donc retrouvable dans l'historique de Chrome sur le téléphone,
+    // jusqu'à ce que Cyril l'efface lui-même.
+    //
+    // Fermer ce trou pour de bon demande de changer la MÉTHODE
+    // d'appairage (code à usage unique échangé contre le jeton, ou saisie
+    // manuelle) — c'est-à-dire toucher à l'authentification. Trois options
+    // sont décrites dans ROADMAP.md §5.33 ; la décision revient à Cyril,
+    // elle n'est pas prise ici.
     function _saveTokenFromUrl() {
         const params = new URLSearchParams(location.search);
         const token = params.get("token");

@@ -3362,6 +3362,82 @@ propriété `aura`, garde RAG), `core/aura_modes.py` (`tone_hint`, `store`,
 
 Suite complète : **1043 passés**.
 
+## 5.33 Jeton d'appairage dans l'historique du navigateur — étudié, décision à Cyril
+
+Priorité 2 de la session de nuit. Point catalogué lors du correctif des
+logs (§5.30) et volontairement laissé ouvert.
+
+### Le constat, plus étroit qu'annoncé
+
+`static/js/app.js` faisait déjà le maximum côté client : `replaceState()`
+retire le jeton de la barre d'adresse dès le chargement. Le commentaire
+d'origine disait « un jeton ne doit pas traîner dans l'historique », ce qui
+laissait croire le problème réglé. **Il ne l'est pas**, et la nuance est
+tout le sujet :
+
+| `replaceState()` | |
+|---|---|
+| **fait** | retire le jeton de la barre d'adresse, de l'entrée d'historique de session, donc de tout favori ou partage créé ensuite |
+| **ne fait pas** | effacer l'URL d'origine de la base d'historique de Chrome — la navigation y est enregistrée **avant** que le script ne s'exécute |
+
+Aucun JavaScript ne peut revenir sur ce point. Le jeton reste retrouvable
+dans l'historique de Chrome sur le téléphone jusqu'à ce que Cyril l'efface.
+**Il n'existe donc pas de mitigation côté client qui ferme ce trou** — la
+question posée était « une mitigation raisonnable côté client existe-t-elle
+? », et la réponse honnête est non.
+
+### Ce qui a été fait quand même (sans toucher à l'authentification)
+
+- `<meta name="referrer" content="no-referrer">` dans `static/index.html`.
+  Sans ça, le jeton partirait dans l'en-tête `Referer` de toute requête
+  sortante déclenchée depuis la page portant `?token=`. La PWA n'en fait
+  aucune aujourd'hui — c'est précisément pourquoi la ligne coûte zéro et
+  vaut mieux posée maintenant qu'après le premier lien externe ajouté par
+  distraction.
+- Le commentaire de `_saveTokenFromUrl()` dit désormais exactement ce que
+  le mécanisme couvre et ce qu'il ne couvre pas, pour qu'un lecteur futur
+  ne referme pas le sujet à tort.
+
+### Les trois options qui ferment vraiment le trou — décision de Cyril
+
+Toutes touchent la **méthode d'appairage**, donc l'authentification. Comme
+demandé, elles sont décrites, pas tranchées.
+
+**Option A — code d'appairage à usage unique.** L'URL porte un code court,
+valable une fois et quelques minutes, échangé contre le vrai jeton par un
+POST au premier chargement. Ce qui reste dans l'historique de Chrome est
+alors inutilisable.
+*Pour* : ferme le trou complètement, standard de l'industrie, garde
+l'appairage en un clic.
+*Contre* : nouvelle route serveur, stockage des codes et de leur
+expiration, et un mode d'échec nouveau (code expiré → réappairage à
+refaire). C'est le plus de code des trois.
+
+**Option B — saisie manuelle du jeton.** Un champ dans un écran de
+réglages ; plus aucun jeton dans une URL, jamais.
+*Pour* : ferme le trou sans aucune logique serveur ; le plus simple à
+raisonner.
+*Contre* : il faut construire l'écran de réglages (il n'existe pas), et
+Cyril doit recopier 32 caractères sur un téléphone à chaque réappairage.
+
+**Option C — ne rien changer, effacer l'historique après appairage.**
+Le jeton ne sert que sur le réseau local, derrière le pare-feu, et
+l'appairage est rare.
+*Pour* : zéro code, zéro risque de régression.
+*Contre* : repose entièrement sur un geste manuel de Cyril, qu'aucun
+mécanisme ne lui rappelle. C'est exactement le genre de dette qu'on oublie.
+
+**Variante utile quelle que soit l'option** : afficher une notice unique au
+moment où un jeton est lu depuis l'URL (« jeton enregistré — pense à
+effacer cette page de ton historique »). Ne ferme rien, mais boucle la
+boucle avec la seule personne qui peut agir. Non construite : elle n'a de
+sens que si Cyril retient l'option C.
+
+⚠️ Rappel de §5.30, toujours ouvert : la valeur actuelle du jeton a séjourné
+en clair dans `data/logs/server_startup.log`. La régénérer dans `.env`
+reste à la main de Cyril — et c'est le moment logique pour le faire, en
+même temps qu'un éventuel changement d'appairage.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
