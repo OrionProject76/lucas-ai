@@ -6729,19 +6729,60 @@ code restauré
 
 Restauration vérifiée par `git diff` vide sur `ui/main_window.py`.
 
-### Ce qui reste non couvert, et pourquoi
+### Les 28 dernières lignes — couvertes sur demande de Cyril
 
-`main_window.py` : 91 %, 28 lignes. Elles se rangent en trois familles,
-toutes coûteuses à couvrir pour un gain faible :
+J'avais argumenté « coûteuses pour un gain faible » et laissé
+`main_window.py` à 91 %. Cyril a demandé de les couvrir : le coût était
+mon argument, pas une impossibilité. **100 %.**
 
-- **Replis d'import** (34-35, 40-42, 289-293) — n'arrivent que si
-  `AvatarWidget` ou `VoiceManager` échouent à s'importer.
-- **Lancements de threads réels** (573-586 `_speak`, 623-630 STT) — les
-  couvrir démarrerait de vrais `QThread` dans la suite. Leurs
-  *conséquences* (les handlers `_on_playback_started`, `_on_tts_error`…)
-  sont couvertes, c'est ce qui compte.
-- **Attentes de fermeture** (691, 693) — `wait(2000)` sur des threads qui
-  ne tournent pas en test.
+⚠️ **Et c'est là qu'un de mes propres tests s'est révélé VIDE.**
+
+La ligne 530 (`_on_token` masque le statut d'attente) restait rouge
+**alors qu'un test prétendait la couvrir**. Cause : sous
+`QT_QPA_PLATFORM=offscreen`, `setVisible(True)` sur un widget dont la
+fenêtre n'a **jamais été montrée** laisse `isVisible()` à `False`. La
+branche n'était donc jamais prise, et l'assertion « le statut est
+masqué » était vraie d'avance.
+
+C'est le **jumeau exact** du piège déjà documenté pour `repaint()` dans
+`test_avatar.py` (§5.17) — et j'y suis tombé le jour même où je
+relisais ce commentaire. Corrigé par `show()` + un tour de boucle dans
+le fixture.
+
+**Ce que ça dit de la couverture** : elle a trouvé ce que la campagne de
+mutation avait manqué. Les deux outils ne voient pas la même chose — la
+mutation valide les tests qu'on pense avoir écrits, la couverture révèle
+ceux qui n'exécutent rien.
+
+**Comment les trois familles ont été couvertes** :
+
+| Famille | Méthode |
+|---|---|
+| Replis d'import (34-35, 40-42) | `sys.modules[nom] = None` fait lever `ImportError` à l'import — mécanisme documenté de CPython — puis `importlib.reload()`, avec restauration systématique |
+| Fenêtre sans avatar (289-293, 442) | `HAS_AVATAR = False` par monkeypatch, puis construction réelle |
+| Lancements de threads (573-586, 623-630) | Doubles de `TTSWorker`/`STTWorker` qui n'ouvrent **aucun** `QThread` réel — un vrai thread survivrait au test, jouerait du son, et rendrait la suite dépendante d'une carte audio |
+| Attentes de fermeture (691, 693) | Doubles dont `isRunning()` rend `True` et `wait()` enregistre l'appel |
+
+⚠️ **Un second piège, dans mon propre helper** : `importlib.reload()`
+mute l'objet module **en place**. Ma première version rendait le module,
+que la restauration avait déjà réécrit — le test affirmait
+`HAS_VOICE is False` sur un module redevenu normal. Le helper capture
+désormais les valeurs **avant** de restaurer, et rend un dictionnaire.
+
+### Mise à l'épreuve — 6 mutations, 0 test vide
+
+```
+closeEvent n'attend plus le worker TTS                    -> ROUGE (bon)
+_speak ne démarre plus le worker                          -> ROUGE (bon)
+une réponse vide est quand même prononcée                 -> ROUGE (bon)
+le bouton micro n'est plus verrouillé pendant la transcription -> ROUGE (bon)
+annuler la boîte de dialogue lance quand même la transcription -> ROUGE (bon)
+le premier jeton ne masque plus le statut                 -> ROUGE (bon)
+code restauré — 0 problème(s)
+```
+
+Le dernier est celui qui était vide : il vire maintenant au rouge.
+Restauration vérifiée par `git diff` vide.
 
 ### État
 
@@ -6749,12 +6790,12 @@ toutes coûteuses à couvrir pour un gain faible :
 |---|---|---|
 | `ui/` mesuré par `just test` | **non** | oui |
 | `ui/avatar_widget.py` | non mesuré (87 % trompeur) | **100 %** |
-| `ui/main_window.py` | non mesuré (87 %) | **91 %** |
-| Couverture totale | 97 % | **98 %** |
-| Tests | 1 297 | **1 304** |
+| `ui/main_window.py` | non mesuré (87 %) | **100 %** |
+| Couverture totale | 97 % | **98 %** (55 lignes non couvertes contre 78) |
+| Tests | 1 297 | **1 314** |
 
-`just check` : code de retour **0** — lint, 1 304 tests, mypy sur 109
-fichiers.
+`just check` : code de retour **0** — lint, 1 314 tests, mypy sur 109
+fichiers. `ui/` est désormais à **100 % sur ses trois fichiers**.
 
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
