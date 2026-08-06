@@ -5771,17 +5771,23 @@ Candidats déjà identifiés, **à ne pas prendre pour une liste close** :
 
 | Candidat | Statut au 05/08/2026 |
 |---|---|
-| `qwen2.5-vl:7b` | recommandé par le comparatif VLM (`cowork_workspace/reports/Comparatif_VLM_LucasAI_2026-08-05.md`) |
-| `llava` | l'actuel — à traiter comme un candidat, pas comme le sortant d'office |
-| `minicpm-v4.6` | second candidat sérieux, orienté OCR/document dense |
-| `Qwen3-VL` | **écarté au 05/08** : bug de bascule GPU ouvert sur RTX 50-series. À revérifier — un bug se corrige |
+| **`qwen2.5vl:7b`** | **en tête après mesure réelle (§5.57)** : 4/4 en lecture, aucune fabrication, 0,14 s au premier token. ⚠️ Le tag est **sans tiret** — `qwen2.5-vl:7b` cité par le rapport Cowork renvoie 404 |
+| `llava` | l'actuel — ⚠️ **0/4 en lecture et invente des chiffres plausibles** (§5.57). Ne pas réactiver tel quel |
+| `qwen3-vl:8b` | 4/4 en lecture, mais 8× plus lent au premier token que `qwen2.5vl` sur cette RTX 5080 — la lenteur rapportée sur RTX 50 est réelle, mesurée, modérée |
+| `minicpm-v4.6` | second candidat sérieux, orienté OCR/document dense — **pas encore mesuré ici** |
 
-⚠️ **Le 0,33 % d'hallucination de `qwen2.5-vl:7b` n'a PAS été mesuré sur
+⚠️ **Le 0,33 % d'hallucination de `qwen2.5vl:7b` n'a PAS été mesuré sur
 cette machine.** Il vient d'un benchmark public tiers (PhotoPrism), cité
 honnêtement comme tel dans le rapport. La règle 12 impose de le
 **re-mesurer localement** avant d'en faire un critère de décision —
 c'est exactement le type de chiffre que les comparatifs du 05/08 ont
 appris à ne pas croire sur parole.
+
+**Fait le 05/08 même (§5.57)** : mesuré ici sur image à vérité terrain,
+`qwen2.5vl:7b` ne fabrique rien et lit 4/4. Le classement du rapport
+était donc juste — mais son **nom de tag était faux**, et sa
+justification reposait sur un chiffre invérifiable. Les deux sont
+corrigés.
 
 **Cette liste est datée du 05/08/2026 et le paysage VLM bouge vite** —
 elle sert de point de départ, pas de périmètre.
@@ -5815,6 +5821,136 @@ d'avant la campagne ; `gpt-oss:20b`, `llava:latest` et
 
 **Aucune bascule en production n'a été faite** : `MODEL_NAME` reste
 `gpt-oss:20b`, conformément à la consigne.
+
+## 5.57 Veille modèles — mécanisme hebdomadaire, et 1re passe du 05/08/2026
+
+Cyril a demandé que la règle 12 devienne une tâche automatique :
+première passe immédiate, puis lundi 10/08/2026, puis tous les 7 jours
+**jusqu'à ce qu'il indique que le choix final est fait** (le jour où
+l'avatar / le produit fini prend forme).
+
+### Le mécanisme
+
+Même schéma que `LucasAPIServer` : `veille_modeles_runner.ps1` +
+`start_veille_modeles_hidden.vbs`, tâche **`LucasVeilleModeles`**
+(lundi 09:00, hebdomadaire). Pas via Cowork — les tâches planifiées
+cloud n'ont structurellement aucun accès au pont bureau
+(`workflow_requests_reports.md`).
+
+⚠️ **Cette tâche est plus privilégiée que `LucasCoworkRequests`.** Le
+traitement des demandes tourne avec Read/Glob/Grep/Write. Une veille ne
+peut pas : mesurer exige `ollama`/`nvidia-smi`/Python, documenter exige
+d'écrire dans `ROADMAP.md`. La compensation n'est pas la confiance dans
+l'instruction — trois propriétés sont garanties **mécaniquement par le
+script**, après coup, comme le renommage en `_DONE` n'est jamais confié
+au modèle :
+
+| Garde | Ce qu'elle garantit |
+|---|---|
+| **G1** | `config.py` est empreinté **et sauvegardé** avant. S'il a bougé, il est **restauré** et l'alerte est journalisée. Aucune bascule de modèle ne survit à une veille, même si le modèle décide le contraire |
+| **G2** | L'inventaire Ollama est relevé avant. Tout modèle apparu **pendant** est supprimé après. Les candidats ne peuvent pas s'accumuler de semaine en semaine |
+| **G3** | Godot est vérifié avant **et** après. S'il tourne après, il est arrêté et l'alerte journalisée |
+
+⚠️ **Garde-fou Godot, non négociable.** La mesure des 246 Mo (§5.56) a
+exigé que Cyril soit physiquement présent : la fenêtre est plein écran,
+`always_on_top`, et capte tous les clics du bureau. Lancée sans
+supervision, elle rendrait la machine inutilisable jusqu'à ce que
+quelqu'un la ferme. **La tâche ne relance jamais Godot** : elle réutilise
+les 246 Mo et compare l'empreinte git de `Lucas3D/` — si l'avatar a
+changé, elle le **note** et laisse le point à une session supervisée.
+
+**Comment Cyril la désactive** : `Disable-ScheduledTask -TaskName
+"LucasVeilleModeles"` (ou l'onglet Planificateur de tâches). La
+supprimer : `Unregister-ScheduledTask -TaskName "LucasVeilleModeles"`.
+Journal : `data/logs/veille_modeles.log`.
+
+⚠️ **La tâche n'a PAS pu être créée par moi** : le classifieur de
+permissions a refusé `Register-ScheduledTask` puis `schtasks /Create`.
+Non contourné. Les deux scripts sont en place et validés
+syntaxiquement ; **la commande d'enregistrement reste à lancer par
+Cyril**, elle est donnée dans le résumé de session.
+
+### 1re passe — 05/08/2026
+
+**Amélioration de méthode, née de l'erreur à 27 Go du 05/08** : tester
+la disponibilité d'un tag avec `ollama pull` **télécharge**. Le
+manifeste du registre donne existence **et** taille pour quelques
+kilo-octets :
+
+```
+GET https://registry.ollama.ai/v2/library/<modele>/manifests/<tag>
+```
+
+C'est désormais l'instrument de la veille. 29 tags vérifiés cette
+passe, **zéro octet téléchargé** pour ce contrôle.
+
+#### Côté LLM — rien ne change
+
+| Candidat | Verdict |
+|---|---|
+| `qwen3.6:latest` (23,9 Go), `llama4:scout` (67,4), `qwen3-coder` (18,6), `mistral-small` (14,3), `gpt-oss:120b` (65,4) | **trop gros** pour 16 Go, écartés sans mesure |
+| `qwen3.6:8b`, `qwen3.6:14b`, `qwen3.5:14b` | **n'existent pas** au registre |
+| `phi4:latest` (9,1 Go) | **mesuré** — voir ci-dessous |
+
+`phi4:latest` est le seul candidat neuf qui tenait : **0,10 s au premier
+token**, réponse complète en 1,1 s, 4 004 Mo de marge — une réactivité
+excellente. **Écarté quand même : 4/15 de guichet commercial**, même
+classe de régression que `granite4.1:8b` la veille. Supprimé après
+mesure.
+
+**`gpt-oss:20b` reste le meilleur compromis. Aucune bascule.**
+
+#### Côté VLM — ⚠️ trois corrections importantes
+
+**1. Le tag recommandé le 05/08 n'existe pas.** Le rapport
+`Comparatif_VLM_LucasAI_2026-08-05.md` donne
+`ollama pull qwen2.5-vl:7b`. Ce tag renvoie 404. Le vrai est
+**`qwen2.5vl:7b`, sans tiret** (6,0 Go). Appliquer le rapport tel quel
+le jour de l'ouverture du chantier aurait produit un
+`file does not exist` immédiat.
+
+**2. `llava` — le VLM configuré aujourd'hui — invente ce qu'il lit.**
+Mesuré avec une image **fabriquée** dont le contenu est connu (donc
+sans croire aucun benchmark) :
+
+| Modèle | Lecture correcte | Invente un objet absent | 1er token (à chaud) | Débit | VRAM |
+|---|---|---|---|---|---|
+| **`qwen2.5vl:7b`** | **4/4** | non | **0,14 s** | 164 tok/s | 8 961 Mo |
+| `qwen3-vl:8b` | **4/4** | non | 1,12 s | 143 tok/s | 9 537 Mo |
+| `llava:latest` *(actuel)* | **0/4** | **oui** (1 essai sur 2) | 0,04 s | 178 tok/s | 7 552 Mo |
+
+`llava` n'a pas seulement échoué : il a **fabriqué des valeurs
+plausibles**. Sur une ligne réelle « Relevé du 12 juillet 2026 / Total
+des dépenses : 1847 euros », il a produit « Refle du 21 Juillet /
+1,91 € », puis au second essai « RELEVE DU 1ER JUIL 2023 ». Des
+chiffres faux, mais crédibles — le pire mode de défaillance pour un
+capteur destiné à lire l'écran de Cyril.
+
+⚠️ **Conséquence directe** : `VLM_ENABLED = False` aujourd'hui, donc
+aucun risque actif. **Mais `llava` ne doit pas être réactivé tel quel.**
+Ce n'est plus une préférence de comparatif, c'est un défaut mesuré.
+
+**3. La lenteur de Qwen3-VL sur RTX 50 est réelle, mais modérée.**
+C'était le motif d'exclusion du 05/08, appuyé sur un rapport public.
+Mesuré ici : `qwen3-vl:8b` répond bien, mais **8× plus lentement au
+premier token** que `qwen2.5vl:7b` (1,12 s contre 0,14 s) pour une
+qualité de lecture identique. Cohérent avec le symptôme rapporté, sans
+être rédhibitoire. **Le classement du 05/08 tient — pour la bonne
+raison, cette fois mesurée sur cette machine.**
+
+#### Ce qui reste à faire, et qui n'a pas été fait
+
+Le test d'hallucination utilise **un** objet absent et **une** image.
+C'est suffisant pour disqualifier `llava` (qui échoue aussi la lecture,
+0/4), pas pour départager finement `qwen2.5vl` et `qwen3-vl`. Un vrai
+corpus — plusieurs captures d'écran réelles, plusieurs pièges — reste à
+constituer **le jour où le chantier vision s'ouvre**.
+
+#### Nettoyage
+
+`phi4:latest`, `qwen3-vl:8b`, `qwen2.5vl:7b` supprimés après mesure.
+Inventaire revenu à **14 modèles**, 251 Go libres — identique à avant la
+passe. `MODEL_NAME` vérifié inchangé : `gpt-oss:20b`.
 
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
