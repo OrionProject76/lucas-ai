@@ -7121,19 +7121,58 @@ troisième est probable — Godot n'utilise pas le magasin de certificats
 Windows, le certificat mkcert sera vraisemblablement rejeté. C'est
 l'étape 2, rien n'a été touché.
 
-### État au moment où cette section est écrite — surveillance ENCORE EN COURS
+### Résultat de la fenêtre de surveillance — close le 06/08/2026 à 23:06
 
-⚠️ **Rien n'est conclu ici.** La fenêtre de surveillance court jusqu'à
-23:06 ; cette section est écrite pendant, pas après. Le résultat est
-ajouté ci-dessous **une fois la fenêtre close**, jamais anticipé — les 4
-occurrences du 02/08 mettaient « quelques minutes » à survenir, et
-déclarer la stabilité avant la fin serait exactement l'erreur que
-l'étape 0 cherche à éviter.
+```
+échantillons        : 353   (22:36:10 -> 23:06:09, 29 min 59 s)
+process VIVANT      : 353/353
+gels (vivant + ne répond plus) : 0
+disparitions        : 0
+alertes déclenchées : 0
 
-À t+11 min : process vivant, `Responding=True`, handles ~901 et threads
-~47 stables, VRAM stable. Aucun incident **jusqu'ici**.
+VRAM    min 3482 / max 3973 / amplitude 491 Mo
+handles min  899 / max  918   stable
+threads min   46 / max   56   stable
+```
 
-*(Résultat final de la fenêtre de surveillance : à compléter à 23:06.)*
+**Aucune fermeture, aucun gel, sur 30 minutes.** Ni dérive de handles, ni
+dérive de threads — les deux signatures d'une fuite lente. Le process
+était toujours vivant et `Responding=True` après la clôture de la fenêtre.
+
+### ⚠️ Ce que ce résultat NE prouve pas
+
+**La piste la plus concrète n'a pas été exercée.** La checklist du 05/08
+plaçait en n°2 un pic VRAM lié au chargement d'un modèle Ollama. Or la
+colonne `modele_ollama` vaut **`aucun` sur les 353 échantillons** :
+Ollama n'a chargé aucun modèle de toute la fenêtre. Godot a donc tourné
+**sans aucune contention GPU**, c'est-à-dire dans le cas le plus
+favorable.
+
+Trois autres réserves, dites plutôt que tues :
+
+| Réserve | Pourquoi elle compte |
+|---|---|
+| **Une seule session** | Les 4 occurrences du 02/08 étaient intermittentes, pas systématiques. 30 min sans incident ne réfutent pas un défaut qui se manifeste une fois sur quelques lancements. |
+| **Binaire ≠ éditeur** | Les 4 cas étaient tous en éditeur. Ce résultat est cohérent avec la piste « c'est l'éditeur », mais **une comparaison à conditions égales n'a pas été faite** — l'éditeur n'a pas été relancé ce soir. |
+| **Rendu nul** | La fenêtre n'affichait rien (voir la trouvaille ci-dessus). Un overlay qui ne rend aucun pixel sollicite bien moins le pilote qu'un overlay qui dessine visage + HUD en continu. |
+
+**Le test qui manque, et qui est maintenant identifiable précisément** :
+relancer le binaire **avec un modèle chargé dans Ollama** et **avec un
+rendu réellement actif** (donc après l'étape 1, fenêtre en coin visible).
+C'est cette combinaison — contention GPU + rendu — qui reproduirait les
+conditions du 02/08, pas la configuration de ce soir.
+
+### Ce que l'étape 0 a réellement livré
+
+Elle n'a pas résolu le blocage 1 : **elle a rendu sa mesure possible**.
+Avant ce soir, quatre fermetures sans la moindre trace. Maintenant : un
+binaire exportable et reproductible, une trace `--verbose` de 493 lignes,
+un dispositif de surveillance qui distingue « disparu » de « gelé », et
+un relevé horodaté croisant VRAM, modèle chargé, handles et threads. Le
+prochain incident sera lisible — c'était l'objectif, et il est atteint.
+
+Et elle a produit un résultat non prévu, qui vaut plus que la trace
+elle-même : la falsification du pari du 02/08 sur le rendu (ci-dessus).
 
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
