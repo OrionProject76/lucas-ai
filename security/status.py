@@ -18,7 +18,7 @@ from __future__ import annotations
 import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -107,7 +107,13 @@ def _is_active(last_scan_at: str | None) -> bool:
         when = datetime.fromisoformat(last_scan_at)
     except ValueError:
         return False
-    return datetime.now() - when <= STALE_AFTER
+    # noqa DTZ005 assumé : `last_scan_at` vient de `daemon_runs.started_at`,
+    # écrit par lucas_daemon.py avec `datetime.now().isoformat()` — heure
+    # LOCALE naïve. La comparaison doit donc l'être aussi. Contrairement à
+    # `_findings()` ci-dessous, où la colonne vient de CURRENT_TIMESTAMP
+    # (UTC) : les deux fonctions lisent deux bases écrites différemment,
+    # et c'est ce mélange qui avait produit le bug corrigé le 06/08/2026.
+    return datetime.now() - when <= STALE_AFTER  # noqa: DTZ005
 
 
 def _findings(memory_db_path: Path) -> tuple[int, str | None]:
@@ -116,7 +122,23 @@ def _findings(memory_db_path: Path) -> tuple[int, str | None]:
         return 0, None
     try:
         with closing(sqlite3.connect(memory_db_path)) as conn:
-            since = (datetime.now() - FINDINGS_WINDOW).isoformat()
+            # ⚠️ Corrigé le 06/08/2026 — cette ligne comptait FAUX, et
+            # dans le sens dangereux : elle affichait « 0 signal » alors
+            # qu'il y en avait.
+            #
+            # `created_at` est écrit par CURRENT_TIMESTAMP de SQLite,
+            # donc en UTC et au format « 2026-08-06 01:05:01 » (espace).
+            # `datetime.now().isoformat()` produisait
+            # « 2026-08-05T03:08:15.368689 » — heure LOCALE et séparateur
+            # « T ». La comparaison se fait sur des CHAÎNES : l'espace
+            # (0x20) est inférieur au « T » (0x54), donc tout événement
+            # portant la même date que `since` était exclu, quelle que
+            # soit son heure. Mesuré sur la vraie base : 1 signal
+            # existant, 0 compté.
+            #
+            # On produit donc exactement la forme stockée : UTC, secondes
+            # entières, séparateur espace.
+            since = (datetime.now(UTC) - FINDINGS_WINDOW).strftime("%Y-%m-%d %H:%M:%S")
             count = conn.execute(
                 "SELECT COUNT(*) FROM system_events "
                 "WHERE event_type LIKE 'security_%' AND created_at >= ?",

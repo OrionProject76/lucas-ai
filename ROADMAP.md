@@ -6196,9 +6196,84 @@ risque d'interférence, plusieurs tests écrivant en base. C'est sa
 décision, pas un correctif de lint. Le constat est écrit à l'endroit
 exact du code.
 
+### ⚠️ Palier 3 — la plus grosse trouvaille : le panneau de sécurité comptait FAUX
+
+Les 26 alertes `DTZ` (datetime sans fuseau) ressemblaient à du style. En
+les examinant une par une plutôt qu'en lot, l'une d'elles cachait un vrai
+bug — **dans le module de sécurité, et dans le sens dangereux**.
+
+`security/status.py::_findings()` comptait les signaux des dernières 24 h :
+
+```python
+since = (datetime.now() - FINDINGS_WINDOW).isoformat()
+#  → "2026-08-05T03:08:15.368689"   heure LOCALE, séparateur « T »
+```
+
+comparé à `created_at`, écrit par `CURRENT_TIMESTAMP` de SQLite :
+
+```
+    "2026-08-06 01:05:01"           UTC, séparateur ESPACE
+```
+
+**La comparaison SQL porte sur des chaînes.** L'espace (0x20) est
+inférieur au « T » (0x54) : tout événement portant **la même date** que
+`since` était exclu, quelle que soit son heure. La fenêtre « 24 h » ne
+couvrait en réalité que la journée UTC en cours.
+
+Mesuré sur la base réelle de Cyril avant correction :
+
+```
+signaux security au total  : 1
+comptés par la fenêtre 24h : 0
+```
+
+**La PWA affichait « aucun signal » alors qu'il y en avait un.** Une
+fausse assurance, exactement ce que `CLAUDE.md` interdit au module de
+sécurité (« un module qui ne détecte rien donnerait une fausse
+assurance »).
+
+Correction : `since` produit désormais **exactement la forme stockée** —
+UTC, secondes entières, séparateur espace.
+
+#### Pourquoi les tests étaient verts
+
+Parce qu'ils injectaient un format que la production n'écrit jamais :
+`datetime.now().isoformat()`, heure locale avec « T ». Le fixture
+validait une réalité inexistante.
+
+Toute insertion passe maintenant par `_sqlite_horodatage()`, qui produit
+la forme réelle de `CURRENT_TIMESTAMP`, avec le motif écrit dans sa
+docstring.
+
+#### Le test de régression a lui-même été mis à l'épreuve
+
+Un test qui passe après un correctif ne prouve rien s'il passait déjà
+avant. Vérifié en retirant le correctif (`git stash`) : **il échoue**,
+et lui seul.
+
+Première version instable, corrigée : avec un seul décalage (« il y a
+12 h »), le test passait **malgré le bug** à certaines heures de la
+journée, l'événement tombant alors sur une autre date que `since`. La
+version retenue couvre toute la fenêtre (1, 6, 12, 18, 23 h) — vérifié
+en simulant les 24 heures : l'ancienne comparaison est prise en défaut
+**24 fois sur 24**.
+
+#### Les autres `DTZ` ne sont pas des bugs
+
+| Endroit | Verdict |
+|---|---|
+| `memory/memory_manager.py:406` | **correct et déjà documenté** — compare en UTC naïf, aligné sur `CURRENT_TIMESTAMP` |
+| `security/status.py::_is_active` | **correct** — `last_scan_at` vient de `daemon_runs.started_at`, écrit par le daemon en heure **locale** naïve ; la comparaison doit l'être aussi. `noqa` + justification |
+| `lucas_daemon.py` (9) | heure **locale** délibérée : ce sont des horodatages lisibles par Cyril dans les journaux. Les passer en UTC afficherait de mauvaises heures |
+
+**La leçon** : ce projet mélange deux conventions — UTC naïf pour ce
+qu'écrit SQLite, local naïf pour ce qu'écrit Python. Aucune des deux
+n'est fausse ; c'est de les **comparer entre elles** que naît le bug.
+
 ### Vérifications
 
-Suite complète **1 297 passés** après chaque palier. Et parce que des
+Suite complète **1 297 passés** après chaque palier, **1 298** après
+l'ajout du test de régression. Et parce que des
 tests verts ne prouvent pas qu'un import retiré ne manquait pas à un
 chemin non couvert, les **27 modules du projet ont été importés
 explicitement, un par un — 27/27**.

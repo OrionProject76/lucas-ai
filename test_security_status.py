@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -37,6 +37,23 @@ def _daemon_db(path, rows=()):
         )
     conn.commit()
     conn.close()
+
+
+def _sqlite_horodatage(quand):
+    """Écrit un horodatage COMME LE FAIT LA PRODUCTION.
+
+    ⚠️ Ce que ce projet a appris le 06/08/2026 : les tests de ce fichier
+    injectaient `datetime.now().isoformat()`, soit
+    « 2026-08-05T03:08:15.368689 » — heure LOCALE, séparateur « T ». La
+    production n'écrit JAMAIS ça : `created_at` vient de
+    `CURRENT_TIMESTAMP` de SQLite, soit « 2026-08-06 01:05:01 » — UTC,
+    séparateur ESPACE, secondes entières.
+
+    Les tests validaient donc un format qui n'existe nulle part, et
+    passaient au vert pendant que la fonction comptait faux en réel.
+    Toute insertion d'événement passe désormais par ici.
+    """
+    return quand.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _memory_db(path, events=()):
@@ -158,7 +175,7 @@ def test_a_malformed_timestamp_is_treated_as_inactive(daemon_db, memory_db) -> N
 # ── Signaux (findings) ──────────────────────────────────────────────────
 
 def test_findings_within_24h_are_counted(daemon_db, memory_db) -> None:
-    now = datetime.now().isoformat()
+    now = _sqlite_horodatage(datetime.now(UTC))
     _daemon_db(daemon_db)
     _memory_db(memory_db, [
         ("security_process_lookalike", "Process svch0st.exe imite svchost.exe | pid=1234", now),
@@ -169,8 +186,48 @@ def test_findings_within_24h_are_counted(daemon_db, memory_db) -> None:
     assert status.findings_24h == 2
 
 
+def test_a_finding_from_earlier_today_is_still_counted(daemon_db, memory_db) -> None:
+    """Régression du bug trouvé le 06/08/2026 — le plus dangereux du lot.
+
+    `_findings()` comparait `created_at` (UTC, séparateur ESPACE, écrit
+    par CURRENT_TIMESTAMP) à un `since` produit par
+    `datetime.now().isoformat()` (heure LOCALE, séparateur « T »).
+
+    La comparaison SQL porte sur des CHAÎNES : l'espace (0x20) est
+    inférieur au « T » (0x54). Tout événement portant la MÊME DATE que
+    `since` était donc exclu, quelle que soit son heure — la fenêtre
+    « 24 h » ne couvrait en réalité que la journée UTC en cours.
+
+    Mesuré sur la base réelle avant correction : 1 signal existant,
+    0 compté. La PWA affichait « aucun signal » alors qu'il y en avait —
+    une fausse assurance, dans le module de sécurité.
+
+    ⚠️ PLUSIEURS décalages, et c'est délibéré. Un test à un seul
+    décalage serait INSTABLE : selon l'heure d'exécution, « il y a 12 h »
+    tombe tantôt sur la date de `since`, tantôt sur la suivante — le
+    test passerait alors malgré le bug, une partie de la journée.
+
+    En couvrant toute la fenêtre, au moins un événement partage
+    forcément la date de `since` quelle que soit l'heure. Vérifié en
+    simulant les 24 heures de la journée : l'ancienne comparaison échoue
+    à chacune d'elles.
+    """
+    maintenant = datetime.now(UTC)
+    _daemon_db(daemon_db)
+    _memory_db(memory_db, [
+        (
+            "security_wide_open_listener",
+            f"Port 999{i} ouvert | port=999{i}",
+            _sqlite_horodatage(maintenant - timedelta(hours=h)),
+        )
+        for i, h in enumerate((1, 6, 12, 18, 23))
+    ])
+
+    assert get_status(daemon_db, memory_db).findings_24h == 5
+
+
 def test_findings_older_than_24h_are_excluded(daemon_db, memory_db) -> None:
-    old = (datetime.now() - timedelta(hours=25)).isoformat()
+    old = _sqlite_horodatage(datetime.now(UTC) - timedelta(hours=25))
     _daemon_db(daemon_db)
     _memory_db(memory_db, [("security_ransom_extension", "Extension suspecte | ext=.locked", old)])
 
@@ -182,7 +239,7 @@ def test_non_security_events_are_not_counted_as_findings(daemon_db, memory_db) -
     system_events contient aussi app_launched, ram_alert... — seuls les
     signaux security_* relèvent du panneau des privilèges.
     """
-    now = datetime.now().isoformat()
+    now = _sqlite_horodatage(datetime.now(UTC))
     _daemon_db(daemon_db)
     _memory_db(memory_db, [
         ("app_launched", "Chrome", now),
@@ -207,7 +264,7 @@ def test_the_summary_excludes_the_raw_evidence_facts(daemon_db, memory_db) -> No
     Finding.as_event() stocke « résumé | faits » (security/types.py) — le
     panneau affiche le résumé lisible, pas les paires clé=valeur brutes.
     """
-    now = datetime.now().isoformat()
+    now = _sqlite_horodatage(datetime.now(UTC))
     _daemon_db(daemon_db)
     _memory_db(memory_db, [
         ("security_process_lookalike", "Résumé lisible | pid=1234, chemin=C:\\temp\\x.exe", now),
