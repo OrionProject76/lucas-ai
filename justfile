@@ -134,16 +134,52 @@ test-quick:
 test-integration:
     pytest test_integration.py -m integration -v
 
-# NB : ruff format réécrit les fichiers sur place.
-
-# Linting + formatage
+# ── Lint : TOUT le projet (élargi le 06/08/2026) ──────────────────────
+#
+# Couvrait auparavant core/ modules/ memory/ api/ ui/ test_router.py —
+# soit un quart des alertes. Étaient hors périmètre : la racine (49
+# fichiers de test, main.py, lucas_daemon.py, config.py), demos/, et
+# surtout security/, le module où CLAUDE.md place le plus d'exigence.
+#
+# Ce n'est pas théorique : le bug du 06/08/2026 — le panneau de sécurité
+# affichant « aucun signal » alors qu'il y en avait — vivait dans
+# security/status.py, hors du périmètre linté (ROADMAP.md §5.59).
+# ⚠️ `venv/Scripts/python.exe -m ruff` et non `ruff` tout court : ruff
+# n'est PAS dans le PATH de cette machine, il vit dans le venv. La
+# recette appelait `ruff` nu — elle échouait donc systématiquement en
+# « terme non reconnu ». C'est ce qui explique que `ruff format`, qu'elle
+# était censée lancer, n'ait jamais tourné (86 fichiers non formatés).
+# Constaté en exécutant réellement `just lint` le 06/08/2026.
 lint:
-    ruff check core/ modules/ memory/ api/ ui/ test_router.py
-    ruff format core/ modules/ memory/ api/ ui/ test_router.py
+    venv/Scripts/python.exe -m ruff check .
+
+# ⚠️ `ruff format` est SÉPARÉ de `lint` depuis le 06/08/2026, et c'est
+# délibéré.
+#
+# Il était appelé par `lint`, mais n'avait manifestement jamais tourné :
+# 29 fichiers du périmètre d'alors auraient été réécrits, 86 sur le
+# projet entier. Un `just lint` qui réécrit 86 fichiers en passant rend
+# toute relecture de diff impossible — on ne distingue plus un correctif
+# d'un retour à la ligne.
+#
+# Et le résultat n'est pas neutre : le formateur éclate les listes
+# compactes en une entrée par ligne. `KEYWORDS_SENSITIVE` de
+# core/router.py (la liste qui décide ce qui ne sort JAMAIS de la
+# machine) passerait de 5 lignes lisibles d'un coup d'œil à 17.
+#
+# Reformater reste possible, mais devient un acte explicite, à faire
+# seul dans son propre commit :
+format:
+    venv/Scripts/python.exe -m ruff format .
+
+# Voir ce que le formatage changerait, sans rien écrire.
+format-check:
+    venv/Scripts/python.exe -m ruff format --check .
 
 # Type checking
+# Meme motif que lint : mypy n'est pas dans le PATH non plus.
 mypy:
-    mypy core/ modules/ memory/ api/ --ignore-missing-imports
+    venv/Scripts/python.exe -m mypy core/ modules/ memory/ api/ --ignore-missing-imports
 
 # Vérification complète (lint + test + type)
 check: lint test mypy

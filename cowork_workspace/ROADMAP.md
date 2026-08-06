@@ -6332,6 +6332,67 @@ actuel. Les retirer effacerait une intention pour satisfaire une règle
 qui dépend d'une configuration inexistante — le contraire de ce que ce
 chantier a appris.
 
+### Palier 5 — `just lint` élargi… et réparé (il ne marchait pas)
+
+Cyril a demandé d'ajouter `security/` et la racine au périmètre. En
+l'exécutant pour vérifier :
+
+```
+ruff : Le terme « ruff » n'est pas reconnu comme nom d'applet de commande…
+error: recipe `lint` failed
+```
+
+**`just lint` n'a jamais fonctionné.** La recette appelait `ruff` nu,
+mais ruff vit dans le venv, pas dans le PATH. C'est l'explication du
+constat précédent — « `ruff format` n'avait manifestement jamais
+tourné » : il ne pouvait pas.
+
+Même défaut sur `just mypy`. Les deux passent désormais par
+`venv/Scripts/python.exe -m …`.
+
+⚠️ `just test` marche, lui, mais appelle le `pytest` du **Python
+global** (`AppData/Local/Programs/Python/Python312/Scripts`), pas celui
+du venv. Non corrigé ici : ça mérite d'être vérifié plutôt que changé à
+l'aveugle — les versions de paquets peuvent différer.
+
+#### `ruff format` sorti de `lint`, délibérément
+
+Il y était appelé, et l'aurait réécrit **86 fichiers** d'un coup —
+rendant tout diff illisible, un correctif indiscernable d'un retour à la
+ligne. Et le résultat n'est pas neutre : le formateur éclate les listes
+compactes. `KEYWORDS_SENSITIVE` de `core/router.py` — **la liste qui
+décide ce qui ne sort jamais de la machine** — passerait de 5 lignes
+lisibles d'un coup d'œil à 17.
+
+Reformater reste possible (`just format`), et `just format-check` montre
+l'ampleur sans rien écrire. Mais c'est devenu un acte explicite, pas un
+effet de bord. Corollaire utile : `just check` (lint + test + mypy) ne
+modifie plus aucun fichier.
+
+#### Les 6 dernières alertes, finalement traitées
+
+Je voulais garder les `# noqa: E402` « parce qu'ils portent une
+intention ». Mais `just lint` sortait alors en erreur en permanence :
+une porte qui refuse toujours ne garde rien. L'intention est conservée
+**en commentaire clair** — même traitement que les `BLE001` du palier 4.
+
+⚠️ Et la même erreur, une troisième fois : écrire les caractères
+`# noqa` **dans le texte d'un commentaire** les fait lire comme une
+directive (`Invalid noqa directive`). Reformulé sans le mot.
+
+**Résultat : `All checks passed!` sur tout le projet.**
+
+#### Ce que la réparation de `mypy` a révélé
+
+Fonctionnel pour la première fois, il rapporte **6 erreurs de typage
+réelles** sur 38 fichiers — dont
+`core/lucas_core.py:853 : Argument 1 to "open_app" … has incompatible
+type "str | None"; expected "str"`, sur le chemin de lancement d'appli
+câblé le 04/08.
+
+**Chantier distinct, non ouvert ici** : ce sont de vraies corrections de
+code, pas du lint.
+
 ### Vérifications
 
 Suite complète **1 297 passés** après chaque palier, **1 298** après

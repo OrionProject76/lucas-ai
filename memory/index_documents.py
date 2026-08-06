@@ -43,9 +43,15 @@ from pathlib import Path
 if __package__ in (None, ""):  # exécution directe : python memory/index_documents.py
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from config import DOCUMENTS_DIR  # noqa: E402
-from modules.ocr_engine import OCREngine, OCRUnavailable  # noqa: E402
-from modules.rag_manager import RAGManager  # noqa: E402
+# Imports APRES sys.path.insert ci-dessus, et c'est necessaire : ce
+# fichier s'execute en script depuis n'importe quel dossier, la racine
+# du projet doit donc etre ajoutee avant que ces imports existent.
+# (Ne portait qu'une directive de suppression E402 jusqu'au 06/08/2026,
+# devenue morte : E402 n'est pas dans le jeu de regles actif. L'intention,
+# elle, valait d'etre gardee : la voici en clair.)
+from config import DOCUMENTS_DIR
+from modules.ocr_engine import OCREngine, OCRUnavailable
+from modules.rag_manager import RAGManager
 
 # Formats lus sans dépendance supplémentaire.
 #
