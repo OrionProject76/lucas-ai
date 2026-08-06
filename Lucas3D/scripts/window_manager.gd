@@ -94,10 +94,17 @@ const TASKBAR_RESERVED := 144.0
 #     true au centre), mais GWL_EXSTYLE reste identique aux deux
 #     positions et WS_EX_TRANSPARENT n'est jamais pose.
 #
-# L'etat actuel privilegie le RENDU : l'avatar et le HUD s'affichent
-# entierement, mais la fenetre capte les clics. Le vrai correctif demande
-# de poser WS_EX_TRANSPARENT par du code natif (GDExtension), hors de
-# portee de GDScript. En attente d'arbitrage de Cyril.
+# ⚠️ PERIME — ce paragraphe decrit l'etat d'AVANT l'incident du 02/08.
+# « L'etat actuel privilegie le RENDU : l'avatar et le HUD s'affichent
+# entierement, mais la fenetre capte les clics. » Ce n'est plus vrai
+# depuis que _appliquer_passthrough_total() est le defaut : aujourd'hui
+# c'est l'inverse exact — tout traverse, rien ne s'affiche. Voir le bloc
+# « CORRIGE LE 06/08/2026 » plus bas, qui fait foi.
+#
+# Reste vrai : le seul correctif est de poser WS_EX_TRANSPARENT par du
+# code natif (GDExtension), hors de portee de GDScript. Arbitre par
+# Cyril le 06/08/2026 : reporte, catalogue dans IDEAS.md, et fenetre en
+# coin en attendant.
 #
 # ⚠️⚠️ INCIDENT DU 02/08/2026 — le bureau ENTIER se bloquait, pas
 # seulement le HUD. La ligne juste au-dessus etait fausse : la fenetre ne
@@ -112,10 +119,42 @@ const TASKBAR_RESERVED := 144.0
 # PAR DEFAUT doit garantir que le bureau n'est jamais bloque, quitte a
 # n'avoir ENCORE aucune zone cliquable. window_set_mouse_passthrough(region)
 # est le seul mecanisme MESURE qui fasse reellement passer les clics sur
-# cette machine. Son defaut connu (decouper le rendu) n'apparaissait qu'a
-# la FRONTIERE d'une region PARTIELLE a l'interieur de la fenetre visible
-# (mesure avec un trou centre) : une region totalement hors ecran n'a pas
-# de frontiere interne visible, donc pas de raison de couper le rendu.
+# cette machine.
+#
+# ⚠️⚠️ CORRIGE LE 06/08/2026 — ces quatre lignes affirmaient le
+# contraire de la realite, et c'est mesure maintenant.
+#
+# Elles disaient : « son defaut connu (decouper le rendu) n'apparaissait
+# qu'a la FRONTIERE d'une region PARTIELLE a l'interieur de la fenetre
+# visible : une region totalement hors ecran n'a pas de frontiere interne
+# visible, donc pas de raison de couper le rendu. » C'etait un PARI, ecrit
+# le 02/08 sans etre verifie.
+#
+# Le pari est FAUX. Etape 0 de la session Godot supervisee, binaire
+# exporte lance sous les yeux de Cyril : bureau parfaitement reactif
+# (le passthrough marche), et AUCUN pixel a l'ecran — ni visage, ni HUD,
+# rien. Process vivant, fenetre 3840x2160 existante, scene complete,
+# zero erreur de script.
+#
+# La region ne dit pas seulement OU les clics passent : elle dit aussi CE
+# QUI EST RENDU. Region entierement hors ecran => surface de rendu nulle
+# => fenetre totalement invisible. Ce n'est pas un effet de bord au
+# niveau des frontieres, c'est la regle.
+#
+# Recoupe la mesure du 02/08 dans l'autre sens : avec un trou PARTIEL a
+# x=1200, la tete apparaissait tranchee exactement a x=1200. Meme
+# mecanisme, deux observations independantes.
+#
+# Consequence : en GDScript pur sur Godot 4.7 + Windows, c'est BINAIRE —
+# soit tout s'affiche et tout est capte (le bureau se bloque, incident du
+# 02/08), soit tout traverse et rien ne s'affiche (l'etat actuel). Aucune
+# troisieme voie sans la GDExtension (IDEAS.md).
+#
+# ➜ D'ou l'arbitrage de Cyril du 06/08 : fenetre EN COIN (~600x600, en
+#   bas a droite, au-dessus de la barre des taches) plutot que plein
+#   ecran. Une petite fenetre peut rendre normalement et ne capter les
+#   clics que sur elle-meme — vivable, la ou 3840x2160 ne l'etait pas.
+#   A implementer en etape 1, pas encore fait ici.
 #
 # _dans_hud() reste ci-dessous, INUTILISEE pour l'instant : elle decrit la
 # politique des zones cliquables du HUD, a reconnecter plus tard a une
@@ -129,6 +168,12 @@ func _region_totalement_hors_ecran() -> PackedVector2Array:
     # l'effet recherche). Trois points identiques hors fenetre donnent un
     # passthrough actif sur toute la fenetre, sans jamais definir de zone
     # interactive.
+    #
+    # ⚠️ ET AUSSI, mesure le 06/08/2026 : cette region rend la fenetre
+    # ENTIEREMENT INVISIBLE. La region gouverne le rendu autant que les
+    # clics (voir le bloc corrige plus haut). Ce n'est donc pas « le HUD
+    # attend d'etre reconnecte » : rien ne s'affiche du tout, par
+    # construction. C'est ce qui rend cet etat SUR.
     return PackedVector2Array([HORS_ECRAN, HORS_ECRAN, HORS_ECRAN])
 
 
@@ -141,7 +186,13 @@ func _region_fenetre_entiere() -> PackedVector2Array:
 
 
 func _appliquer_passthrough_total():
-    """Etat SUR par defaut au demarrage : rien n'est interactif, tout traverse."""
+    """Etat SUR par defaut au demarrage : rien n'est interactif, tout traverse.
+
+    ⚠️ Et rien ne s'AFFICHE non plus — mesure le 06/08/2026, etape 0.
+    La securite de cet etat vient precisement de la : une fenetre qui ne
+    rend aucun pixel ne peut pas bloquer le bureau. Ne pas l'appeler en
+    croyant qu'il laissera l'avatar visible.
+    """
     DisplayServer.window_set_mouse_passthrough(_region_totalement_hors_ecran(), window.get_window_id())
     Global.click_through = true
 

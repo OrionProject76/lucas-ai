@@ -1127,3 +1127,67 @@ gratuitement.
 **Rien n'est construit ici** — état des lieux uniquement, pour que Cyril
 sache exactement où ça en est plutôt que de croire que c'est déjà fait ou
 que c'est trivial.
+
+---
+
+## #95 — GDExtension `WS_EX_TRANSPARENT` : le seul vrai correctif du click-through
+
+**Reporté par Cyril le 06/08/2026, étape 0 de la session Godot supervisée.**
+Ce n'est pas une idée neuve : c'est le correctif déjà identifié le 02/08,
+sorti du périmètre de cette version et catalogué ici pour ne pas être
+redécouvert dans six mois.
+
+### Le problème, mesuré deux fois
+
+Sur **Godot 4.7 + Windows**, en GDScript pur, on ne peut pas avoir à la fois
+un rendu complet et des clics qui traversent. C'est **binaire** :
+
+| Région de passthrough | Clics | Rendu |
+|---|---|---|
+| vide / absente | **tout capté** — le bureau entier se bloque (incident du 02/08) | tout s'affiche |
+| entièrement hors écran (état actuel) | tout traverse ✅ | **rien ne s'affiche** |
+| partielle | traverse hors zone | **découpé net à la frontière** |
+
+`window_set_mouse_passthrough(polygone)` est implémenté sur Windows par une
+**région de fenêtre** (`SetWindowRgn`) : elle gouverne le rendu autant que
+les clics. Et `WINDOW_FLAG_MOUSE_PASSTHROUGH` est **sans effet mesuré** —
+la bascule s'exécute, mais `GWL_EXSTYLE` ne change jamais et
+`WS_EX_TRANSPARENT` n'est jamais posé.
+
+**Deux observations indépendantes** l'établissent : le 02/08, un trou
+partiel à x=1200 tranchait la tête de l'avatar exactement à x=1200 ; le
+06/08, une région entièrement hors écran a rendu la fenêtre **totalement
+invisible** — bureau parfaitement réactif, aucun pixel affiché, process
+vivant, scène complète, zéro erreur.
+
+### Le correctif
+
+Une petite **GDExtension** (C++) qui pose `WS_EX_TRANSPARENT` sur la fenêtre
+via `SetWindowLongPtr`, sans toucher à la région de rendu. La **politique**
+est déjà écrite et vérifiée dans `Lucas3D/scripts/window_manager.gd` —
+`_dans_hud()` décrit quelles zones doivent intercepter, `TASKBAR_RESERVED`
+(144 px) et les bords du HUD sont **mesurés, pas devinés**. Seul le
+mécanisme manque.
+
+⚠️ **Ne pas supprimer `_appliquer_traverse()` ni `_dans_hud()` en croyant
+nettoyer du code mort** : ce sont les pièces qui attendent ce mécanisme.
+
+### Pourquoi c'est reporté et pas abandonné
+
+Le contournement retenu — **fenêtre en coin (~600×600, en bas à droite,
+au-dessus de la barre des tâches)** au lieu du plein écran — supprime le
+dilemme sans code natif : une petite fenêtre peut rendre normalement et ne
+capter les clics que sur elle-même. Vivable sur 600×600, insupportable sur
+3840×2160.
+
+La GDExtension redevient nécessaire le jour où l'avatar doit occuper
+librement l'écran — c'est-à-dire la vision d'origine (« Avatar 3D
+Holographique (Godot 4) — module détaillé » plus haut dans ce fichier, qui
+énonce « click-through » dès sa première ligne, et `VISION_LONG_TERME.md`
+§3). Pas avant.
+
+⚠️ Un point de vigilance à ne pas oublier au moment de l'ouvrir : une
+GDExtension est du **code natif chargé dans le process**. Elle sort du
+cadre « GDScript seulement » et se traite avec la même prudence que tout
+ce qui touche à l'API Win32 — cohérent avec la règle de `CLAUDE.md`
+(04/08/2026) qui interdit déjà le P/Invoke pour les tests.

@@ -7002,6 +7002,139 @@ vivent dans la PWA (`static/js/voice_output.js`, `audio.js`). Leur
 présence dans le code est vérifiée, leur comportement non — il faut le
 S25 Ultra et une action de Cyril.
 
+## 5.67 Session Godot supervisée — étape 0, et un pari du 02/08 qui était faux (06/08/2026)
+
+Première session Godot depuis la mise en pause du 02/08/2026, **avec Cyril
+devant l'écran** — condition posée à l'époque et jamais levée depuis.
+
+### Ce que Cyril a tranché en ouverture
+
+1. **Étape 0 avant tout le reste** : capturer une trace, pas corriger.
+2. **Accepter la limite du click-through** pour cette version. Fenêtre
+   **en coin (~600×600, en bas à droite, au-dessus de la barre des
+   tâches)** plutôt que plein écran. Le correctif GDExtension est
+   catalogué (`IDEAS.md` #95), pas construit.
+3. **Tester sur le binaire exporté**, pas l'éditeur — les 4 fermetures du
+   02/08 ont toutes eu lieu en éditeur, l'export n'avait jamais été
+   essayé.
+
+### Étape 0 — le dispositif
+
+`export_presets.cfg` n'existait pas : créé (Windows Desktop, x86_64).
+Export release réussi → `build/Lucas3D.exe` (109 Mo), **gitignoré**.
+
+Un binaire release Windows n'a **pas de console attachée** : sa sortie
+standard est perdue. `--log-file` est le seul moyen de la garder — d'où
+`Lucas3D.exe --verbose --log-file data/logs/godot_etape0.log`. **493
+lignes capturées**, ce que les 4 occurrences du 02/08 n'avaient jamais
+produit.
+
+Surveillance en parallèle (`demos/etape0_surveillance_godot.ps1`),
+échantillon toutes les 5 s. Elle relève **`Responding`**, qui est ce qui
+distingue « disparu » de « **gelé** » — les deux cas se sont produits le
+02/08 et ne se diagnostiquent pas pareil. Plus VRAM, modèle Ollama
+chargé, handles et threads (une fuite lente se verrait avant le crash).
+
+### 🟢 La trouvaille — le commentaire du code affirmait le contraire du réel
+
+Godot lancé : **bureau parfaitement réactif** (Cyril a tout essayé, rien
+de figé) et **aucun pixel à l'écran** — ni visage, ni HUD, rien. Process
+vivant, fenêtre 3840×2160 existante, scène complète (`FaceRoot` + `HUD`),
+zéro erreur de script.
+
+Ce n'est pas une panne : **c'est la même cause que le bureau réactif.**
+`_appliquer_passthrough_total()` pose une région de trois points
+identiques à (-10,-10), entièrement hors écran. Sur Windows,
+`window_set_mouse_passthrough` est implémenté par une **région de
+fenêtre** : elle ne dit pas seulement OÙ les clics passent, elle dit
+aussi **CE QUI EST RENDU**. Région hors écran ⇒ surface de rendu nulle ⇒
+fenêtre totalement invisible.
+
+**Ce que ça falsifie.** `window_manager.gd` pariait l'inverse depuis le
+02/08 : « *une region totalement hors ecran n'a pas de frontiere interne
+visible, donc pas de raison de couper le rendu* ». Un pari, écrit sans
+être vérifié. Les yeux de Cyril l'ont réfuté en une seconde.
+
+Et le fichier **se contredisait lui-même** : un bloc plus haut énonçait
+déjà la règle correcte (« *ne decoupe pas seulement les clics mais aussi
+LE RENDU* »). Deux commentaires opposés sur le même mécanisme, et c'est
+le faux qui gouvernait le choix de comportement par défaut. Un troisième
+passage était périmé (« l'état actuel privilégie le RENDU »), décrivant
+l'état d'avant l'incident du 02/08.
+
+**Les trois sont corrigés** — commentaires et docstring uniquement,
+**aucune instruction modifiée**, vérifié en comparant le fichier dépouillé
+de ses commentaires (seule différence : l'expansion d'une docstring, une
+expression littérale sans effet).
+
+Recoupe la mesure du 02/08 dans l'autre sens : trou **partiel** à x=1200 →
+tête tranchée exactement à x=1200. Même mécanisme, deux observations
+indépendantes.
+
+### Ce que ça change
+
+En GDScript pur sur Godot 4.7 + Windows, c'est **binaire** : soit tout
+s'affiche et tout est capté (le bureau se bloque — incident du 02/08),
+soit tout traverse et rien ne s'affiche (l'état actuel). **Pas de
+troisième voie sans la GDExtension.**
+
+Ce qui **valide l'arbitrage n°2 de Cyril** : une fenêtre en coin échappe
+au dilemme, puisqu'elle ne capte les clics que sur elle-même. Quelques
+centaines de pixels dans un angle, pas 3840×2160. Ce n'était pas un
+repli, c'était la sortie.
+
+### ⚠️ Une mesure qui contredit le dossier — VRAM de Godot
+
+VRAM avant lancement **2 795 Mo**, après **3 771 Mo** : soit **~976 Mo
+pour Godot**, contre les **246 Mo** retenus depuis le 05/08 (§5.56). Un
+facteur 4.
+
+Ça resserre l'arithmétique de la règle 12 : avec 246 Mo, la marge de
+1 011 Mo de `gpt-oss:20b` laissait ~765 Mo de rab ; avec 976 Mo il en
+reste ~35. La conclusion ne s'inverse pas encore, mais elle devient
+fragile.
+
+**À refaire proprement avant d'en tirer quoi que ce soit** :
+`nvidia-smi --query-compute-apps` rend `[N/A]` pour la mémoire par
+process sur ce pilote, donc on ne dispose que d'un **delta global**, et
+d'autres applications bougent sur ce GPU. Ollama était déchargé au
+moment du relevé — c'est le cas favorable. Noté comme mesure à reprendre,
+pas comme fait acquis.
+
+### Confirmé au passage — le client Godot ne peut pas se connecter
+
+Prouvé **sans lancer Godot**, en rejouant son URL exacte contre le
+serveur :
+
+```
+ws://127.0.0.1:8000/ws  (URL du client Godot)  -> ECHEC InvalidMessage
+wss:// sans jeton                              -> ECHEC InvalidStatus
+wss:// + jeton en query                        -> CONNECTE
+wss:// + jeton en sous-protocole               -> CONNECTE
+```
+
+Deux ruptures indépendantes, toutes deux postérieures à l'écriture du
+client : le serveur est passé en **HTTPS** (le client dit `ws://`) et
+l'**authentification** est active (le client n'envoie aucun jeton). La
+trace le confirme : `WebSocket pret sur ws://127.0.0.1:8000/ws`. Une
+troisième est probable — Godot n'utilise pas le magasin de certificats
+Windows, le certificat mkcert sera vraisemblablement rejeté. C'est
+l'étape 2, rien n'a été touché.
+
+### État au moment où cette section est écrite — surveillance ENCORE EN COURS
+
+⚠️ **Rien n'est conclu ici.** La fenêtre de surveillance court jusqu'à
+23:06 ; cette section est écrite pendant, pas après. Le résultat est
+ajouté ci-dessous **une fois la fenêtre close**, jamais anticipé — les 4
+occurrences du 02/08 mettaient « quelques minutes » à survenir, et
+déclarer la stabilité avant la fin serait exactement l'erreur que
+l'étape 0 cherche à éviter.
+
+À t+11 min : process vivant, `Responding=True`, handles ~901 et threads
+~47 stables, VRAM stable. Aucun incident **jusqu'ici**.
+
+*(Résultat final de la fenêtre de surveillance : à compléter à 23:06.)*
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
