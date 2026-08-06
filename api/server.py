@@ -709,7 +709,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     message,
                     image_path=image_path,
                     allow_screen_capture=allow_screen_capture,
-                    # noqa B023 : la liaison tardive est inoffensive ici.
+                    # B023 assumé ci-dessous : la liaison tardive est inoffensive.
                     # `activity_events` est recréée à chaque tour (l.693),
                     # `ask()` est synchrone, et la liste est relue juste
                     # après (l.707) — la lambda ne survit jamais à son

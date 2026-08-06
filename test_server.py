@@ -16,6 +16,14 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
+# ⚠️ Type PRÉCIS, pas `Exception` : ces trois tests gardent le contrôle du
+# jeton. Avec `pytest.raises(Exception)`, ils passeraient au vert même si
+# la connexion échouait pour une raison sans rapport (URL fautive, double
+# cassé) — un test d'authentification qui se contente de « quelque chose
+# a échoué » ne prouve pas que le refus vient du jeton. Type constaté en
+# exécutant réellement le cas (06/08/2026).
+from starlette.websockets import WebSocketDisconnect
+
 from api.server import app
 
 
@@ -330,9 +338,12 @@ class _FakeFinanceManagerForAPI:
 def fake_finance_with_data(monkeypatch):
     from datetime import datetime
 
+    # Dates naïves délibérées : elles imitent ce que `finance_manager`
+    # produit en lisant un CSV bancaire, qui ne porte aucun fuseau.
+    # Les rendre conscientes ici ferait diverger le double du réel.
     transactions = [
-        {"date": datetime(2026, 1, 2), "libelle": "Virement salaire", "montant": 2400.0, "categorie": "Revenus"},
-        {"date": datetime(2026, 1, 5), "libelle": "CARREFOUR", "montant": -84.3, "categorie": "Alimentation"},
+        {"date": datetime(2026, 1, 2), "libelle": "Virement salaire", "montant": 2400.0, "categorie": "Revenus"},  # noqa: DTZ001
+        {"date": datetime(2026, 1, 5), "libelle": "CARREFOUR", "montant": -84.3, "categorie": "Alimentation"},  # noqa: DTZ001
     ]
     manager = _FakeFinanceManagerForAPI(transactions)
     monkeypatch.setattr("modules.finance_manager.load_directory", lambda: (manager, []))
@@ -1225,7 +1236,7 @@ def test_no_token_configured_means_no_token_required(client, fake_core) -> None:
 
 def test_websocket_without_token_is_closed_once_one_is_set(client, monkeypatch) -> None:
     monkeypatch.setattr("api.server.API_TOKEN", "secret123")
-    with pytest.raises(Exception), client.websocket_connect("/ws") as ws:
+    with pytest.raises(WebSocketDisconnect), client.websocket_connect("/ws") as ws:
         ws.receive_json()
 
 
@@ -1262,7 +1273,7 @@ def test_websocket_with_the_right_token_in_a_subprotocol_succeeds(client, monkey
 
 def test_websocket_with_a_wrong_token_in_a_subprotocol_is_closed(client, monkeypatch) -> None:
     monkeypatch.setattr("api.server.API_TOKEN", "secret123")
-    with pytest.raises(Exception), client.websocket_connect(
+    with pytest.raises(WebSocketDisconnect), client.websocket_connect(
         "/ws", subprotocols=["lucas.v1", "lucas-token.mauvais"]
     ) as ws:
         ws.receive_json()
@@ -1276,7 +1287,7 @@ def test_subprotocol_token_wins_over_the_query_string(client, monkeypatch) -> No
     quoi le repli deviendrait un contournement du contrôle.
     """
     monkeypatch.setattr("api.server.API_TOKEN", "secret123")
-    with pytest.raises(Exception), client.websocket_connect(
+    with pytest.raises(WebSocketDisconnect), client.websocket_connect(
         "/ws?token=secret123", subprotocols=["lucas.v1", "lucas-token.mauvais"]
     ) as ws:
         ws.receive_json()

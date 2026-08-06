@@ -141,8 +141,8 @@ def main() -> int:
 
     relevant.sort()
     irrelevant.sort()
-    worst_relevant, worst_question = relevant[-1]
-    best_irrelevant, best_question = irrelevant[0]
+    worst_relevant, _ = relevant[-1]
+    best_irrelevant, _ = irrelevant[0]
 
     print(
         f"\npertinent   : {relevant[0][0]:.3f} … {worst_relevant:.3f}"

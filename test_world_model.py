@@ -21,7 +21,10 @@ from core.world_model import format_for_prompt, get_snapshot
 class _FixedDateTime:
     """Remplace datetime.now() par une valeur connue — mardi 04/08/2026."""
 
-    _fixed = real_datetime(2026, 8, 4, 15, 30)
+    # Naïve délibérément : cette valeur REMPLACE `datetime.now()`, qui
+    # rend une heure locale naïve. La rendre consciente ferait mentir le
+    # double sur ce qu'il imite.
+    _fixed = real_datetime(2026, 8, 4, 15, 30)  # noqa: DTZ001
 
     @classmethod
     def now(cls):

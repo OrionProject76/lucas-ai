@@ -5,6 +5,16 @@
 # du projet (data/lucas_daemon.db, memory/lucas_memory.db) — mêmes raisons
 # que partout ailleurs dans cette suite : un test ne doit jamais dépendre
 # de ce qui tourne sur le poste qui l'exécute, ni pouvoir l'altérer.
+#
+# ⚠️ DEUX conventions d'horodatage cohabitent ici, et il faut les garder
+# distinctes — c'est leur mélange qui a produit le bug du 06/08/2026 :
+#   • `daemon_runs.started_at` : heure LOCALE naïve, parce que c'est
+#     lucas_daemon.py qui l'écrit ainsi (`datetime.now().isoformat()`).
+#     Les `datetime.now()` ci-dessous alimentent CE côté-là.
+#   • `system_events.created_at` : UTC, séparateur espace, parce que
+#     c'est `CURRENT_TIMESTAMP` de SQLite qui l'écrit. Tout passe par
+#     `_sqlite_horodatage()`, jamais par `datetime.now()` directement.
+# ruff: noqa: DTZ005
 
 from __future__ import annotations
 

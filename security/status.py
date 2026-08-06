@@ -107,7 +107,7 @@ def _is_active(last_scan_at: str | None) -> bool:
         when = datetime.fromisoformat(last_scan_at)
     except ValueError:
         return False
-    # noqa DTZ005 assumé : `last_scan_at` vient de `daemon_runs.started_at`,
+    # DTZ005 assumé ci-dessous : `last_scan_at` vient de `daemon_runs.started_at`,
     # écrit par lucas_daemon.py avec `datetime.now().isoformat()` — heure
     # LOCALE naïve. La comparaison doit donc l'être aussi. Contrairement à
     # `_findings()` ci-dessous, où la colonne vient de CURRENT_TIMESTAMP

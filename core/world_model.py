@@ -28,7 +28,10 @@ def get_snapshot() -> dict:
     "snapshots" — seuls les événements significatifs sont persistés,
     voir memory/memory_manager.py::save_event).
     """
-    now = datetime.now()
+    # Heure LOCALE délibérée : ce snapshot alimente le prompt (« il est
+    # 22h14, mercredi »). En UTC, Luca's annoncerait à Cyril une heure
+    # qui n'est pas celle de sa pendule.
+    now = datetime.now()  # noqa: DTZ005
     return {
         "cpu_percent": psutil.cpu_percent(interval=0.3),
         "ram_percent": psutil.virtual_memory().percent,

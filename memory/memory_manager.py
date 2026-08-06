@@ -403,7 +403,12 @@ class MemoryManager:
         if row is None or not row[0]:
             return None
         try:
-            precedent = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S")
+            # DTZ007 assumé : `%z` serait FAUX ici. `created_at` vient de
+            # CURRENT_TIMESTAMP, qui n'écrit aucun fuseau — la valeur est
+            # UTC par convention, pas par notation. La comparaison en UTC
+            # naïf, quatre lignes plus bas, est ce qui rend l'ensemble
+            # correct.
+            precedent = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S")  # noqa: DTZ007
         except (TypeError, ValueError):
             return None
         # created_at est écrit par CURRENT_TIMESTAMP, donc en UTC : la

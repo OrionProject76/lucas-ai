@@ -51,11 +51,15 @@ class OllamaEmbeddingFunction(EmbeddingFunction):
                     json={"model": "nomic-embed-text", "prompt": text},
                 )
                 embeddings.append(response.json()["embedding"])
-            except Exception as e:
+            except Exception as e:  # requests lève des types
+                # variés (connexion, timeout, JSON malformé) ; ils se
+                # traduisent tous par le même message actionnable pour
+                # Cyril. `from e` conserve la trace d'origine, sans quoi
+                # la cause réelle disparaîtrait du traceback.
                 raise RuntimeError(
                     f"Échec de l'embedding Ollama (nomic-embed-text) — "
                     f"vérifier qu'Ollama tourne (ollama serve). Détail : {e}"
-                )
+                ) from e
         return embeddings
 
 
@@ -69,7 +73,10 @@ class RAGManager:
             self.chroma_client = chromadb.PersistentClient(path=os.path.join(data_dir, "chromadb"))
             self.collection = self._open_collection()
             self.use_chroma = True
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — dégradation volontaire :
+            # ChromaDB indisponible (base absente, verrouillée, version
+            # incompatible) ne doit jamais empêcher Luca's de démarrer.
+            # Le RAG se coupe, le reste fonctionne.
             print(f"ChromaDB indisponible, bascule en mode fallback : {e}")
             self.use_chroma = False
             self.collection = None

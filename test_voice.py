@@ -10,5 +10,7 @@ def test_synthesis():
 if __name__ == "__main__":
     try:
         test_synthesis()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — script de démonstration manuel :
+        # afficher la panne est tout ce qu'on attend, un traceback brut
+        # n'apprendrait rien de plus ici.
         print(f"Erreur de synthèse vocale : {e}")

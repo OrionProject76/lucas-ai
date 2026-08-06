@@ -66,7 +66,16 @@ def _is_expired(expiration: str | None) -> bool:
     if not expiration:
         return False
     try:
-        return datetime.fromisoformat(expiration) < datetime.now()
+        # ⚠️ Comparaison en heure LOCALE naïve. Sans danger aujourd'hui :
+        # rien dans le projet n'écrit `expiration` (voir l.41 et
+        # core/lucas_core.py l.423), donc on sort plus haut sur `None`.
+        #
+        # Piège latent le jour où quelque chose l'écrira : si cette
+        # colonne vient de `CURRENT_TIMESTAMP` (UTC), la comparaison
+        # sera fausse du décalage horaire — exactement le bug trouvé le
+        # 06/08/2026 dans security/status.py (ROADMAP.md §5.59). Écrire
+        # cette valeur depuis Python en heure locale, ou adapter ici.
+        return datetime.fromisoformat(expiration) < datetime.now()  # noqa: DTZ005
     except ValueError:
         return False
 

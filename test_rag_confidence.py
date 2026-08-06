@@ -81,8 +81,8 @@ def test_mixed_results_flag_only_the_weak_ones() -> None:
     extraits = [
         ligne for ligne in rag.get_context("q").splitlines() if ligne.startswith("[Extrait")
     ]
-    solide = [ligne for ligne in extraits if "solide" in ligne][0]
-    douteux = [ligne for ligne in extraits if "douteux" in ligne][0]
+    solide = next(ligne for ligne in extraits if "solide" in ligne)
+    douteux = next(ligne for ligne in extraits if "douteux" in ligne)
     assert "correspondance faible" not in solide
     assert "correspondance faible" in douteux
 

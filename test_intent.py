@@ -74,8 +74,8 @@ CORPUS: list[tuple[str, str, str]] = [
 
     # — Ni l'un ni l'autre : déclencher ici coûte plusieurs secondes ——
     ("regarde si tu peux m'aider", NEITHER,
-     "01/08 — verbe de perception idiomatique ; le classifieur y tombait, "
-     "corrigé par le prompt"),
+     ("01/08 — verbe de perception idiomatique ; le classifieur y tombait, "
+      "corrigé par le prompt")),
     ("vois si tu peux faire ça", NEITHER, "01/08 — même piège idiomatique"),
     ("quelle heure il est", NEITHER, "témoin — ne rien déclencher"),
     ("explique-moi la photosynthèse", NEITHER, "témoin — culture générale"),

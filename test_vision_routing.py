@@ -1001,14 +1001,17 @@ def test_generic_screen_wording_does_not_get_the_pc_override(core, monkeypatch) 
 # observées ce jour-là, pas des exemples inventés.
 
 REAL_VISION_REFUSALS = [
-    "Je n'ai pas accès à une image ni à un contexte visuel pour analyser. "
-    "Si vous souhaitez que je décrive quelque chose, veuillez me fournir "
-    "le détail ou la capture d'écran concernée.",
-    "Désolé, mais je n'ai pas accès à aucune image ou contexte visuel. "
-    "Si vous souhaitez que je décrive quelque chose, veuillez me fournir "
-    "les détails ou la capture d'écran concernée.",
-    "Je n'ai pas accès à votre écran en ce moment, car je fonctionne "
-    "localement sur le PC de Cyril et ne peux pas regarder à distance.",
+    # Parenthèses explicites : sans elles, rien ne distingue visuellement
+    # une continuation volontaire d'une virgule oubliée — et une virgule
+    # oubliée fusionnerait deux cas de test en un seul, silencieusement.
+    ("Je n'ai pas accès à une image ni à un contexte visuel pour analyser. "
+     "Si vous souhaitez que je décrive quelque chose, veuillez me fournir "
+     "le détail ou la capture d'écran concernée."),
+    ("Désolé, mais je n'ai pas accès à aucune image ou contexte visuel. "
+     "Si vous souhaitez que je décrive quelque chose, veuillez me fournir "
+     "les détails ou la capture d'écran concernée."),
+    ("Je n'ai pas accès à votre écran en ce moment, car je fonctionne "
+     "localement sur le PC de Cyril et ne peux pas regarder à distance."),
 ]
 
 

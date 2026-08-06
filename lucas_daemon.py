@@ -8,7 +8,29 @@ Lancement :
     ou : nssm install LucasDaemon ... (service Windows)
 
 Auteur : Lucas AI Project
+
+── Convention d'horodatage de ce fichier ─────────────────────────────
+
+Tout ce que ce daemon écrit — journal, `daemon_runs.started_at`,
+`emotional_logs.timestamp`, noms de captures — utilise l'heure LOCALE
+naïve (`datetime.now()`), et c'est délibéré : ces valeurs sont lues par
+Cyril. Un journal en UTC afficherait « 01:05 » pour un événement de
+3h05 du matin.
+
+⚠️ Ce qui est interdit, en revanche, c'est de COMPARER ces valeurs à
+celles écrites par SQLite (`CURRENT_TIMESTAMP`, qui est en UTC). C'est
+ce mélange — pas l'heure locale elle-même — qui a produit le bug du
+06/08/2026 dans `security/status.py`, où le panneau affichait « aucun
+signal » alors qu'il y en avait (ROADMAP.md §5.59).
+
+`security/status.py::_is_active` lit bien `started_at` d'ici en heure
+locale, et c'est correct. Toute nouvelle lecture croisée doit vérifier
+laquelle des deux conventions s'applique.
 """
+
+# La convention ci-dessus vaut pour tout le fichier : la déclarer une
+# fois évite d'ajouter le même `noqa` à quinze endroits.
+# ruff: noqa: DTZ005, DTZ006
 
 import sqlite3
 import subprocess
@@ -104,7 +126,33 @@ def db_log_task(task_name: str, status: str, details: str = "", error: str = "")
 # ─── TÂCHES NOCTURNES ──────────────────────────────────────
 
 class LucasDaemon:
-    """Daemon principal de Luca's AI."""
+    """Daemon principal de Luca's AI.
+
+    ── Pourquoi ces `except Exception` ───────────────────────────────
+
+    Chaque tâche planifiée en attrape un, et c'est délibéré : ce
+    processus tourne 24/7 sans surveillance. Une tâche qui plante ne
+    doit pas emporter le daemon avec elle — sinon une erreur ponctuelle
+    dans l'indexation RAG couperait aussi les balayages de sécurité et
+    le rapport du matin, en silence, jusqu'au prochain redémarrage
+    manuel.
+
+    ⚠️ La condition qui rend ces `except` acceptables : **ils
+    journalisent tous**. Un `except Exception: pass` muet dans ce
+    fichier serait le contraire — deux existaient, corrigés le
+    06/08/2026 (ROADMAP.md §5.59). C'est cette différence, pas le type
+    d'exception attrapé, qui sépare une dégradation maîtrisée d'une
+    panne invisible.
+
+    ⚠️ Réserve connue, non traitée ici : `db_log_task(..., error=str(e))`
+    enregistre le MESSAGE de l'exception. Sur les tâches qui manipulent
+    des documents personnels (indexation RAG), ce message peut embarquer
+    du contenu réel — même motif que les fuites du 04/08 (`CLAUDE.md`,
+    « jamais afficher le contenu d'un fichier de données personnelles »).
+    Les deux corrections du 06/08 ne journalisent que le TYPE ; aligner
+    les sept autres demande de vérifier ce que chacune perd en
+    diagnostic, ce qui dépasse un chantier de lint.
+    """
 
     def __init__(self):
         self.running = True
@@ -145,7 +193,7 @@ class LucasDaemon:
             else:
                 log("⚠️ Script train_lora.py non trouvé. Skip.")
                 db_log_task("lora_training", "skipped", "Script non trouvé")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — voir « Pourquoi ces except Exception » en tete de LucasDaemon
             log(f"❌ Exception LoRA: {e}")
             db_log_task("lora_training", "failed", error=str(e))
 
@@ -178,7 +226,7 @@ class LucasDaemon:
             else:
                 log("⚠️ Script index_documents.py non trouvé. Skip.")
                 db_log_task("rag_indexing", "skipped", "Script non trouvé")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — voir « Pourquoi ces except Exception » en tete de LucasDaemon
             log(f"❌ Exception RAG: {e}")
             db_log_task("rag_indexing", "failed", error=str(e))
 
@@ -211,7 +259,7 @@ class LucasDaemon:
             log("✅ Base de données optimisée (VACUUM)")
 
             db_log_task("cleanup", "success", f"Screenshots: {deleted}, Cache: {len(cache_dirs)}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — voir « Pourquoi ces except Exception » en tete de LucasDaemon
             log(f"❌ Exception cleanup: {e}")
             db_log_task("cleanup", "failed", error=str(e))
 
@@ -241,7 +289,7 @@ class LucasDaemon:
                 import win32gui
                 hwnd = win32gui.GetForegroundWindow()
                 app_name = win32gui.GetWindowText(hwnd)
-            except Exception:
+            except Exception:  # noqa: BLE001 — voir « Pourquoi ces except Exception » en tete de LucasDaemon
                 app_name = "unknown"
 
             conn = sqlite3.connect(DB_FILE)
@@ -336,7 +384,7 @@ class LucasDaemon:
             else:
                 log(f"⚠️ Tests en échec: {result.stdout[:500]}")
                 db_log_task("auto_tests", "failed", error=result.stdout[:1000])
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — voir « Pourquoi ces except Exception » en tete de LucasDaemon
             log(f"❌ Exception tests: {e}")
             db_log_task("auto_tests", "failed", error=str(e))
 
@@ -376,7 +424,7 @@ class LucasDaemon:
         db_log_task(task_name, "started")
         try:
             findings = scan()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — voir « Pourquoi ces except Exception » en tete de LucasDaemon
             log(f"❌ Balayage {task_name} en échec : {e}", "ERROR")
             db_log_task(task_name, "failed", error=str(e))
             return
@@ -458,7 +506,7 @@ class LucasDaemon:
 
             # Afficher dans la console aussi
             print(report)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — voir « Pourquoi ces except Exception » en tete de LucasDaemon
             log(f"❌ Exception rapport: {e}")
             db_log_task("morning_report", "failed", error=str(e))
 

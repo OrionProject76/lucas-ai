@@ -218,7 +218,7 @@ def _rasteriser_pdf(path: Path) -> Path:
             for i, page in enumerate(document):
                 pixmap = page.get_pixmap(dpi=200)
                 pixmap.save(str(tmp_dir / f"page_{i:03d}.png"))
-    except Exception as exc:  # noqa: BLE001 — fitz lève des types variés
+    except Exception as exc:  # fitz lève des types variés
         shutil.rmtree(tmp_dir, ignore_errors=True)
         raise OCRUnavailable(f"rendu PDF impossible ({type(exc).__name__})") from exc
     return tmp_dir
@@ -271,13 +271,13 @@ def _read_pdf(path: Path, ocr_engine: OCREngine | None = None) -> str:
             # d'abandonner.
             try:
                 reader.decrypt("")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 raise UnreadablePDF("PDF chiffré, mot de passe requis") from exc
 
         pages = [_extract_page(page) for page in reader.pages]
     except UnreadablePDF:
         raise
-    except Exception as exc:  # noqa: BLE001 — pypdf lève des types variés
+    except Exception as exc:  # pypdf lève des types variés
         raise UnreadablePDF(f"illisible ({type(exc).__name__})") from exc
 
     texte = "\n\n".join(p.strip() for p in pages if p.strip())
@@ -322,7 +322,7 @@ def _read_docx(path: Path) -> str:
 
     try:
         document = docx.Document(str(path))
-    except Exception as exc:  # noqa: BLE001 — python-docx lève des types variés
+    except Exception as exc:  # python-docx lève des types variés
         raise UnreadableDOCX(f"illisible ({type(exc).__name__})") from exc
 
     blocs = [p.text.strip() for p in document.paragraphs if p.text.strip()]

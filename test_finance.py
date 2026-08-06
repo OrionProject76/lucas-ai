@@ -536,6 +536,11 @@ def test_load_directory_ignores_non_csv_files(tmp_path) -> None:
     (tmp_path / "notes.txt").write_text("pas un relevé", encoding="utf-8")
     manager, skipped = load_directory(tmp_path)
     assert len(manager.transactions) == 1
+    # `skipped` était dépaqueté puis jamais vérifié : le test prouvait que
+    # le .txt n'entrait pas dans les transactions, pas ce qu'il devenait.
+    # `skipped` liste les CSV ILLISIBLES — un .txt n'en est pas un, il ne
+    # doit donc pas y figurer non plus.
+    assert skipped == [], "un .txt n'est pas un relevé illisible, il ne doit pas y figurer"
 
 
 def test_load_directory_reports_malformed_file_without_failing_the_others(tmp_path) -> None:

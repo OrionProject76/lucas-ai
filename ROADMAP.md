@@ -6270,10 +6270,75 @@ en simulant les 24 heures : l'ancienne comparaison est prise en défaut
 qu'écrit SQLite, local naïf pour ce qu'écrit Python. Aucune des deux
 n'est fausse ; c'est de les **comparer entre elles** que naît le bug.
 
+### Palier 4 — les 48 restantes, triées une par une
+
+**105 → 6.** Les 6 qui restent sont un choix, pas un reste : voir plus
+bas.
+
+#### Une tentative de config ruff, faite puis retirée
+
+Le constat n°1 (« aucune configuration n'existe, le périmètre bouge à
+chaque version ») appelait un `ruff.toml`. Écrit, avec pour règle
+explicite qu'il devait **reproduire à l'identique** l'état du jour.
+
+**Mesuré : 54 alertes avant, 320 après.** La sélection par préfixes
+(`"S"`, `"PLR"`, `"SIM"`…) est plus large que le sous-ensemble curé du
+défaut de ruff — impossible de le reproduire ainsi. Le fichier a donc
+été **supprimé** : il aurait ajouté 266 alertes sous couvert de
+« configuration », c'est-à-dire le changement de politique déguisé que
+son propre en-tête s'interdisait.
+
+**Reste à trancher par Cyril** : adopter ce périmètre élargi (et traiter
+les 266), ou figer autrement. Ce n'est pas une décision de lint.
+
+#### ⚠️ Mes propres commentaires créaient des `noqa` aveugles
+
+Deux commentaires écrits au palier 2 commençaient par `# noqa …` pour
+expliquer une exception assumée. Ruff les a lus comme des **directives
+blanket** — un `noqa` sans code, qui supprime **toutes** les règles sur
+la ligne. Exactement l'inverse du but recherché.
+
+Détecté par `RUF100` (« Unused blanket noqa »), reformulé en
+« `DTZ005` assumé ci-dessous : … ». **Un commentaire d'explication ne
+commence jamais par `# noqa`.**
+
+#### Le tri, par catégorie
+
+| Alerte | Traitement | Motif |
+|---|---|---|
+| `BLE001` ×10 | **documentées, gardées** | 7 dans le daemon (une tâche qui plante ne doit pas tuer un processus 24/7 — et **elles journalisent toutes**, c'est ce qui les rend acceptables), 2 dégradations volontaires du RAG, 1 script de démo |
+| `DTZ005` ×15 | **convention déclarée au niveau du fichier** | Heure locale délibérée : ces horodatages sont lus par Cyril. Un `# ruff: noqa` en tête de `lucas_daemon.py` évite quinze annotations identiques |
+| `RUF100` ×12 | **6 retirées, 6 gardées** | Retirées : directives réellement mortes (l'explication qu'elles portaient, elle, est conservée en commentaire simple). Gardées : les `# noqa: E402` d'imports tardifs volontaires — « inutiles » seulement parce qu'aucune config n'active `E402` |
+| `ISC004` ×4 | **parenthésées** | Continuations volontaires de longues chaînes, pas des virgules oubliées — vérifié. Les parenthèses rendent la différence visible : une virgule oubliée fusionnerait deux cas de test en un seul, silencieusement |
+| `B017` ×3 | **assertions resserrées** | `pytest.raises(Exception)` dans trois tests du **contrôle du jeton** : ils passaient au vert même si la connexion échouait pour une raison sans rapport. Type réel constaté en exécutant le cas — `WebSocketDisconnect` |
+| `RUF059` ×3 | 2 en `_`, 1 **transformée en assertion** | `test_load_directory_ignores_non_csv_files` dépaquetait `skipped` sans jamais le vérifier : le test prouvait que le `.txt` n'entrait pas dans les transactions, pas ce qu'il devenait |
+| `DTZ001`/`DTZ006`/`DTZ007` | **documentées** | Naïves à dessein : dates de CSV bancaire (sans fuseau), `datetime.now()` figé dans un double, et la comparaison UTC naïve déjà expliquée de `memory_manager` |
+| `RUF015` ×2, `B904` | **corrigées** | `[...][0]` → `next(...)` ; `raise … from e` pour conserver la trace d'origine |
+
+#### Un piège latent trouvé au passage
+
+`core/memory_weighting.py` compare `expiration` (venu de la base) à
+`datetime.now()` en heure **locale** — même schéma que le bug de
+sécurité. Sans danger aujourd'hui : **rien n'écrit `expiration`**
+(`core/lucas_core.py` l.423 le confirme), on sort donc plus haut sur
+`None`. Annoté comme piège pour le jour où quelque chose l'écrira.
+
+#### Ce qui reste, et pourquoi
+
+**6 `RUF100`**, toutes des `# noqa: E402` sur des imports tardifs
+volontaires (après manipulation de `sys.path`). Elles ne sont
+« inutiles » que parce que `E402` n'est pas dans le jeu de règles
+actuel. Les retirer effacerait une intention pour satisfaire une règle
+qui dépend d'une configuration inexistante — le contraire de ce que ce
+chantier a appris.
+
 ### Vérifications
 
 Suite complète **1 297 passés** après chaque palier, **1 298** après
-l'ajout du test de régression. Et parce que des
+l'ajout du test de régression — et à nouveau **1 298** en fin de
+chantier. Modules importés explicitement un par un après chaque palier
+(27/27, puis 14/14 sur les modules touchés), plus `lucas_daemon.py`
+chargé à part. Et parce que des
 tests verts ne prouvent pas qu'un import retiré ne manquait pas à un
 chemin non couvert, les **27 modules du projet ont été importés
 explicitement, un par un — 27/27**.
