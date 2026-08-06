@@ -208,3 +208,105 @@ def test_a_known_executable_path_is_reported_as_is() -> None:
     signal = Guardian._check_lookalike_name("svch0st.exe", r"C:\Temp\svch0st.exe")
     assert signal is not None
     assert signal.evidence["chemin"] == r"C:\Temp\svch0st.exe"
+
+
+# ══ Les trois survivants du SECOND passage ═══════════════════════════
+#
+# ⚠️ Pourquoi ils sont arrivés après coup.
+#
+# Sur les 11 survivants de `security/` traités en premier, ma
+# vérification n'en a rejoué que HUIT. `privacy_shield:154` et `:189`
+# n'ont jamais été vérifiés — je les avais comptés comme traités sans
+# preuve. C'est exactement l'erreur traquée ailleurs : rapporter un
+# succès sans l'avoir constaté.
+#
+# Le troisième, dans `ransomware_watch`, appartient à une catégorie
+# entière — les négations — que mon outil de mutation écartait en
+# silence : le garde de frontière de mot examinait le caractère suivant
+# l'espace de `"not "`, donc échouait toujours.
+
+def test_a_first_contact_without_a_path_is_still_named() -> None:
+    """
+    Mutant privacy_shield:154 : `exe or "inconnu"` -> `and`.
+
+    Même motif que celui déjà couvert pour l'écoute grande ouverte, mais
+    sur l'AUTRE capteur — le premier contact avec une adresse publique.
+    Deux fonctions, deux `evidence`, deux tests : n'en couvrir qu'une
+    laissait l'autre mutant vivant.
+    """
+    from security.privacy_shield import PrivacyShield
+
+    # ⚠️ Sans historique injecté, ce contrôle NE S'APPLIQUE PAS (l.141) :
+    # il rend None avant d'atteindre la ligne visée. Ma première version
+    # construisait un PrivacyShield nu et testait donc le mauvais chemin.
+    class _HistoireNeuve:
+        def is_new(self, cle):
+            return True
+
+    shield = PrivacyShield(history=_HistoireNeuve())
+    signal = shield._check_first_external_contact("x.exe", "", "93.184.216.34")
+    assert signal is not None
+    assert signal.evidence["chemin"] == "inconnu"
+
+    connu = shield._check_first_external_contact(
+        "y.exe", r"C:\Program Files\y.exe", "93.184.216.35"
+    )
+    assert connu is not None
+    assert connu.evidence["chemin"] == r"C:\Program Files\y.exe"
+
+
+def test_a_listening_socket_without_an_address_is_skipped(monkeypatch) -> None:
+    """
+    Mutant privacy_shield:189 : `conn.status == CONN_LISTEN and conn.laddr`
+    -> `or`.
+
+    Une socket en écoute SANS adresse locale existe — psutil rend parfois
+    `laddr` vide sur des connexions transitoires. Avec `or`, le capteur
+    appelle `_check_wide_open_listener` avec `laddr` vide et tombe sur un
+    AttributeError : le balayage entier s'arrête, et plus aucun signal
+    n'est produit.
+    """
+    import psutil
+
+    from security.privacy_shield import PrivacyShield
+
+    class _Connexion:
+        pid = 4242
+        status = psutil.CONN_LISTEN
+        laddr = ()          # écoute, mais sans adresse
+        raddr = None
+
+    shield = PrivacyShield()
+    monkeypatch.setattr(psutil, "net_connections", lambda kind="inet": [_Connexion()])
+    monkeypatch.setattr(
+        shield, "_describe_process", lambda pid: ("app.exe", r"C:\app.exe")
+    )
+
+    assert shield.scan() == [], "une socket sans adresse ne produit aucun signal"
+
+
+def test_a_shell_folder_that_is_a_real_directory_is_kept(monkeypatch, tmp_path) -> None:
+    """
+    Mutant ransomware_watch:104 : `if resolved is None or not resolved.is_dir()`
+    -> le `not` disparaît.
+
+    Inversé, un dossier RÉSOLU et existant — typiquement « Documents »
+    redirigé vers OneDrive — est jeté au profit de `~/Documents`, qui
+    n'existe pas sur une machine où la redirection est active. La veille
+    ransomware surveillerait alors un dossier vide, en silence.
+    """
+    from security import ransomware_watch as rw
+
+    reel = tmp_path / "OneDrive" / "Documents"
+    reel.mkdir(parents=True)
+
+    monkeypatch.setattr(
+        rw, "_resolve_shell_folder",
+        lambda nom: reel if nom == rw.RANSOMWARE_WATCH_DIRS[0] else None,
+    )
+
+    dossiers = rw._watched_directories()
+    assert reel in dossiers, (
+        "un dossier résolu et existant doit être surveillé, pas remplacé "
+        "par un chemin par défaut qui n'existe peut-être pas"
+    )
