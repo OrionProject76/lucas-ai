@@ -86,3 +86,11 @@ desktop.ini
 # Documents personnels indexes par le RAG — jamais versionnes
 data/documents/*
 !data/documents/README.md
+
+# Documents de travail de Cyril deposes a la racine — jamais versionnes.
+# Emportes par erreur dans le commit 38a893c (un `git add -A -- '*.md'`
+# trop large de ma part), retires du suivi juste apres. Ils restent sur
+# le disque : c'est le suivi Git qui s'arrete, pas les fichiers.
+ORION_AI_Specifications_Completes_Claude.md
+OrionAI_Analyse_Comparative_Kimi_x_Claude_v1_0.md
+OrionAI_Vision_Claude_v1_0.md
