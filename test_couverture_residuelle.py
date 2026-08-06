@@ -168,7 +168,10 @@ def test_a_service_bound_to_localhost_is_not_a_wide_open_listener() -> None:
         ip = "127.0.0.1"
         port = 9999
 
-    assert PrivacyShield._check_wide_open_listener("app.exe", _Adresse(), "1234") is None
+    # 3e parametre = le CHEMIN de l'executable. J'y passais "1234" en le
+    # prenant pour un PID — sans effet sur ce test, qui sort avant, mais
+    # un lecteur en aurait tire une fausse idee de la signature.
+    assert PrivacyShield._check_wide_open_listener("app.exe", _Adresse(), "") is None
 
 
 # ══ 3. Messages d'erreur — le contraire du silence ════════════════════
