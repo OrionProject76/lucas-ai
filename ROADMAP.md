@@ -5927,6 +5927,53 @@ après — et G2, lui, est éprouvé.
 État après les tests : `config.py` **byte-identique** à avant (empreinte
 vérifiée, `git status` vide), 14 modèles, 253 Go libres.
 
+### Tâche enregistrée, et la chaîne prouvée par précédent (06/08/2026)
+
+Cyril a créé `LucasVeilleModeles`. Vérifié : déclencheur hebdomadaire,
+lundi (`DaysOfWeek: 2`), `2026-08-10T09:00:00`, **prochaine exécution le
+10/08/2026 à 09:00**. `LastTaskResult: 267011` = « jamais encore
+exécutée », normal.
+
+Restait un maillon non vérifié : `claude -p` fonctionne-t-il **depuis une
+tâche planifiée** ? Plutôt que de lancer une veille complète pour le
+savoir, le **précédent** suffit — `data/logs/cowork_requests.log` :
+
+```
+2026-08-05 22:00:00  1 demande(s) en attente
+2026-08-05 22:01:46      rapport depose : Verification_Demande_VLM-STT_2026-08-05.md
+```
+
+22:00:00 pile, soit le déclencheur quotidien de `LucasCoworkRequests`
+(`StartBoundary 2026-08-05T22:00:00+02:00`). La chaîne Planificateur →
+`wscript` → PowerShell → `claude -p` a donc déjà produit un résultat réel,
+en 1 min 46. Rien à re-prouver.
+
+### Le tableau des modèles de `CLAUDE.md` décrivait 4 modèles inexistants
+
+Trouvé en lisant ce rapport de 22h (règle 9 : vérifier `reports/` avant
+de lancer un travail). Croisement du tableau « Modèles LLM » avec
+`ollama list` et `config.py` :
+
+| Ligne du tableau | Réalité |
+|---|---|
+| Vision : `internvl2` / `llava:13b`, ~8 Go | **ni l'un ni l'autre installé**. Le VLM réel est `llava:latest` (4,7 Go), coupé, et qui fabrique (§5.57) |
+| Memory : `bge-m3`, ~2 Go | **jamais installé**. Les embeddings sont `nomic-embed-text` (274 Mo) |
+| Créatif : `mistral-nemo`, ~7 Go | **jamais installé**, aucune référence dans le code |
+| Rapide : `qwen2.5:7b`, routing | installé, mais **plus utilisé** — `INTENT_MODEL` vaut `gpt-oss:20b` |
+
+Tableau réécrit avec les VRAM mesurées, une colonne *statut* qui
+distingue actif / coupé / installé-mais-inutilisé, et l'avertissement sur
+`llava`. `internvl2` est conservé **explicitement comme piste v1.1**
+(cité par `config.py` l.91/143-147 et `core/lucas_core.py` l.1163), pas
+comme existant.
+
+⚠️ **Le rapport de 22h affirme aussi « bug mmproj Qwen3-VL : toujours
+ouvert ».** La mesure directe le contredit en partie : `qwen3-vl:8b`
+**fonctionne** sur cette RTX 5080 (4/4 en lecture), il est seulement 8×
+plus lent au premier token. Le rapport s'appuyait sur des tickets
+publics ; §5.57 s'appuie sur la machine. C'est exactement la raison
+d'être de la règle 12.
+
 ⚠️ **La tâche n'a PAS pu être créée par moi** : le classifieur de
 permissions a refusé `Register-ScheduledTask` puis `schtasks /Create`.
 Non contourné. Les deux scripts sont en place et validés

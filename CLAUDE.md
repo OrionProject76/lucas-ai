@@ -463,14 +463,31 @@ C:/OrionAI/
 ```
 
 ## 🧠 Modèles LLM (Ollama)
-| Rôle | Modèle | Taille VRAM | Usage |
-|------|--------|-------------|-------|
-| Principal | gpt-oss:20b | ~15,3 Go (mesuré, chat+RAG — ROADMAP.md §5.44) | Raisonnement, code, chat |
-| Vision | internvl2 / llava:13b | ~8 Go | Analyse écran temps réel |
-| Rapide | qwen2.5:7b | ~5 Go | Réponses instantanées, routing |
-| Créatif | mistral-nemo | ~7 Go | Brainstorming, storytelling |
-| Memory | bge-m3 | ~2 Go | Embeddings RAG |
-| TTS | kokoro / piper | ~1 Go | Voix locale |
+
+**Corrigé le 06/08/2026** — quatre lignes de ce tableau décrivaient des
+modèles **jamais installés** (`bge-m3`, `mistral-nemo`, `internvl2`,
+`llava:13b`). Trouvé en croisant le tableau avec `ollama list` et
+`config.py` pendant la 1re veille (règle 12). Le tableau dit désormais
+ce qui tourne, pas ce qui avait été imaginé au lancement.
+
+| Rôle | Modèle réel | VRAM mesurée | Statut |
+|------|-------------|--------------|--------|
+| **Principal** | `gpt-oss:20b` | 12 501 Mo, marge 1 011 (§5.56) | **actif** |
+| **Embeddings RAG** | `nomic-embed-text` (274 Mo sur disque) | ~500 Mo | **actif** |
+| **Vision (VLM)** | `llava:latest` | 7 552 Mo | ⚠️ **coupé** (`VLM_ENABLED = False`) — **et à ne pas réactiver tel quel** : mesuré 0/4 en lecture d'écran, invente des chiffres plausibles (§5.57). Remplaçant en tête : `qwen2.5vl:7b` (4/4, tag **sans tiret**) |
+| **Classifieur d'intention** | `gpt-oss:20b` (`INTENT_MODEL`) | — | **actif**, partage le modèle principal |
+| **TTS** | `edge_tts` (défaut) / Piper (sensible) | — | **actif** — voir règle 11 et le routage TTS |
+
+**Installés mais non utilisés par le code** : `qwen2.5:7b` (ex-classifieur,
+remplacé par `gpt-oss:20b`), `qwen3:14b`, `gemma3:12b`, `gemma4:latest`,
+`deepseek-r1:14b`, `deepseek-coder:33b`, `llama3.1:8b`, `llama3:70b`,
+`qwen3.6:latest`, `qwen2.5:latest`, `kimi-k2.7-code:cloud`.
+
+⚠️ **`internvl2` n'est pas installé** et reste une piste v1.1 — `config.py`
+(l.91, 143-147) et `core/lucas_core.py` (l.1163) le citent comme plan de
+réactivation du VLM, pas comme existant. La 1re veille place
+`qwen2.5vl:7b` devant lui sur mesure réelle ; l'arbitrage se fera à
+l'ouverture du chantier vision (§5.56).
 
 ## 🔄 Workflow Git
 1. `just git-feature nom-du-module` → nouvelle branche
