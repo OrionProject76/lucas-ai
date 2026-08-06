@@ -12,11 +12,11 @@ from __future__ import annotations
 import pytest
 
 from core.decision_engine import (
+    ILLUSTRATIVE_ACTIONS,
     ActionCategory,
     ActionDenied,
     ActionSpec,
     DecisionEngine,
-    ILLUSTRATIVE_ACTIONS,
     automation_manager_actions,
 )
 

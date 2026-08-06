@@ -42,11 +42,11 @@ import re
 from dataclasses import dataclass
 
 from config import (
+    CONTEXT_MAX_CHARS,
+    CONTEXT_TURNS,
     INTENT_CLASSIFIER_ENABLED,
     INTENT_MAX_TOKENS,
     INTENT_MODEL,
-    CONTEXT_MAX_CHARS,
-    CONTEXT_TURNS,
     INTENT_TIMEOUT_SECONDS,
     OLLAMA_URL,
 )

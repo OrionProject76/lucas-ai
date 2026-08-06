@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import core.reasoning_engine as reasoning_engine
+from core import reasoning_engine
 from core.reasoning_engine import ReasoningEngine
 
 

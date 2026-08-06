@@ -10,17 +10,13 @@ Lancement :
 Auteur : Lucas AI Project
 """
 
-import os
-import sys
-import time
-import json
-import asyncio
 import sqlite3
 import subprocess
-import traceback
+import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from threading import Thread
+
 import schedule
 
 # ─── CONFIGURATION ─────────────────────────────────────────
@@ -221,9 +217,9 @@ class LucasDaemon:
     def capture_screenshot(self):
         """Capture l'écran toutes les 30 secondes."""
         try:
-            from PIL import Image
-            import pyautogui
             import hashlib
+
+            import pyautogui
 
             timestamp = datetime.now()
             date_dir = SCREENSHOTS_DIR / timestamp.strftime("%Y-%m-%d")
@@ -254,7 +250,7 @@ class LucasDaemon:
             """, (timestamp.isoformat(), str(filepath), app_name, img_hash))
             conn.commit()
             conn.close()
-        except Exception as e:
+        except Exception:
             # Silencieux pour ne pas spammer les logs
             pass
 
@@ -422,7 +418,7 @@ class LucasDaemon:
                 report += f"   {icon} {task}: {status} (x{count})\n"
 
             report += f"\n📸 Screenshots capturés : {screenshot_count}\n"
-            report += f"\n😶 Émotions détectées :\n"
+            report += "\n😶 Émotions détectées :\n"
             for emotion, count in emotions:
                 report += f"   • {emotion}: {count} fois\n"
 

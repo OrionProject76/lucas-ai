@@ -1225,9 +1225,8 @@ def test_no_token_configured_means_no_token_required(client, fake_core) -> None:
 
 def test_websocket_without_token_is_closed_once_one_is_set(client, monkeypatch) -> None:
     monkeypatch.setattr("api.server.API_TOKEN", "secret123")
-    with pytest.raises(Exception):
-        with client.websocket_connect("/ws") as ws:
-            ws.receive_json()
+    with pytest.raises(Exception), client.websocket_connect("/ws") as ws:
+        ws.receive_json()
 
 
 def test_websocket_with_the_right_token_in_the_query_string_succeeds(client, monkeypatch) -> None:
@@ -1263,11 +1262,10 @@ def test_websocket_with_the_right_token_in_a_subprotocol_succeeds(client, monkey
 
 def test_websocket_with_a_wrong_token_in_a_subprotocol_is_closed(client, monkeypatch) -> None:
     monkeypatch.setattr("api.server.API_TOKEN", "secret123")
-    with pytest.raises(Exception):
-        with client.websocket_connect(
-            "/ws", subprotocols=["lucas.v1", "lucas-token.mauvais"]
-        ) as ws:
-            ws.receive_json()
+    with pytest.raises(Exception), client.websocket_connect(
+        "/ws", subprotocols=["lucas.v1", "lucas-token.mauvais"]
+    ) as ws:
+        ws.receive_json()
 
 
 def test_subprotocol_token_wins_over_the_query_string(client, monkeypatch) -> None:
@@ -1278,11 +1276,10 @@ def test_subprotocol_token_wins_over_the_query_string(client, monkeypatch) -> No
     quoi le repli deviendrait un contournement du contrôle.
     """
     monkeypatch.setattr("api.server.API_TOKEN", "secret123")
-    with pytest.raises(Exception):
-        with client.websocket_connect(
-            "/ws?token=secret123", subprotocols=["lucas.v1", "lucas-token.mauvais"]
-        ) as ws:
-            ws.receive_json()
+    with pytest.raises(Exception), client.websocket_connect(
+        "/ws?token=secret123", subprotocols=["lucas.v1", "lucas-token.mauvais"]
+    ) as ws:
+        ws.receive_json()
 
 
 def test_server_echoes_only_the_protocol_never_the_token(client, monkeypatch) -> None:

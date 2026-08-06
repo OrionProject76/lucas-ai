@@ -34,7 +34,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import re
 import shutil
 import sys
@@ -484,7 +483,7 @@ def index_directory(
     directory = Path(directory)
     if not directory.is_dir():
         print(f"Dossier introuvable : {directory}")
-        print(f"Le créer et y déposer des documents, puis relancer.")
+        print("Le créer et y déposer des documents, puis relancer.")
         return 1
 
     rag = RAGManager()

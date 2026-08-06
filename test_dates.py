@@ -20,7 +20,6 @@ from core.dates import extract_periods, extract_query_period
 from core.dates import matches as matches_period
 from test_memory_double import MemoryDouble
 
-
 # ── Extraction côté documents ─────────────────────────────────────────
 
 @pytest.mark.parametrize(

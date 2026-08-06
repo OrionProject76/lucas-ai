@@ -2,7 +2,7 @@
 
 import re
 import time
-from typing import Callable
+from collections.abc import Callable
 
 from config import (
     CLOUD_HISTORY_MESSAGES,
@@ -16,16 +16,16 @@ from config import (
     REANCHOR_SYSTEM_PROMPT,
     REASONING_ENGINE_ENABLED,
     RECENT_EVENTS_IN_PROMPT,
+    SOURCE_HISTORY_MESSAGES,
     SYSTEM_PROMPT,
     VISION_ENABLED,
-    SOURCE_HISTORY_MESSAGES,
     VLM_ENABLED,
     VLM_MAX_CHARS,
     VLM_MODEL,
 )
+from core.aura_modes import AuraModeEngine, tone_hint
 from core.cloud_llm import ask_cloud
 from core.local_llm import ask_local
-from core.aura_modes import AuraModeEngine, tone_hint
 from core.memory_weighting import annotate_uncertain_events, annotate_uncertain_history
 from core.reasoning_engine import ReasoningEngine
 from core.router import (

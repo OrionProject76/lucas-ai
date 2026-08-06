@@ -12,7 +12,6 @@ import pytest
 
 from core.ollama_reply import extract_reply
 
-
 # ── Cas normal : `content` prime toujours ─────────────────────────────
 
 
