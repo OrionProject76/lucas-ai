@@ -118,12 +118,26 @@ daemon-debug:
 # `security` ajouté le 05/08/2026 : il manquait à la commande standard,
 # alors que c'est le code le plus sensible du projet — il n'était donc
 # mesuré que par des campagnes ponctuelles.
+# ⚠️ `venv/Scripts/python.exe -m pytest`, PAS `pytest` nu — corrigé le
+# 06/08/2026, et ce n'était pas cosmétique.
+#
+# `pytest` nu résolvait vers le Python GLOBAL
+# (AppData/Local/Programs/Python/Python312), auquel il manque
+# **20 paquets** présents dans le venv : ddgs, faster-whisper, pypdf,
+# python-docx, pymupdf, ruff, mypy…
+#
+# Conséquence mesurée : `just test` collectait 1 249 tests avec 2 erreurs
+# d'import (test_dependance_forme.py, test_modules.py — `ModuleNotFoundError:
+# ddgs`), là où le venv en collecte 1 298 qui passent. Autrement dit, la
+# commande officielle du projet testait un environnement qui n'est PAS
+# celui dans lequel Luca's tourne — et deux fichiers de tests n'étaient
+# jamais exécutés par elle.
 test:
-    pytest -v --ignore=test_voice.py --cov=core --cov=modules --cov=memory --cov=api --cov=security --cov-report=term-missing
+    venv/Scripts/python.exe -m pytest -v --ignore=test_voice.py --cov=core --cov=modules --cov=memory --cov=api --cov=security --cov-report=term-missing
 
 # Tests rapides (sans coverage)
 test-quick:
-    pytest -v --ignore=test_voice.py
+    venv/Scripts/python.exe -m pytest -v --ignore=test_voice.py
 
 # NB : ceux-ci parlent aux VRAIS services — Ollama, Piper, registre
 # Windows. Lents (~20 s) et dépendants de l'environnement, donc exclus
@@ -132,7 +146,7 @@ test-quick:
 
 # Tests d'intégration (Ollama doit tourner)
 test-integration:
-    pytest test_integration.py -m integration -v
+    venv/Scripts/python.exe -m pytest test_integration.py -m integration -v
 
 # ── Lint : TOUT le projet (élargi le 06/08/2026) ──────────────────────
 #
