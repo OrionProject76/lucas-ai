@@ -1191,3 +1191,79 @@ GDExtension est du **code natif chargé dans le process**. Elle sort du
 cadre « GDScript seulement » et se traite avec la même prudence que tout
 ce qui touche à l'API Win32 — cohérent avec la règle de `CLAUDE.md`
 (04/08/2026) qui interdit déjà le P/Invoke pour les tests.
+
+---
+
+## #96 — Nettoyage et optimisation du PC
+
+**Demandé par Cyril le 06/08/2026.** Luca doit pouvoir scruter les dossiers
+et fichiers du PC pour identifier ce qui est superflu — programmes non
+utilisés depuis longtemps, doublons de fichiers, dossiers/fichiers devenus
+caducs — dans le but d'un PC plus propre, moins encombré, plus performant.
+
+Prolonge naturellement `modules/semantic_desktop.py` (#16, v1 lecture seule
+construite le 03/08/2026) : la brique qui sait déjà lister, apparenter et
+regrouper des fichiers est celle qui saura repérer ce qui ne sert plus.
+
+### ⚠️ La distinction à ne jamais fusionner en une seule fonctionnalité
+
+**1. SCAN / ANALYSE — lecture seule, sans risque.** Repérer les doublons,
+les gros fichiers, les programmes jamais lancés depuis longtemps. Rien
+n'est modifié : Luca observe et rapporte.
+
+**2. ⛔ POINT MANQUANT — l'instruction de Cyril s'est interrompue ici.**
+
+> Son message du 06/08/2026 se termine en plein milieu du point 1
+> (« *les programmes jamais lancés depuis* »). Le point 2 n'a jamais été
+> transmis.
+
+**Ce qui suit est une RECONSTRUCTION de Claude Code, pas les mots de
+Cyril — à confirmer, corriger ou remplacer par lui.** Elle est écrite ici
+uniquement pour que la structure de l'idée ne se perde pas, et elle est
+signalée comme telle pour ne pas se retrouver citée un jour comme une
+décision qu'il aurait prise.
+
+*Reconstruction plausible du point 2* : **ACTION / SUPPRESSION —
+destructive, jamais automatique.** Supprimer, désinstaller, déplacer.
+Chaque action passe par une confirmation explicite de Cyril, une par une,
+avec ce qui sera touché affiché avant. Aucune suppression en lot, aucune
+action silencieuse, rien d'irréversible sans qu'il ait vu et validé.
+
+### Pourquoi cette séparation existe déjà partout dans le projet
+
+Ce n'est pas une précaution ajoutée pour cette idée : c'est le patron que
+Luca's applique déjà, trois fois.
+
+| Module | Lecture | Écriture / action |
+|---|---|---|
+| `modules/semantic_desktop.py` | liste, apparente, regroupe | **hors périmètre** tant que la décision n'est pas gouvernée |
+| `security/` niveau 1 | observe, rapporte | **jamais d'action**, par construction |
+| `core/decision_engine.py` | lecture = automatique | écriture/exécution = **confirmation** |
+
+Un module de nettoyage est le cas où l'erreur coûte le plus cher : un
+faux positif sur un « fichier caduc » peut détruire quelque chose
+d'irremplaçable. C'est exactement le domaine où `CLAUDE.md` (« liberté
+conditionnée à la protection ») impose que les garde-fous existent
+**avant** l'extension des libertés d'action.
+
+### Points de vigilance à traiter le jour où ce chantier s'ouvre
+
+- **Doublons** : deux fichiers de contenu identique ne sont pas
+  interchangeables — l'un peut être une sauvegarde délibérée. Comparer par
+  empreinte, et **rapporter**, pas choisir lequel meurt.
+- **« Jamais lancé »** ≠ **inutile** : un outil de récupération, un pilote,
+  un utilitaire annuel (déclaration d'impôts) ont une valeur qui n'a rien
+  à voir avec leur fréquence d'usage.
+- **Ne jamais toucher** à ce qui relève du système, des pilotes, ou d'un
+  antivirus — Bitdefender bloque déjà légitimement les scripts qui
+  ressemblent à ça (`CLAUDE.md`, incident du 04/08/2026).
+- **Règle des données personnelles** (`CLAUDE.md`, 04/08/2026) : un scan de
+  disque croise nécessairement des fichiers personnels. Rapporter par
+  **structure** (taille, date, empreinte, extension), jamais par contenu —
+  et jamais laisser un message d'exception embarquer un nom de fichier réel
+  hors du poste.
+- **La corbeille plutôt que la suppression** comme premier palier : une
+  action réversible reste une action, mais elle laisse une porte de sortie.
+
+**Rien n'est construit.** Idée cataloguée, périmètre à trancher avec Cyril —
+à commencer par le point 2, qui lui appartient.
