@@ -1207,27 +1207,38 @@ regrouper des fichiers est celle qui saura repérer ce qui ne sert plus.
 
 ### ⚠️ La distinction à ne jamais fusionner en une seule fonctionnalité
 
-**1. SCAN / ANALYSE — lecture seule, sans risque.** Repérer les doublons,
-les gros fichiers, les programmes jamais lancés depuis longtemps. Rien
-n'est modifié : Luca observe et rapporte.
+**1. SCAN / ANALYSE (lecture seule, sans risque)** — repérer les doublons,
+les gros fichiers, les programmes jamais lancés depuis longtemps. Peut se
+construire relativement tôt, aucune action système, juste de la lecture et
+un rapport.
 
-**2. ⛔ POINT MANQUANT — l'instruction de Cyril s'est interrompue ici.**
+**2. SUPPRESSION (action à risque réel, catégorie distincte de « lancer une
+appli »)** — programmes, fichiers, dossiers. Une suppression peut être
+difficile à annuler, et un « doublon détecté » ou un « programme non
+utilisé » **peut se tromper**. Ne JAMAIS construire la suppression comme
+une extension automatique du scan.
 
-> Son message du 06/08/2026 se termine en plein milieu du point 1
-> (« *les programmes jamais lancés depuis* »). Le point 2 n'a jamais été
-> transmis.
+### Séquencement
 
-**Ce qui suit est une RECONSTRUCTION de Claude Code, pas les mots de
-Cyril — à confirmer, corriger ou remplacer par lui.** Elle est écrite ici
-uniquement pour que la structure de l'idée ne se perde pas, et elle est
-signalée comme telle pour ne pas se retrouver citée un jour comme une
-décision qu'il aurait prise.
+Le **scan** peut être un chantier relativement proche une fois le socle
+actuel stable — **aucune dépendance à Godot**.
 
-*Reconstruction plausible du point 2* : **ACTION / SUPPRESSION —
-destructive, jamais automatique.** Supprimer, désinstaller, déplacer.
-Chaque action passe par une confirmation explicite de Cyril, une par une,
-avec ce qui sera touché affiché avant. Aucune suppression en lot, aucune
-action silencieuse, rien d'irréversible sans qu'il ait vu et validé.
+La **suppression réelle attend explicitement les CARTES D'APPROBATION**
+(déjà catalogué #80) : une interface où Cyril voit la liste précise de ce
+qui serait supprimé et valide ou retire des éléments **un par un**, jamais
+une suppression automatique ou silencieuse.
+
+Cohérent avec le principe **Self-Decision** déjà présent dans les specs
+d'origine — la ligne « *Liste blanche : ouvrir apps, rappels, fermer
+distractions, orga fichiers, backup, MAJ, nettoyage* » (§5 de ce fichier)
+nomme littéralement le nettoyage — et avec le principe plus large « **la
+liberté d'action de Luca's est conditionnée à sa capacité de protection** »
+(`VISION_LONG_TERME.md` §4.1).
+
+⚠️ Les trois renvois ci-dessus ont été **vérifiés** : #80 existe bien
+(« Cartes d'approbation (ALLOW/DENY) — UX de confirmation Self-Decision »),
+la ligne Self-Decision existe et contient bien « nettoyage », et
+`VISION_LONG_TERME.md` §4.1 est bien la doctrine citée.
 
 ### Pourquoi cette séparation existe déjà partout dans le projet
 
@@ -1265,5 +1276,11 @@ conditionnée à la protection ») impose que les garde-fous existent
 - **La corbeille plutôt que la suppression** comme premier palier : une
   action réversible reste une action, mais elle laisse une porte de sortie.
 
-**Rien n'est construit.** Idée cataloguée, périmètre à trancher avec Cyril —
-à commencer par le point 2, qui lui appartient.
+**Rien n'est construit.** Catalogage uniquement.
+
+*(Note d'historique : ce point 2 a d'abord été transmis tronqué le
+06/08/2026 — le message s'arrêtait au milieu du point 1. Le texte
+ci-dessus est celui de Cyril, reçu complet ensuite ; la reconstruction
+provisoire qui tenait la place entre-temps a été retirée, pas fusionnée.
+Les points de vigilance de la section précédente, eux, sont des ajouts de
+Claude Code, pas de Cyril.)*
