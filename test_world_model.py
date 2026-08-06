@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import core.world_model as world_model
+from core import world_model
 from core.world_model import format_for_prompt, get_snapshot
 
 
@@ -85,7 +85,7 @@ def test_gpu_load_returns_the_first_gpu_load_as_a_percentage(monkeypatch) -> Non
 def test_gpu_load_is_zero_without_a_dedicated_gpu(monkeypatch) -> None:
     import GPUtil
 
-    monkeypatch.setattr(GPUtil, "getGPUs", lambda: [])
+    monkeypatch.setattr(GPUtil, "getGPUs", list)
     assert world_model._get_gpu_load() == 0.0
 
 

@@ -21,7 +21,6 @@ import pytest
 from core.lucas_core import FALSE_CLAIM_CORRECTION, claims_action_success
 from core.router import extract_app_name, looks_like_app_request, should_use_automation
 
-
 # ── 1. Le déclencheur : variantes d'écriture d'un même nom ─────────────
 
 

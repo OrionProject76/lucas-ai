@@ -17,7 +17,14 @@ from pathlib import Path
 # ou en important le module depuis un autre script, sans casser les imports relatifs.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import (
+    Depends,
+    FastAPI,
+    Header,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -373,7 +380,7 @@ async def _push_system_state(websocket: WebSocket) -> None:
                     snapshot.get("gpu_percent", 0.0),
                 )
             )
-        except Exception:  # noqa: BLE001 — déconnexion ou snapshot
+        except Exception:
             # indisponible : la boucle s'arrête, le chat continue.
             return
         await asyncio.sleep(SYSTEM_PUSH_INTERVAL)
@@ -404,7 +411,7 @@ async def _push_security_status(websocket: WebSocket) -> None:
                     status.latest_summary,
                 )
             )
-        except Exception:  # noqa: BLE001 — déconnexion ou bases absentes :
+        except Exception:
             # la boucle s'arrête, le chat continue (même garde que
             # _push_system_state ci-dessus).
             return
@@ -511,7 +518,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 try:
                     image_path = _save_base64_image(image_base64)
-                except Exception as exc:  # noqa: BLE001 — base64 invalide
+                except Exception as exc:
                     await websocket.send_json(
                         protocol.error(f"Image illisible : {exc}")
                     )
@@ -561,7 +568,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
                     await websocket.send_json(protocol.avatar_state(protocol.STATE_IDLE))
                     continue
-                except Exception as exc:  # noqa: BLE001 — voir ci-dessous
+                except Exception as exc:
                     # ⚠️ Élargi le 05/08/2026. Seul `STTUnavailable` était
                     # rattrapé : toute autre panne (fichier audio corrompu,
                     # décodeur absent, mémoire) remontait hors du handler et
@@ -665,7 +672,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     regarde = should_use_vision(message, lucas.recent_context()) and (
                         allow_screen_capture or mentions_pc_explicitly(message)
                     )
-                except Exception:  # noqa: BLE001 — un doute sur l'état ne doit
+                except Exception:
                     # jamais empêcher de répondre.
                     regarde = False
 
@@ -719,7 +726,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     audio_path = await asyncio.to_thread(
                         _voice_manager.synthesize_routed, answer, message
                     )
-                except Exception as exc:  # noqa: BLE001 — une panne TTS ne
+                except Exception as exc:
                     # doit jamais invalider une réponse texte déjà envoyée.
                     await websocket.send_json(
                         protocol.activity("voice", f"voix indisponible : {exc}"[:120])

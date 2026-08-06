@@ -13,14 +13,15 @@ from config import (
     RAG_MAX_DISTANCE,
     RAG_MAX_DISTANCE_DATED,
 )
+
 # ⚠️ core.dates est importé PARESSEUSEMENT dans les méthodes : core/__init__
 # charge LucasCore, qui charge ce module — un import en tête d'ici ferme la
 # boucle. Même motif que core/router.py avec core.intent.
 
 try:
-    from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
+    from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
 except ImportError:
-    from chromadb import EmbeddingFunction, Documents, Embeddings
+    from chromadb import Documents, EmbeddingFunction, Embeddings
 
 
 class OllamaEmbeddingFunction(EmbeddingFunction):
@@ -257,7 +258,7 @@ class RAGManager:
         # conclurait « inchangé » et personne ne verrait que la base est
         # restée à l'ancien format.
         digest = hashlib.sha256(
-            f"{self._FORMAT_VERSION}\n{text}".encode("utf-8")
+            f"{self._FORMAT_VERSION}\n{text}".encode()
         ).hexdigest()[:16]
 
         # ⚠️ Le NOM DU FICHIER est ajouté en tête de chaque morceau.

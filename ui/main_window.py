@@ -174,7 +174,7 @@ class ContextWorker(QThread):
             messages = core.prepare(self.text)
             if not self._cancelled:
                 self.ready.emit(messages)
-        except Exception as e:  # noqa: BLE001 — une erreur de contexte
+        except Exception as e:
             # doit devenir un message dans le chat, jamais une exception
             # qui remonte dans la boucle Qt et fait tomber la fenêtre.
             if not self._cancelled:
@@ -213,7 +213,7 @@ class TTSWorker(QThread):
                     self.error.emit(SENSITIVE_SKIPPED_MESSAGE)
             else:
                 self.error.emit("Module voix non disponible")
-        except Exception as e:  # noqa: BLE001 — un souci de synthèse ne
+        except Exception as e:
             # doit pas faire tomber le thread ni l'interface.
             self.error.emit(str(e))
         finally:
@@ -244,7 +244,7 @@ class STTWorker(QThread):
             self.transcribed.emit(result.text)
         except STTUnavailable as e:
             self.error.emit(f"Transcription impossible : {e}")
-        except Exception as e:  # noqa: BLE001 — un souci de transcription ne
+        except Exception as e:
             # doit pas faire tomber le thread ni l'interface.
             self.error.emit(str(e))
 

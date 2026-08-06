@@ -14,7 +14,6 @@ import pytest
 
 from api.log_scrub import MASK, TokenScrubFilter, install, mask_secrets
 
-
 # ── mask_secrets : la valeur part, le nom reste ────────────────────────
 
 

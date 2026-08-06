@@ -95,7 +95,7 @@ def _parse_date(raw: str) -> datetime:
         try:
             # Date naïve assumée : une date de relevé bancaire n'a pas de
             # fuseau, lui en attribuer un fausserait les comparaisons.
-            return datetime.strptime(raw, fmt)  # noqa: DTZ007
+            return datetime.strptime(raw, fmt)
         except ValueError:
             continue
     raise CSVFormatError(f"Format de date non reconnu : « {raw} »")

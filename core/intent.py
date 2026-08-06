@@ -42,11 +42,11 @@ import re
 from dataclasses import dataclass
 
 from config import (
+    CONTEXT_MAX_CHARS,
+    CONTEXT_TURNS,
     INTENT_CLASSIFIER_ENABLED,
     INTENT_MAX_TOKENS,
     INTENT_MODEL,
-    CONTEXT_MAX_CHARS,
-    CONTEXT_TURNS,
     INTENT_TIMEOUT_SECONDS,
     OLLAMA_URL,
 )
@@ -276,7 +276,7 @@ def _ask_classifier(question: str, context: str = "") -> str | None:
         )
         # Lit `thinking` en dernier recours — voir core/ollama_reply.py.
         raw = extract_reply(response.json().get("message", {}))
-    except Exception:  # noqa: BLE001 — voir docstring
+    except Exception:
         return None
 
     # Le modèle ajoute parfois un point ou une majuscule accentuée.

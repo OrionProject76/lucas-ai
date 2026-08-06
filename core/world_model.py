@@ -74,7 +74,7 @@ def _get_gpu_load() -> float:
 
         gpus = GPUtil.getGPUs()
         return round(gpus[0].load * 100, 1) if gpus else 0.0
-    except Exception:  # noqa: BLE001 — pilote absent, machine sans GPU
+    except Exception:
         # dédié : une jauge vide vaut mieux qu'un World Model en panne.
         return 0.0
 
@@ -91,7 +91,7 @@ def _get_active_window_title() -> str:
         return win32gui.GetWindowText(hwnd) or "Inconnu"
     except ImportError:
         return "pywin32 non installé"
-    except Exception:  # noqa: BLE001 — le World Model ne doit jamais faire
+    except Exception:
         # tomber l'appelant : une info moins précise vaut mieux qu'un crash.
         return "Inconnu"
 
@@ -121,7 +121,7 @@ def _get_active_process_name() -> str:
             return ""
         nom = psutil.Process(pid).name()
         return nom[:-4].lower() if nom.lower().endswith(".exe") else nom.lower()
-    except Exception:  # noqa: BLE001 — voir docstring
+    except Exception:
         return ""
 
 

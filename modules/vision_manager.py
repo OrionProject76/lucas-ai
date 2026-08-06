@@ -67,7 +67,7 @@ class VisionManager:
                 }],
             )
             return response["message"]["content"]
-        except Exception as e:  # noqa: BLE001 — voir docstring
+        except Exception as e:
             return (
                 f"Erreur analyse (modèle {self.model} peut-être non installé) : {e}\n"
                 f"Installez-le avec : ollama pull {self.model}"
