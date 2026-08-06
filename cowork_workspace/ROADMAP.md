@@ -6797,6 +6797,95 @@ Restauration vérifiée par `git diff` vide.
 `just check` : code de retour **0** — lint, 1 314 tests, mypy sur 109
 fichiers. `ui/` est désormais à **100 % sur ses trois fichiers**.
 
+## 5.64 Les 55 dernières lignes — le projet à 100 % (06/08/2026)
+
+Cyril a demandé de couvrir les 55 lignes restantes, réparties sur 16
+fichiers. **`TOTAL 3568 0 100%`**, 1 345 tests.
+
+Elles se rangeaient en quatre familles, et l'intérêt n'est pas le même :
+
+| Famille | Ce que couvrir vérifie |
+|---|---|
+| **Replis d'environnement** (`ImportError`, exécution en script) | Que Luca's **dégrade** au lieu de tomber sur une machine autrement configurée |
+| **Gardes de sécurité** (`guardian`, `privacy_shield`) | Les branches qui **REFUSENT** de signaler. Un capteur qui crie sur tout ne sera jamais lu — ces filtres sont ce qui le rend crédible |
+| **Messages d'erreur** | Chacun dit à Cyril ce qui s'est passé. Muets, ils redeviendraient le silence traqué partout ailleurs |
+| **Effets externes** (`edge_tts`, `pygame`, classifieur) | Jamais appelés en vrai : des doubles, sinon la suite dépendrait du réseau, d'une carte son et d'Ollama vivant |
+
+### Trois mécanismes qu'il a fallu trouver
+
+**Le classifieur d'intention était inatteignable.** `conftest.py`
+neutralise globalement `_ask_classifier` pour que la suite ne dépende pas
+d'Ollama — le vrai code d'appel n'était donc jamais exécuté. Solution :
+capturer la fonction **à l'import du module de test**, avant que la
+fixture autouse ne s'installe (les fixtures démarrent par test, l'import
+a lieu à la collecte).
+
+**`__package__` résiste au rechargement.** Couvrir
+`sys.path.insert` de `index_documents.py` demande `__package__ == ""` —
+état d'une exécution directe. Un `importlib.reload()` ne suffit pas : il
+**recalcule** `__package__` à `"memory"`. Il faut charger le fichier
+**hors paquet** (`spec_from_file_location` sans parent).
+
+**Un seul genre de titre exerce l'arbitrage AURA.** « tutoriel » est à
+la fois marqueur LEARNING *et* marqueur d'arbitrage : LEARNING gagne dès
+l'étape 5 et la ligne d'arbitrage n'est jamais atteinte. Seuls
+`apprendre` et `cours ` — marqueurs d'arbitrage **uniquement** — la
+touchent. Mon premier test passait sans rien exercer.
+
+### ⚠️ Une fausse alerte que j'ai failli signaler comme un bug
+
+Mon test affirmait que la version **corrigée** d'une fausse confirmation
+n'était pas mémorisée — ce qui aurait été exactement le défaut que le
+commentaire du code dit vouloir éviter (auto-imitation, §5.5).
+
+**C'était mon test.** `ask()` appelle `save_message`, pas
+`save_response` ; mon double surveillait la mauvaise méthode. Le
+comportement réel est correct, et le test le vérifie désormais au bon
+endroit.
+
+### Mise à l'épreuve — et une mutation qui ne mutait rien
+
+9 comportements cassés délibérément, un par un :
+
+```
+Guardian journalise même les signaux INFO             -> ROUGE (bon)
+localhost compte comme écoute ouverte au réseau       -> ROUGE (bon)
+une réponse vide est rendue en silence                -> ROUGE (bon)
+la clé cloud est figée au démarrage                   -> ROUGE (bon)
+YouTube reste du loisir même sur un cours             -> ROUGE (bon)
+la fausse confirmation n'est plus corrigée            -> ROUGE (bon)
+deux labels à la fois sont acceptés quand même        -> ROUGE (bon)
+play_audio n'initialise plus le mixer                 -> ROUGE (bon)
+un process sans chemin est quand même signalé         -> !! VERT
+```
+
+Le dernier m'a fait croire à un test vide. **C'était la mutation qui
+était fausse** : j'avais écrit `C:/Temp/x.exe` avec des barres obliques,
+qui ne correspond à aucun motif de `VOLATILE_DIRECTORIES`
+(`\appdata\local\temp`…). Refaite avec un vrai chemin volatil : **ROUGE**.
+
+Leçon : une mutation inefficace se présente exactement comme un test
+vide. Vérifier que la mutation change bien quelque chose fait partie du
+protocole, sinon on « corrige » un test qui allait bien.
+
+### État du projet
+
+```
+$ just check
+All checks passed!                              (ruff, tout le projet)
+1345 passed, 9 deselected
+TOTAL  3568 lignes   0 non couverte   100%
+Success: no issues found in 110 source files    (mypy, tout le projet)
+code de retour : 0
+```
+
+| | Début de journée | Maintenant |
+|---|---|---|
+| Alertes ruff | 105 (recette cassée) | **0** |
+| Erreurs mypy | 6 visibles / recette cassée | **0** sur 110 fichiers |
+| Couverture | 97 %, `ui/` non mesuré | **100 %** |
+| Tests | 1 297 | **1 345** |
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
