@@ -21,15 +21,71 @@ func setup_window():
     window.borderless = true
     window.transparent = true
     window.unresizable = true
-    window.always_on_top = true
-    window.size = screen_size
-    window.position = Vector2i(0, 0)
+    # ⚠️⚠️ ALWAYS_ON_TOP RETIRE LE 06/08/2026 — INCIDENT DE SECURITE.
+    #
+    # Cyril a rencontre la fenetre Lucas3D affichee PAR-DESSUS le
+    # GESTIONNAIRE DES TACHES (Ctrl+Maj+Echap), le rendant inutilisable a
+    # la souris. Seule sortie trouvee : touche Windows, survol de l'icone
+    # dans la barre des taches, clic sur la croix. Un contournement, pas
+    # une solution.
+    #
+    # POURQUOI c'est arrive : le Gestionnaire des taches se pose lui aussi
+    # en TOPMOST. Entre deux fenetres TOPMOST, Windows n'accorde aucune
+    # priorite au systeme — c'est la derniere posee/activee qui passe
+    # devant. Une fenetre applicative TOPMOST peut donc parfaitement
+    # recouvrir un outil systeme cense rester joignable.
+    #
+    # Le filet de securite ne doit JAMAIS dependre de ce qu'on teste.
+    # Retirer le flag est une garantie PAR CONSTRUCTION : sans TOPMOST,
+    # n'importe quelle fenetre passe devant Lucas3D d'un simple clic.
+    # C'est plus solide que n'importe quelle bascule interne, qui
+    # supposerait que l'application repond encore — precisement ce qu'un
+    # gel rend faux.
+    #
+    # A ne pas remettre sans un mecanisme de sortie prouve INDEPENDANT de
+    # l'application (voir arreter_lucas3d.bat sur le Bureau).
+    window.always_on_top = false
+    window.size = FENETRE_TAILLE
+    window.position = _coin_bas_droit()
     DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_TRANSPARENT, true, window.get_window_id())
     DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_BORDERLESS, true, window.get_window_id())
-    DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_ALWAYS_ON_TOP, true, window.get_window_id())
+    DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_ALWAYS_ON_TOP, false, window.get_window_id())
+
+    # ⚠️ NO_FOCUS explique pourquoi F11 NE REPONDAIT PAS pendant le test
+    # du 06/08. Ce n'est pas un raccourci casse : _input() de ce noeud ne
+    # recoit d'evenements clavier que si la fenetre a le FOCUS. NO_FOCUS
+    # garantit qu'elle ne l'obtient jamais — les touches partent donc a la
+    # fenetre active, jamais ici. F10/F11/F12 sont morts PAR CONSTRUCTION,
+    # pas par accident.
+    #
+    # Le flag est conserve (un compagnon de bureau ne doit pas voler le
+    # focus), mais il interdit definitivement de faire reposer une sortie
+    # de secours sur un raccourci interne. D'ou le .bat, qui ne depend ni
+    # du focus, ni du rendu, ni de l'application vivante.
     DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_NO_FOCUS, true, window.get_window_id())
-    _appliquer_passthrough_total()
-    print("Fenetre configuree : " + str(screen_size))
+
+    # ⚠️ ETAPE 1 (06/08/2026) — AUCUN appel a window_set_mouse_passthrough.
+    #
+    # C'est deliberе, et c'est LE changement de cette etape. Sur Windows
+    # cette API est une region de fenetre : elle gouverne le rendu autant
+    # que les clics (mesure a l'etape 0 — region hors ecran => fenetre
+    # totalement invisible). Ne pas l'appeler laisse la fenetre rendre
+    # normalement.
+    #
+    # Consequence assumee, arbitree par Cyril le 06/08/2026 : cette
+    # fenetre CAPTE les clics — mais seulement sur ses 600x600 px dans un
+    # coin, pas sur les 3840x2160 du bureau. C'est ce qui rend la limite
+    # de Godot 4.7 vivable en attendant la GDExtension (IDEAS.md #95).
+    #
+    # Ne pas l'appeler du tout, plutot que de poser une region couvrant
+    # toute la fenetre, ISOLE la variable : le mecanisme soupconne d'etre
+    # a l'origine des gels du 02/08 (polygone degenere) est entierement
+    # hors du test. Ce qu'on mesure ici est « rendu actif + modele
+    # charge », pas le comportement de cette API.
+    Global.click_through = false
+
+    print("Fenetre configuree : " + str(FENETRE_TAILLE) + " en " + str(window.position)
+        + " (ecran " + str(screen_size) + ")")
 
 # ── Zones cliquables ──────────────────────────────────────────────────
 #
@@ -63,6 +119,43 @@ const HUD_BOTTOM := 70.0
 # les clics sur la barre des taches.
 # A revoir si Cyril change l'echelle d'affichage ou deplace sa barre.
 const TASKBAR_RESERVED := 144.0
+
+
+# ── Fenetre en coin — arbitrage de Cyril du 06/08/2026 ────────────────
+#
+# Remplace l'overlay plein ecran. Raison : sur Godot 4.7 + Windows, on ne
+# peut pas avoir a la fois un rendu complet et des clics qui traversent
+# (mesure deux fois, voir le bloc « CORRIGE LE 06/08/2026 » plus bas).
+# Une petite fenetre echappe au dilemme — elle capte les clics UNIQUEMENT
+# sur elle-meme. 600x600 dans un angle est vivable ; 3840x2160 ne
+# l'etait pas.
+#
+# Point de depart explicitement provisoire, a ajuster en le regardant.
+const FENETRE_TAILLE := Vector2i(600, 600)
+
+# Marges DISTINCTES depuis le 07/08/2026 — une seule valeur ne suffisait
+# pas. Cyril a signale que la fenetre se posait sur l'icone Corbeille de
+# son bureau. Les icones vivent au-dessus de la barre des taches, donc
+# c'est la marge BASSE qu'il faut ouvrir, pas la droite : reculer vers la
+# droite ne ferait que longer la meme colonne d'icones.
+#
+# 220 px degagent environ une rangee et demie d'icones a l'echelle
+# d'affichage actuelle. Valeur a ajuster en la regardant — c'est un
+# reglage visuel, pas une constante mesuree comme TASKBAR_RESERVED.
+const MARGE_DROITE := 24
+const MARGE_BASSE := 220
+
+
+func _coin_bas_droit() -> Vector2i:
+    # Calcule a l'execution, jamais code en dur : TASKBAR_RESERVED est
+    # mesuree sur CETTE machine (144 px) et screen_get_usable_rect() rend
+    # l'ecran entier ici, barre des taches comprise. Poser la fenetre sans
+    # cette reserve la ferait chevaucher la barre des taches, que Godot
+    # capturerait alors — exactement le defaut corrige le 02/08.
+    return Vector2i(
+        screen_size.x - FENETRE_TAILLE.x - MARGE_DROITE,
+        screen_size.y - int(TASKBAR_RESERVED) - FENETRE_TAILLE.y - MARGE_BASSE,
+    )
 
 
 # ⚠️ NE PLUS UTILISER window_set_mouse_passthrough(polygone) SUR WINDOWS.
@@ -178,8 +271,13 @@ func _region_totalement_hors_ecran() -> PackedVector2Array:
 
 
 func _region_fenetre_entiere() -> PackedVector2Array:
-    var w := float(screen_size.x)
-    var h := float(screen_size.y)
+    # ⚠️ Corrige le 06/08/2026 (etape 1) : lisait screen_size, alors que la
+    # fenetre ne fait plus la taille de l'ecran depuis le passage en coin.
+    # Une region de 3840x2160 posee sur une fenetre de 600x600 n'a aucun
+    # sens. Non atteignable au demarrage (setup_window n'appelle plus
+    # aucun passthrough), mais F12 y menait — un piege pose pour plus tard.
+    var w := float(window.size.x)
+    var h := float(window.size.y)
     return PackedVector2Array([
         Vector2(0, 0), Vector2(w, 0), Vector2(w, h), Vector2(0, h)
     ])
@@ -244,6 +342,10 @@ func _input(event):
     if event is InputEventKey and event.pressed and not event.echo:
         match event.keycode:
             KEY_F12:
+                # ⚠️ ETAPE 1 : F12 rebascule sur _appliquer_passthrough_total(),
+                # donc sur le polygone degenere — la fenetre REDEVIENDRAIT
+                # INVISIBLE. Laisse en place (c'est la bascule prevue), mais
+                # a savoir avant de chasser un fantome pendant un test.
                 toggle_click_through()
             KEY_F11:
                 toggle_visibility()

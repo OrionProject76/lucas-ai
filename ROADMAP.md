@@ -7162,6 +7162,122 @@ rendu réellement actif** (donc après l'étape 1, fenêtre en coin visible).
 C'est cette combinaison — contention GPU + rendu — qui reproduirait les
 conditions du 02/08, pas la configuration de ce soir.
 
+### Étape 1 (06-07/08/2026) — fenêtre en coin, et le test qui manquait
+
+**Le changement** : `setup_window()` n'appelle plus aucun passthrough. Fait
+par **omission** plutôt qu'en posant une région couvrant toute la fenêtre —
+délibérément, pour mettre le mécanisme soupçonné des gels du 02/08
+entièrement hors du test. Fenêtre 600×600 en coin bas-droit, position
+calculée à l'exécution depuis `TASKBAR_RESERVED` (144 px mesurés).
+
+#### 🔴 Incident de sécurité, et ce qu'il a révélé
+
+Cyril a rencontré la fenêtre Lucas3D affichée **par-dessus le Gestionnaire
+des tâches**, le rendant inutilisable à la souris. Seule sortie trouvée :
+touche Windows → survol de l'icône → clic sur la croix.
+
+**Cause** : le Gestionnaire des tâches se pose lui aussi en `TOPMOST`.
+Entre deux fenêtres TOPMOST, **Windows n'accorde aucune priorité au
+système** — c'est la dernière posée qui passe devant. Ce n'était pas un
+bug, c'était le comportement normal de deux flags identiques en
+concurrence.
+
+**Corrigé par construction** : `always_on_top` retiré. Sans TOPMOST,
+n'importe quelle fenêtre passe devant d'un clic. Plus solide qu'une
+bascule interne, qui supposerait l'application encore capable de
+répondre — ce qu'un gel rend faux par définition.
+
+**Pourquoi F11 ne répondait pas** : `_input()` ne reçoit d'événements
+clavier que si la fenêtre a le focus. `WINDOW_FLAG_NO_FOCUS` garantit
+qu'elle ne l'obtient jamais. **F10/F11/F12 sont morts par construction**,
+pas par accident. Le flag est conservé (un compagnon ne doit pas voler le
+focus), mais il interdit définitivement d'appuyer une sortie de secours
+sur un raccourci interne.
+
+**Trouvé au passage — une seconde configuration de fenêtre concurrente** :
+`main.gd::_force_fullscreen()` forçait plein écran **et** `always_on_top`
+juste avant que `WindowManager` ne repasse derrière. Deux sources de
+vérité pour le même réglage, dont une qui remettait exactement le flag
+fautif. Neutralisée (conservée, plus appelée).
+
+**Le filet** : `demos/arreter_lucas3d.bat`, déployé sur le Bureau. Ne
+dépend ni du rendu, ni du focus, ni de l'application vivante (`taskkill
+/F` fonctionne sur un process gelé). **Testé réellement — et les deux
+premiers essais ont échoué** :
+
+| Essai | Résultat |
+|---|---|
+| 1er | **contaminé** — le PATH de Git Bash exposait les `find`/`timeout` d'Unix ; la branche de vérification est passée **par accident** |
+| Durcissement | **script cassé** — `\t` de `\System32\taskkill` lu comme une tabulation par Python. L'avertissement le disait, il n'a pas été écouté |
+| 3e, en `cmd.exe` pur | ✅ process tué, vérifié indépendamment |
+
+D'où les **chemins absolus vers System32** : un script de secours ne doit
+pas dépendre du PATH de celui qui le lance.
+
+#### Écart de périmètre — le HUD était toujours là
+
+Le premier rendu montré à Cyril était l'interface complète. Cause : le HUD
+(`TopBar`, `LeftPanel`, `RightPanel`, `BackgroundGrid`) restait **instancié**
+et se contentait de rétrécir dans les 600×600. Masqué par `_masquer_hud()`
+— masqué, pas supprimé, réversible quand le HUD aura son chantier.
+
+**Validé par Cyril** : Gestionnaire des tâches accessible et cliquable
+par-dessus ; coin bas-droit, seulement le visage. *(Le `.bat` reste non
+testé par lui — il a fermé par la croix. Trois sorties existent
+désormais : croix, Gestionnaire des tâches, script.)*
+
+#### 🟢 Le test qui manquait — rendu actif + contention GPU réelle
+
+Première fois que les trois conditions du 02/08 sont réunies ensemble :
+**binaire exporté + rendu réellement actif + modèle chargé**.
+
+```
+échantillons   : 293   (00:08:17 -> 00:33:17, 25 min)
+process VIVANT : 293/293      GELS : 0      DISPARITIONS : 0
+handles 862-882   threads 47-53   ->  aucune dérive
+
+── avec gpt-oss:20b CHARGE ──
+   288 échantillons = 24 min pleines
+   VRAM 15 015 -> 15 498 Mo    marge minimale 805 Mo
+   vivant 288/288, gels 0
+```
+
+Le pic de chargement est capturé : **+11 708 Mo en un seul échantillon**
+(3 657 → 15 365), encaissé sans incident. Modèle à **100 % GPU** tout du
+long, **aucun débordement en RAM**. Godot arrêté volontairement à 29 min.
+
+#### ⚠️ Correction d'une mesure de l'étape 0 — le coût VRAM de Godot
+
+**Godot en fenêtre 600×600 coûte ~247 Mo** (3 217 → 3 464 au lancement),
+pas les ~976 Mo mesurés à l'étape 0. La différence est la **taille du
+framebuffer** : 3840×2160 à l'étape 0, 600×600 ici.
+
+L'alerte posée plus haut sur l'arithmétique de la règle 12 **tombe** : la
+valeur de 246 Mo du 05/08 (§5.56) était juste, et c'est la mesure de
+l'étape 0 qui était un cas particulier. L'arbitrage de la fenêtre en coin
+règle donc le click-through **et** divise par quatre le coût VRAM de
+l'avatar.
+
+#### Ce que ça ne règle pas
+
+La piste n°2 de la checklist est **testée, pas éliminée**. Ce qui a été
+exercé, c'est le modèle **résident** pendant que Godot rend, plus **un**
+pic de chargement. Des chargements/déchargements **répétés** n'ont pas été
+testés. Et les réserves de l'étape 0 tiennent : une seule session, aucune
+comparaison avec l'éditeur à conditions égales, alors que les 4
+occurrences du 02/08 étaient intermittentes.
+
+**Bilan : deux fenêtres, 55 minutes cumulées, zéro incident** — sur
+binaire exporté. Un faisceau en faveur de la piste « c'est l'éditeur »,
+pas une preuve.
+
+#### Signalé, non traité — refus de dire bonjour
+
+À « dis juste bonjour », Luca a répondu *« Je ne peux pas t'envoyer une
+simple salutation, car cela contredirait les règles de ton as… »*. Un
+refus de saluer. Sans rapport avec Godot, noté par Cyril pour être
+regardé séparément. **Non diagnostiqué.**
+
 ### Ce que l'étape 0 a réellement livré
 
 Elle n'a pas résolu le blocage 1 : **elle a rendu sa mesure possible**.

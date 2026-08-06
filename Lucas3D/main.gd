@@ -5,10 +5,41 @@ extends Node3D
 func _ready():
     _setup_noise()
     print("Lucas3D Desktop Pal demarre")
-    _force_fullscreen()
+    # ⚠️ _force_fullscreen() RETIRE DE L'APPEL le 06/08/2026.
+    #
+    # C'etait une SECONDE configuration de fenetre, concurrente de
+    # WindowManager.setup_window() appele juste apres — elle forcait
+    # plein ecran ET always_on_top, puis setup_window() repassait
+    # derriere. Deux sources de verite pour le meme reglage, dont une
+    # qui remettait exactement le flag a l'origine de l'incident du
+    # Gestionnaire des taches. WindowManager est desormais seul a
+    # configurer la fenetre.
     WindowManager.setup_window()
+    _masquer_hud()
     Global.main_ready.emit()
 
+
+func _masquer_hud():
+    # ⚠️ ETAPE 1 (06/08/2026) — perimetre valide par Cyril : la petite
+    # fenetre en coin, RIEN D'AUTRE. Le HUD complet (TopBar, LeftPanel,
+    # RightPanel, BackgroundGrid) restait instancie et se contentait de
+    # retrecir dans les 600x600 : c'est l'interface plein ecran vue par
+    # Cyril, comprimee — pas un perimetre respecte.
+    #
+    # Masque plutot que supprime de la scene : reversible en une ligne
+    # quand le HUD reviendra a son propre chantier.
+    var hud := get_node_or_null("HUD")
+    if hud:
+        hud.visible = false
+        print("HUD masque (perimetre etape 1)")
+    else:
+        print("HUD introuvable — rien a masquer")
+
+# ⚠️ PLUS APPELEE depuis le 06/08/2026 — voir _ready(). Conservee, non
+# supprimee : elle documente la configuration plein ecran d'origine, et
+# la supprimer masquerait ce qui a reellement tourne jusqu'ici.
+# NE PAS LA RAPPELER sans relire l'incident du Gestionnaire des taches
+# (window_manager.gd, bloc ALWAYS_ON_TOP RETIRE).
 func _force_fullscreen():
     var win = get_window()
     var screen = DisplayServer.screen_get_size()
@@ -255,5 +286,28 @@ func _handle_eye_tracking():
         var mouse_pos = viewport.get_mouse_position()
         var viewport_size = viewport.get_visible_rect().size
         var normalized = (mouse_pos - viewport_size / 2.0) / (viewport_size / 2.0)
+
+        # ⚠️ AXE Y INVERSE — corrige le 07/08/2026, signale par Cyril :
+        # les yeux regardaient EN BAS quand la souris montait.
+        #
+        # Deux conventions opposees se rencontraient ici sans conversion :
+        #   - coordonnees ECRAN (get_mouse_position) : Y vers le BAS
+        #   - coordonnees 3D (eye_base_left.y + decalage.y dans
+        #     face_controller.gd, l.142) : Y vers le HAUT
+        #
+        # Souris qui monte -> mouse_pos.y diminue -> normalized.y negatif
+        # -> decalage.y negatif -> l'oeil DESCEND. Exactement l'inverse.
+        #
+        # La conversion se fait ICI, au point de passage ecran -> 3D, et
+        # pas dans set_eye_look() : c'est le seul endroit du code ou une
+        # coordonnee ecran existe. set_eye_look() est un point d'entree en
+        # convention 3D, comme les saccades — y cacher une inversion le
+        # rendrait faux pour tout autre appelant.
+        #
+        # (Ce ne serait PAS visible sur les saccades, qui tirent dans
+        # randf_range(-0.6, 0.6), symetrique autour de zero. La raison est
+        # la coherence du contrat, pas un bug qu'on eviterait.)
+        normalized.y = -normalized.y
+
         if face_root.has_method("set_eye_look"):
             face_root.set_eye_look(normalized)
