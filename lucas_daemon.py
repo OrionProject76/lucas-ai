@@ -38,7 +38,12 @@ for d in [DATA_DIR, LOGS_DIR, SCREENSHOTS_DIR, MODELS_DIR, TRAINING_DIR, REPORTS
 
 LOG_FILE = LOGS_DIR / "daemon.log"
 DB_FILE = DATA_DIR / "lucas_daemon.db"
-CONFIG_FILE = LUCAS_ROOT / "config.json"
+# CONFIG_FILE (config.json) retiré le 06/08/2026 : la constante était
+# définie ici et consommée nulle part — aucun `json.load` dans ce
+# fichier, et la clé qu'il contient (`profiles.enabled`) n'apparaît dans
+# aucun module du projet. Elle donnait l'impression que le daemon lisait
+# une configuration utilisateur, ce qui n'a jamais été le cas.
+# Voir ROADMAP.md §5.58.
 
 # ─── LOGGING ───────────────────────────────────────────────
 def log(msg: str, level: str = "INFO"):

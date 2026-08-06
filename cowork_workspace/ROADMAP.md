@@ -6062,6 +6062,57 @@ constituer **le jour où le chantier vision s'ouvre**.
 Inventaire revenu à **14 modèles**, 251 Go libres — identique à avant la
 passe. `MODEL_NAME` vérifié inchangé : `gpt-oss:20b`.
 
+## 5.58 `config.json` — un fichier de réglages que personne ne lit (06/08/2026)
+
+Suite du nettoyage doc/code entamé avec le tableau des modèles (§5.57).
+`CLAUDE.md` décrivait `config.json` comme « Config utilisateur
+(modifiable) ». **Il n'est lu par aucun module.**
+
+⚠️ **Je m'étais trompé dans un premier temps**, et la correction vaut
+d'être notée : une recherche rapide trouvait bien une référence —
+`lucas_daemon.py:41`, `CONFIG_FILE = LUCAS_ROOT / "config.json"` — ce qui
+semblait clore la question. Trouver une référence ne prouve pas qu'elle
+sert. Trois vérifications ont tranché :
+
+| Vérification | Résultat |
+|---|---|
+| Occurrences de `CONFIG_FILE` dans `lucas_daemon.py` | **1** — sa définition, jamais son usage |
+| `json.load` / `json.loads` dans le daemon | **aucun** |
+| Le mot `profiles` (seule clé du fichier) ailleurs dans le projet | **aucune occurrence** |
+
+Le fichier fait 75 octets et contient `{"profiles": {"enabled": ...}}`.
+Il est versionné, et **éditer sa valeur ne produit strictement rien** —
+sans message, sans erreur. C'est le motif « échec silencieux » traqué
+tout au long de ce projet, cette fois du côté de l'utilisateur : Cyril
+pourrait y changer un réglage et attendre un effet qui ne viendra jamais.
+
+**Ce qui a été fait** :
+- La constante morte est retirée de `lucas_daemon.py`, avec le motif en
+  commentaire à sa place (même traitement que `ui/chat_widget.py`,
+  supprimé le 04/08 pour la même raison).
+- `CLAUDE.md` dit maintenant que le fichier est **inerte**, au lieu de le
+  présenter comme modifiable.
+
+**Ce qui n'a PAS été fait, délibérément** : `config.json` n'est pas
+supprimé. Il est versionné et sa clé `profiles.enabled` traduit une
+intention — probablement les profils AURA. Effacer un fichier que Cyril a
+pu créer volontairement dépasse le nettoyage documentaire. **Deux options
+lui restent ouvertes** : le supprimer (rien ne le lit), ou le brancher
+pour de vrai si les profils doivent devenir configurables.
+
+### Au passage : 105 alertes `ruff` dans le projet
+
+Relevé en vérifiant `lucas_daemon.py` (33 à lui seul). Ventilation des
+plus fréquentes : `BLE001` blind-except (9), `DTZ005` datetime sans
+fuseau (8), `F401` imports inutilisés (6), `PLW1510` `subprocess.run`
+sans `check` (3), `S110` `try/except/pass` (2).
+
+**Chantier volontairement non ouvert ici.** 47 sont auto-corrigeables,
+mais les plus nombreuses ne le sont pas : remplacer un `except Exception`
+par une exception précise change le comportement, et c'est exactement ce
+qui a masqué un `NameError` le 05/08 (§5.39). Ça mérite une passe dédiée,
+pas un `--fix` en fin de session.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

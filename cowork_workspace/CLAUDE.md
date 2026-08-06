@@ -387,7 +387,9 @@ n'apporterait rien.
 C:/OrionAI/
 ├── main.py                    # Point d'entrée FastAPI + PySide6
 ├── config.py                  # Configuration centralisée
-├── config.json                # Config utilisateur (modifiable)
+├── config.json                # ⚠️ INERTE — lu par AUCUN module (vérifié
+│                              #   le 06/08/2026). L'éditer n'a aucun effet.
+│                              #   Voir ROADMAP.md §5.58
 ├── requirements.txt           # Dépendances principales
 ├── requirements_daemon.txt    # Dépendances daemon
 ├── justfile                   # Commandes rapides
