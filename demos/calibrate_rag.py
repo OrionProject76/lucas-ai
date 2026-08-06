@@ -87,7 +87,7 @@ def _closest_distance(collection, question: str) -> float | None:
 
 def _relevant_distances(collection, chunks: list[str]) -> list[tuple[float, str]]:
     """Une question par chunk, puis la distance qu'elle obtient."""
-    measured = []
+    measured: list[tuple[float, str]] = []
     for index, chunk in enumerate(chunks, start=1):
         question = ask_local(
             [{"role": "user", "content": QUESTION_PROMPT + chunk[:1200]}]

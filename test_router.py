@@ -424,8 +424,21 @@ def core_with_history(monkeypatch) -> LucasCore:
     )
 
     core = LucasCore.__new__(LucasCore)
-    core.memory = _FakeMemory([("user", f"message {i}") for i in range(40)])
+    core.memory = _FakeMemory([("user", f"message {i}") for i in range(40)])  # type: ignore[assignment]  # double assume, voir test_memory_double.py
     return core
+
+
+def _double(core: LucasCore) -> _FakeMemory:
+    """Rend la memoire de `core` telle qu'elle est reellement : un double.
+
+    `LucasCore.memory` est declare `MemoryManager` ; les tests y branchent
+    un `_FakeMemory` (voir test_memory_double.py). Passer par ce helper
+    evite de repeter un `type: ignore` a chaque lecture d'un attribut
+    propre au double, comme `actions_logged` — et l'assertion rend
+    l'hypothese verifiable au lieu de la supposer.
+    """
+    assert isinstance(core.memory, _FakeMemory)
+    return core.memory
 
 
 class _FakeRag:
@@ -679,7 +692,7 @@ def test_cloud_never_triggers_automation(core_with_history: LucasCore, monkeypat
     monkeypatch.setattr("modules.automation_manager.AutomationManager", _FakeAutomationManager)
     messages = core_with_history._build_messages("ouvre chrome", "cloud")
     assert not any("ACTION RÉELLE" in m["content"] for m in messages)
-    assert core_with_history.memory.actions_logged == []
+    assert _double(core_with_history).actions_logged == []
 
 
 @requires_core
@@ -692,8 +705,8 @@ def test_local_launches_the_requested_app_and_logs_it(core_with_history: LucasCo
     assert "chrome a été ouverte" in joined
     assert "INTERDIT" in joined
 
-    assert len(core_with_history.memory.actions_logged) == 1
-    logged = core_with_history.memory.actions_logged[0]
+    assert len(_double(core_with_history).actions_logged) == 1
+    logged = _double(core_with_history).actions_logged[0]
     assert logged["action"] == "launch_chrome"
     assert logged["source"] == "chat"
     assert logged["result"] == "executed"
@@ -704,7 +717,7 @@ def test_automation_context_absent_when_question_unrelated(core_with_history: Lu
     monkeypatch.setattr("modules.automation_manager.AutomationManager", _FakeAutomationManager)
     messages = core_with_history._build_messages("bonjour", "local")
     assert not any("ACTION RÉELLE" in m["content"] for m in messages)
-    assert core_with_history.memory.actions_logged == []
+    assert _double(core_with_history).actions_logged == []
 
 
 @requires_core
@@ -720,8 +733,8 @@ def test_automation_denial_is_logged_as_denied(core_with_history: LucasCore, mon
     joined = " ".join(m["content"] for m in messages)
 
     assert "ACTION REFUSÉE" in joined
-    assert len(core_with_history.memory.actions_logged) == 1
-    assert core_with_history.memory.actions_logged[0]["result"] == "denied"
+    assert len(_double(core_with_history).actions_logged) == 1
+    assert _double(core_with_history).actions_logged[0]["result"] == "denied"
 
 
 @requires_core

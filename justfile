@@ -189,15 +189,17 @@ format-check:
 # donc gratuit — et c'est le module ou CLAUDE.md place le plus
 # d'exigence. Meme correction de perimetre que pour `just lint`.
 #
-# ⚠️ RESTENT HORS PERIMETRE, chiffres a l'appui (06/08/2026) :
-#   ui/     : 13 erreurs, toutes des attributs Qt que les stubs PySide6
-#             ne connaissent pas (ex. Qt.ScrollBarAsNeeded). Ce sont des
-#             faux positifs de stub, pas des defauts — les traiter
-#             demanderait des `type: ignore` en serie.
-#   racine  : 73 erreurs sur 24 fichiers (tests, main.py, daemon).
-# Les integrer est une decision de Cyril, pas un reglage d'outil.
+# PERIMETRE COMPLET depuis le 06/08/2026 : plus aucun angle mort. La
+# racine (49 tests, main.py, lucas_daemon.py, config.py), demos/ et ui/
+# etaient hors champ — 73 erreurs y dormaient, dont plusieurs vrais
+# defauts de test. Detail du tri : ROADMAP.md §5.61.
+#
+# `ui/` a pu entrer parce que ses 12 alias Qt5 (Qt.AlignCenter,
+# QPainter.Antialiasing...) ont ete migres vers la forme canonique
+# PySide6 — verifie AVANT migration que les deux sont strictement egales
+# au runtime, donc a comportement identique.
 mypy:
-    venv/Scripts/python.exe -m mypy core/ modules/ memory/ api/ security/ --ignore-missing-imports --check-untyped-defs
+    venv/Scripts/python.exe -m mypy . --ignore-missing-imports --check-untyped-defs --exclude '(^|/)(venv|Lucas3D)/'
 
 # Vérification complète (lint + test + type)
 check: lint test mypy

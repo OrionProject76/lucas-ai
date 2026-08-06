@@ -85,6 +85,10 @@ def test_clearing_the_input_returns_to_idle(app) -> None:
     from ui.main_window import MainWindow
 
     window = MainWindow()
+    # `avatar` est Optional depuis le 06/08/2026 (l'import d'AvatarWidget
+    # peut echouer, d'ou un repli). Le test suppose qu'il existe : le dire
+    # plutot que de planter sur un AttributeError si le repli s'activait.
+    assert window.avatar is not None, "l'avatar doit etre charge pour ce test"
     window.input_field.setText("bonjour")
     assert window.avatar.state == "LISTENING"
 
@@ -113,6 +117,7 @@ def test_typing_does_not_disturb_a_running_generation(app, monkeypatch) -> None:
             """closeEvent() interrompt le worker en cours."""
 
     window.worker = _Busy()
+    assert window.avatar is not None, "l'avatar doit etre charge pour ce test"
     window.input_field.setText("texte")
     assert window.avatar.state == THINKING
 

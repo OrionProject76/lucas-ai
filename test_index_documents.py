@@ -177,7 +177,11 @@ def _fake_pypdf(monkeypatch, pages, encrypted=False, boom=None):
             raise ValueError("mot de passe requis")
 
     module = types.ModuleType("pypdf")
-    module.PdfReader = _Reader
+    # Attribut pose sur un faux module fabrique a la volee : mypy ne peut
+    # pas le connaitre. `setattr` reglerait mypy mais declenche ruff B010
+    # (« pas plus sur qu'un acces direct ») — l'affectation directe avec
+    # une exception ciblee satisfait les deux.
+    module.PdfReader = _Reader  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "pypdf", module)
 
 
@@ -240,7 +244,10 @@ def _fake_fitz(monkeypatch, nb_pages):
             return False
 
     module = types.ModuleType("fitz")
-    module.open = lambda path: _Document([_Page() for _ in range(nb_pages)])
+    # Meme motif que pour `PdfReader` ci-dessus.
+    module.open = lambda path: _Document(  # type: ignore[attr-defined]
+        [_Page() for _ in range(nb_pages)]
+    )
     monkeypatch.setitem(sys.modules, "fitz", module)
 
 

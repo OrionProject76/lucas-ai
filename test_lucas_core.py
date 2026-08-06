@@ -75,7 +75,7 @@ def core(monkeypatch):
     monkeypatch.setattr(lucas_core, "ask_cloud", lambda messages: "réponse cloud")
 
     instance = LucasCore.__new__(LucasCore)
-    instance.memory = _FakeMemory()
+    instance.memory = _FakeMemory()  # type: ignore[assignment]  # double assume, voir test_memory_double.py
     return instance
 
 
@@ -127,7 +127,7 @@ def test_ask_without_on_activity_does_not_crash(core) -> None:
 
 
 def test_prepare_saves_the_message_and_always_stays_local(monkeypatch, core) -> None:
-    captured = {}
+    captured: dict = {}
     monkeypatch.setattr(
         lucas_core.LucasCore, "_build_messages",
         lambda self, user_message, destination="local", **k: captured.update(

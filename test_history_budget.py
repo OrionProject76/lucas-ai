@@ -141,7 +141,7 @@ def _core(monkeypatch, history: list[tuple[str, str]]) -> LucasCore:
     monkeypatch.setattr(lucas_core, "should_use_vision", lambda text, context="": False)
     monkeypatch.setattr(lucas_core, "should_use_rag", lambda text, context="": False)
     instance = LucasCore.__new__(LucasCore)
-    instance.memory = _FakeMemory(history)
+    instance.memory = _FakeMemory(history)  # type: ignore[assignment]  # double assume, voir test_memory_double.py
     return instance
 
 

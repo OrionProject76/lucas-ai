@@ -306,7 +306,7 @@ def test_une_recherche_infructueuse_est_annoncee_au_modele(monkeypatch):
     monkeypatch.setattr(lucas_core, "RAGManager", _RagVide)
 
     core = LucasCore.__new__(LucasCore)
-    core.memory = _Memoire()
+    core.memory = _Memoire()  # type: ignore[assignment]  # double assume, voir test_memory_double.py
     messages = core._build_messages("mon salaire de juillet 2024", "local")
 
     bloc = messages[-2]["content"]

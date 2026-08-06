@@ -475,6 +475,7 @@ def test_websocket_chat_cycle(client, fake_core) -> None:
                 break
 
     assert states[-3:] == ["thinking", "speaking", "idle"]
+    assert answer is not None, "aucun message 'speaking' recu"
     assert "bonjour" in answer
 
 
@@ -922,6 +923,7 @@ def test_websocket_audio_is_transcribed_and_answered(client, fake_core, fake_stt
     assert states[-4:] == ["listening", "thinking", "speaking", "idle"]
     # fake_core renvoie "réponse à « <message demandé> »" — le message
     # demandé doit être le texte transcrit, pas l'audio brut.
+    assert answer is not None, "aucun message 'speaking' recu"
     assert "audio transcrit" in answer
 
 
@@ -1464,7 +1466,9 @@ def test_push_system_state_stops_on_a_broken_connection() -> None:
         async def send_json(self, data):
             raise RuntimeError("connexion fermée")
 
-    asyncio.run(_push_system_state(_BrokenWebSocket()))  # ne doit jamais lever ni boucler
+    # `_BrokenWebSocket` n'implemente que `send_json` — c'est tout ce
+    # que la fonction utilise. Substitution volontaire, invisible a mypy.
+    asyncio.run(_push_system_state(_BrokenWebSocket()))  # type: ignore[arg-type]  # ne doit jamais lever ni boucler
 
 
 def test_push_security_status_stops_on_a_broken_connection() -> None:
@@ -1476,7 +1480,7 @@ def test_push_security_status_stops_on_a_broken_connection() -> None:
         async def send_json(self, data):
             raise RuntimeError("connexion fermée")
 
-    asyncio.run(_push_security_status(_BrokenWebSocket()))  # ne doit jamais lever ni boucler
+    asyncio.run(_push_security_status(_BrokenWebSocket()))  # type: ignore[arg-type]  # ne doit jamais lever ni boucler
 
 
 if __name__ == "__main__":

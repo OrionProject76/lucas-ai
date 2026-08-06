@@ -139,7 +139,7 @@ class _FakeChromaCollection:
         self._documents = documents or []
         self._metadatas = metadatas or []
         self._ids = ids or []
-        self.added = None
+        self.added: dict | None = None
 
     def get(self, where=None, include=None):
         result: dict = {"ids": self._ids}
@@ -211,6 +211,9 @@ def test_init_migrates_an_old_l2_collection_with_existing_documents(monkeypatch,
 
     assert client.deleted_collections == ["orion_docs"]
     assert rag.collection is client.second_collection
+    # `collection` est Optional : le dire ici plutot que de laisser un
+    # AttributeError sur None si la reouverture echouait.
+    assert rag.collection is not None
     assert rag.collection.added == {
         "documents": ["contenu a", "contenu b"],
         "metadatas": [{"source": "a.txt"}, {"source": "b.txt"}],

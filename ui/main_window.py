@@ -276,19 +276,24 @@ class MainWindow(QWidget):
         left_layout.setSpacing(8)
         left_layout.setContentsMargins(8, 16, 8, 16)
 
+        # Annoté avant la branche : sans ça, mypy fige le type sur la
+        # première affectation (`AvatarWidget`) et refuse le `None` de
+        # l'autre branche. L'avatar EST optionnel — c'est tout le sens du
+        # repli quand son import échoue.
+        self.avatar: AvatarWidget | None
         if HAS_AVATAR:
             self.avatar = AvatarWidget()
             self.avatar.setFixedSize(140, 140)
-            left_layout.addWidget(self.avatar, alignment=Qt.AlignCenter)
+            left_layout.addWidget(self.avatar, alignment=Qt.AlignmentFlag.AlignCenter)
         else:
             self.avatar = None
             placeholder = QLabel("◈")
             placeholder.setStyleSheet("font-size: 48px; color: #00D4FF;")
-            placeholder.setAlignment(Qt.AlignCenter)
+            placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
             left_layout.addWidget(placeholder)
 
         self.avatar_status = QLabel("● En ligne")
-        self.avatar_status.setAlignment(Qt.AlignCenter)
+        self.avatar_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.avatar_status.setStyleSheet(
             "color: #00D4FF; font-size: 11px; font-weight: bold;"
         )
@@ -313,12 +318,12 @@ class MainWindow(QWidget):
         # Titre
         title = QLabel("◈ LUCA'S ◈")
         title.setObjectName("title")
-        title.setAlignment(Qt.AlignCenter)
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # Zone de chat
         self.chat_history = QTextEdit()
         self.chat_history.setReadOnly(True)
-        self.chat_history.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.chat_history.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         # Barre de statut
         self.status_label = QLabel("")

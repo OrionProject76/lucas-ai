@@ -127,7 +127,7 @@ def core_with_events(monkeypatch) -> tuple[LucasCore, _FakeMemory]:
         ("ram_alert", "RAM à 91%", "2026-08-01 09:58"),
     ])
     core = LucasCore.__new__(LucasCore)
-    core.memory = memory
+    core.memory = memory  # type: ignore[assignment]  # double assume, voir test_memory_double.py
     return core, memory
 
 
@@ -150,7 +150,7 @@ def test_cloud_prompt_omits_window_title(monkeypatch) -> None:
     })
 
     core = LucasCore.__new__(LucasCore)
-    core.memory = _FakeMemory([])
+    core.memory = _FakeMemory([])  # type: ignore[assignment]  # double assume, voir test_memory_double.py
 
     local = " ".join(m["content"] for m in core._build_messages("bonjour", "local"))
     cloud = " ".join(m["content"] for m in core._build_messages("bonjour", "cloud"))
@@ -183,7 +183,7 @@ def test_no_empty_system_message_when_no_events(monkeypatch) -> None:
     )
 
     core = LucasCore.__new__(LucasCore)
-    core.memory = _FakeMemory([])
+    core.memory = _FakeMemory([])  # type: ignore[assignment]  # double assume, voir test_memory_double.py
     messages = core._build_messages("bonjour", "local")
 
     assert all(m["content"].strip() for m in messages), "aucun message vide"

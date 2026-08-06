@@ -573,7 +573,7 @@ def test_send_message_runs_the_full_pipeline_to_a_complete_response(app_window, 
             super().__init__()
             self.question = question
 
-        def start(self):
+        def start(self):  # type: ignore[override]  # double de QThread, pas de vrai thread
             self.ready.emit([{"role": "user", "content": self.question}])
 
     class _FakeLLM(QThread):
@@ -586,7 +586,7 @@ def test_send_message_runs_the_full_pipeline_to_a_complete_response(app_window, 
             super().__init__()
             self.messages = messages
 
-        def start(self):
+        def start(self):  # type: ignore[override]  # double de QThread, pas de vrai thread
             # ⚠️ Le texte affiché vient EXCLUSIVEMENT du cumul des jetons
             # streamés (_on_token) ; response_complete() ne fait que
             # sauvegarder full_answer et déclencher le TTS, jamais un
@@ -633,7 +633,7 @@ def test_send_message_switches_the_avatar_to_watching_for_screen_questions(app_w
         def __init__(self, question, log_event=None):
             super().__init__()
 
-        def start(self):
+        def start(self):  # type: ignore[override]  # double de QThread, pas de vrai thread
             pass  # la réponse n'arrive jamais : seul l'état initial nous intéresse ici
 
     monkeypatch.setattr(main_window, "ContextWorker", _FakeContext)

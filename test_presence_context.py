@@ -26,7 +26,7 @@ def _core(minutes):
             return minutes
 
     instance = LucasCore.__new__(LucasCore)
-    instance.memory = _Memoire()
+    instance.memory = _Memoire()  # type: ignore[assignment]  # double assume, voir test_memory_double.py
     return instance
 
 

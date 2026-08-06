@@ -58,10 +58,10 @@ class AvatarDemo(QWidget):
         layout.setSpacing(14)
 
         self.avatar = AvatarWidget()
-        layout.addWidget(self.avatar, alignment=Qt.AlignCenter)
+        layout.addWidget(self.avatar, alignment=Qt.AlignmentFlag.AlignCenter)
 
         self.caption = QLabel("")
-        self.caption.setAlignment(Qt.AlignCenter)
+        self.caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.caption.setStyleSheet("color: #6B6F7B; font-size: 12px;")
         layout.addWidget(self.caption)
 
@@ -83,7 +83,7 @@ class AvatarDemo(QWidget):
             "il doit se remarquer sans qu'on le cherche.\n"
             f"Fondu entre deux modes : {TRANSITION_FRAMES} frames (~400 ms)."
         )
-        hint.setAlignment(Qt.AlignCenter)
+        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hint.setStyleSheet("color: #6B6F7B; font-size: 11px;")
         layout.addWidget(hint)
 

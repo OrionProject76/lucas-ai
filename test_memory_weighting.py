@@ -144,7 +144,7 @@ def test_annotated_history_reaches_the_prompt(monkeypatch) -> None:
     monkeypatch.setattr(lucas_core, "should_use_rag", lambda text, context="": False)
 
     core = LucasCore.__new__(LucasCore)
-    core.memory = _Memoire()
+    core.memory = _Memoire()  # type: ignore[assignment]  # double assume, voir test_memory_double.py
     messages = core._build_messages("question actuelle", "local")
 
     flagged = [m for m in messages if UNCERTAIN_MARKER in m["content"]]

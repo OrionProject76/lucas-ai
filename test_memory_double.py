@@ -18,6 +18,23 @@
 # été supprimés — chacun a ses particularités (historique injecté,
 # actions journalisées) — mais ils en HÉRITENT désormais, ce qui veut dire
 # qu'une méthode ajoutée ici les couvre tous d'un coup.
+#
+# ⚠️ Pourquoi les sites d'usage portent `# type: ignore[assignment]`
+# ------------------------------------------------------------------
+# Ajouté le 06/08/2026 en activant mypy sur la racine. Quatorze tests
+# écrivent `core.memory = _FakeMemory()` sur un `LucasCore` construit par
+# `__new__` — dont l'attribut `memory` est déclaré `MemoryManager`.
+#
+# La substitution est DÉLIBÉRÉE : c'est elle qui garantit qu'un test
+# n'ouvre jamais la vraie base de Cyril. `MemoryDouble` n'hérite
+# volontairement PAS de `MemoryManager` — en hériter ferait entrer le
+# comportement SQLite réel par la porte de derrière, et le socle
+# perdrait sa seule raison d'être.
+#
+# mypy n'a aucun moyen de distinguer cette substitution voulue d'une
+# erreur de type. Le `type: ignore` est donc l'outil juste, pas un
+# contournement — et il est CIBLÉ (`[assignment]`), jamais global : une
+# vraie incompatibilité d'un autre genre resterait signalée.
 
 from __future__ import annotations
 

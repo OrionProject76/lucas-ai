@@ -6523,6 +6523,106 @@ Les intégrer est une décision de Cyril, pas un réglage d'outil.
 d'automation modifié, y compris le « ouvre le bloc note » singulier à
 l'origine de la fausse confirmation du 05/08.
 
+## 5.61 Chantier mypy racine — 73 → 0, et plus aucun angle mort (06/08/2026)
+
+Ouvert à la demande de Cyril. `just mypy` couvre désormais **tout le
+projet** : 108 fichiers, `Success`.
+
+### Ce qui était un vrai défaut de test — 13 corrigées
+
+Des helpers rendent `X | None` et le résultat était utilisé
+directement. Si la valeur était `None`, le test échouait sur un
+`TypeError`/`AttributeError` obscur **au lieu de dire quelle étape avait
+cassé** :
+
+```python
+assert expression is not None, f"aucune expression extraite avec {sep!r}"
+assert texte is not None, "le document n'a pas pu être lu"
+assert answer is not None, "aucun message 'speaking' reçu"
+assert resultat is not None, "la transcription mobile n'a rien rendu"
+```
+
+Ce n'est pas cosmétique : un test qui plante au lieu d'échouer proprement
+fait perdre du temps au moment précis où on en a le moins.
+
+### Les 14 lambdas — la cause n'était pas où je croyais
+
+Quatorze appels écrivaient
+`log_event=lambda t, d="": events.append((t, d))`.
+
+J'ai d'abord cherché un type imprécis côté production. **Il ne l'est
+pas** : `Callable[[str, str], None] | None`, parfaitement déclaré. C'est
+mypy qui abandonne — face à un type **union**, il ne sait pas contre
+quel membre vérifier une lambda et rend « Cannot infer type of lambda ».
+
+Le correctif ne pouvait donc pas venir de la production. `event_recorder()`
+ajouté à `conftest.py` : une fonction **nommée**, inférée seule,
+indépendamment de l'union. Les 14 sites deviennent
+`events, log_event = event_recorder()`.
+
+### Les doubles de mémoire — 14 `type: ignore` ciblés, assumés
+
+`core.memory = _FakeMemory()` sur un `LucasCore` dont l'attribut est
+déclaré `MemoryManager`. La substitution est **délibérée** : c'est elle
+qui garantit qu'un test n'ouvre jamais la vraie base de Cyril, et
+`MemoryDouble` n'hérite volontairement **pas** de `MemoryManager` — en
+hériter ferait entrer le comportement SQLite par la porte de derrière.
+
+mypy n'a aucun moyen de distinguer ça d'une erreur. Le `type: ignore`
+est l'outil juste, pas un contournement — **ciblé** (`[assignment]`),
+jamais global, et l'explication vit une seule fois dans
+`test_memory_double.py`.
+
+Là où le double était **lu** (`memory.actions_logged`, 6 fois), un
+accesseur typé `_double(core)` remplace six ignores par une assertion
+qui rend l'hypothèse vérifiable.
+
+### Qt : migration des alias, vérifiée avant d'être faite
+
+12 erreurs `ui/` + 3 `demos/` étaient des alias Qt5 que les stubs
+PySide6 ne connaissent pas. **Vérifié au runtime AVANT de toucher au
+code** :
+
+```
+Qt.AlignCenter        == Qt.AlignmentFlag.AlignCenter          : True
+Qt.NoPen              == Qt.PenStyle.NoPen                     : True
+Qt.ScrollBarAsNeeded  == Qt.ScrollBarPolicy.ScrollBarAsNeeded  : True
+QPainter.Antialiasing == QPainter.RenderHint.Antialiasing      : True
+```
+
+Strictement égales — la migration ne change rien au comportement, et
+remplace un alias historique que Qt peut retirer par la forme
+officielle. C'est ce qui a permis à `ui/` d'entrer au périmètre.
+
+### Une annotation qui a fait remonter autre chose
+
+Annoter `self.avatar: AvatarWidget | None` dans `main_window.py` (il
+vaut `None` quand l'import échoue — tout le sens du repli) a révélé **4
+erreurs dans `test_avatar.py`** : les tests lisaient `window.avatar.state`
+en supposant l'avatar présent. Assertions ajoutées.
+
+Un type correct en production a donc trouvé un angle mort dans les
+tests — exactement ce qu'on attend d'un vérificateur.
+
+### ⚠️ Ruff et mypy peuvent se contredire
+
+`module.PdfReader = _Reader` sur un faux module fabriqué à la volée :
+mypy veut `setattr`, ruff refuse `setattr` avec un nom constant (B010).
+Résolu par l'affectation directe **plus** une exception ciblée — la seule
+forme qui satisfait les deux. À retenir : leurs conseils ne sont pas
+toujours compatibles, et c'est au code de trancher.
+
+### État final
+
+| Porte | Périmètre | Résultat |
+|---|---|---|
+| `just lint` | tout le projet | **All checks passed!** |
+| `just mypy` | tout le projet, `--check-untyped-defs` | **Success — 108 fichiers** |
+| suite | — | **1 298 passés** |
+
+Validé au-delà des tests : `MainWindow` réellement construite en mode
+offscreen après la migration Qt — avatar chargé, alignements appliqués.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

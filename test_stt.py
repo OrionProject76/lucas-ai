@@ -195,7 +195,11 @@ def test_manager_returns_none_instead_of_raising(monkeypatch) -> None:
 def test_manager_forwards_the_mobile_path(monkeypatch) -> None:
     manager = STTManager()
     manager.engine._backend = _FakeBackend()
-    assert manager.transcribe_from_mobile(base64.b64encode(b"a").decode()).language == "fr"
+    resultat = manager.transcribe_from_mobile(base64.b64encode(b"a").decode())
+    # Verifie la transcription AVANT d'en lire un champ : sinon un echec
+    # du backend produit un AttributeError sur None au lieu de le dire.
+    assert resultat is not None, "la transcription mobile n'a rien rendu"
+    assert resultat.language == "fr"
 
 
 def test_manager_mobile_path_returns_none_instead_of_raising(monkeypatch) -> None:

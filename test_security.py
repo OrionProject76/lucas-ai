@@ -1302,8 +1302,8 @@ class _FakeRegistryKey:
     def __enter__(self):
         return self
 
-    def __exit__(self, *exc_info) -> bool:
-        return False
+    def __exit__(self, *exc_info) -> None:
+        return None
 
 
 def test_read_registry_autostarts_parses_multiple_hives(monkeypatch) -> None:

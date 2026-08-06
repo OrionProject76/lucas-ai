@@ -280,14 +280,14 @@ class AvatarWidget(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         center = QPointF(70, 70)
         radius = self.body_radius()
 
         # Halo en trois couches concentriques plutôt qu'un dégradé unique :
         # la lumière se diffuse au lieu de s'arrêter net (esthétique Astra).
-        painter.setPen(Qt.NoPen)
+        painter.setPen(Qt.PenStyle.NoPen)
         base_glow = 55 + self.glow_intensity * 10
         for scale, opacity in ((1.25, 0.35), (1.10, 0.6), (1.0, 1.0)):
             layer_radius = base_glow * scale
@@ -317,7 +317,7 @@ class AvatarWidget(QWidget):
             pulse = (math.sin(self.watch_pulse) + 1.0) / 2.0
             dot_alpha = int(90 + 165 * pulse)
             dot_radius = 4.0 + 1.5 * pulse
-            painter.setPen(Qt.NoPen)
+            painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QBrush(QColor(255, 90, 0, dot_alpha)))
             painter.drawEllipse(QPointF(107, 36), dot_radius, dot_radius)
 
@@ -345,7 +345,7 @@ class AvatarWidget(QWidget):
             # Œil gauche
             left_eye = QPointF(55 + eye_offset_x, 60 + eye_offset_y)
             painter.setBrush(QBrush(QColor(255, 255, 255)))
-            painter.setPen(Qt.NoPen)
+            painter.setPen(Qt.PenStyle.NoPen)
             painter.drawEllipse(left_eye, 8, 10)
 
             # Pupille gauche
@@ -398,7 +398,7 @@ class AvatarWidget(QWidget):
             for p in self.particles:
                 alpha = int(p['life'] * 255)
                 painter.setBrush(QBrush(QColor(0, 212, 255, alpha)))
-                painter.setPen(Qt.NoPen)
+                painter.setPen(Qt.PenStyle.NoPen)
                 painter.drawEllipse(QPointF(p['x'], p['y']), p['size'], p['size'])
 
         # Label état
@@ -407,7 +407,7 @@ class AvatarWidget(QWidget):
         # Libellé lisible plutôt que le nom de la constante : Cyril doit
         # lire ce que Luca's fait, pas « WATCHING ».
         painter.drawText(
-            40, 130, 60, 15, Qt.AlignCenter, STATE_LABELS.get(self.state, "")
+            40, 130, 60, 15, Qt.AlignmentFlag.AlignCenter, STATE_LABELS.get(self.state, "")
         )
 
 
@@ -422,7 +422,7 @@ if __name__ == "__main__":
     layout = QVBoxLayout()
 
     avatar = AvatarWidget()
-    layout.addWidget(avatar, alignment=Qt.AlignCenter)
+    layout.addWidget(avatar, alignment=Qt.AlignmentFlag.AlignCenter)
 
     btn_layout = QHBoxLayout()
 

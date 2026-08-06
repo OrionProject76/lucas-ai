@@ -149,7 +149,7 @@ def core(monkeypatch):
         lambda snapshot, include_window=True: "[système]",
     )
     instance = LucasCore.__new__(LucasCore)
-    instance.memory = _FakeMemory()
+    instance.memory = _FakeMemory()  # type: ignore[assignment]  # double assume, voir test_memory_double.py
     return instance
 
 
@@ -533,7 +533,7 @@ def core_with_history(monkeypatch):
         lambda snapshot, include_window=True: "[système]",
     )
     instance = LucasCore.__new__(LucasCore)
-    instance.memory = _FakeMemory(
+    instance.memory = _FakeMemory(  # type: ignore[assignment]  # double assume, voir test_memory_double.py
         history=_long_history() + [("user", "c'est écrit quoi ?")]
     )
     return instance
@@ -1034,7 +1034,7 @@ def test_repeated_vision_refusals_are_filtered_from_history(monkeypatch, classif
         history.append(("assistant", refusal))
 
     instance = LucasCore.__new__(LucasCore)
-    instance.memory = _FakeMemory(history=history)
+    instance.memory = _FakeMemory(history=history)  # type: ignore[assignment]  # double assume, voir test_memory_double.py
 
     _fake_vision(monkeypatch, "un terminal affichant du code Python")
     messages = instance._build_messages("Décris ce que tu vois.", "local")
@@ -1066,7 +1066,7 @@ def test_vision_refusal_filter_is_a_no_op_without_a_new_vision_block(monkeypatch
         ("assistant", REAL_VISION_REFUSALS[0]),
     ]
     instance = LucasCore.__new__(LucasCore)
-    instance.memory = _FakeMemory(history=history)
+    instance.memory = _FakeMemory(history=history)  # type: ignore[assignment]  # double assume, voir test_memory_double.py
 
     messages = instance._build_messages("quelle heure il est", "local")
 

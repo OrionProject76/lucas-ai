@@ -35,7 +35,7 @@ def _counter():
         calls.append(1)
         return "fait"
 
-    _run.calls = calls
+    _run.calls = calls  # type: ignore[attr-defined]  # sonde attachee au callable
     return _run
 
 

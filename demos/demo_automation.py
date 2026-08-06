@@ -16,7 +16,10 @@ from modules.automation_manager import AutomationManager
 
 
 def main() -> None:
-    am = AutomationManager(log_event=lambda t, d="": print(f"  [event] {t} : {d}"))
+    def afficher(event_type: str, details: str = "") -> None:
+        print(f"  [event] {event_type} : {details}")
+
+    am = AutomationManager(log_event=afficher)
 
     print("Applications autorisées :", ", ".join(am.list_allowed()))
 
