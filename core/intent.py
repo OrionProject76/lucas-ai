@@ -337,6 +337,16 @@ def classify(question: str, context: str = "", _inherit: bool = True) -> Intent:
     if _inherit and context and is_elliptical(question):
         precedente = previous_question(context)
         if precedente and precedente != question:
+            # ⚠️ `_inherit=False` est DÉFENSIF, et sans effet mesurable
+            # aujourd'hui : le contexte passé ici est vide, donc la garde
+            # ligne 337 (`_inherit and context and ...`) est déjà fausse
+            # quelle que soit cette valeur. Vérifié le 06/08/2026 — la
+            # campagne de mutation le classe « équivalent », c'est exact.
+            #
+            # On le garde quand même : le jour où quelqu'un transmettra un
+            # contexte à cet appel, c'est cette valeur qui empêchera de
+            # remonter la chaîne d'ellipses à l'infini. Un garde-fou qui
+            # ne sert pas encore n'est pas un garde-fou inutile.
             herite = classify(precedente, "", _inherit=False)
             # Un repli mots-clés ne s'hérite pas : il vaut 50 % de
             # couverture, et le propager doublerait ses erreurs.
