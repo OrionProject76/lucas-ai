@@ -6623,6 +6623,55 @@ toujours compatibles, et c'est au code de trancher.
 Validé au-delà des tests : `MainWindow` réellement construite en mode
 offscreen après la migration Qt — avatar chargé, alignements appliqués.
 
+## 5.62 `just check` a révélé que `just test` testait le mauvais Python (06/08/2026)
+
+Lancé pour vérifier l'ensemble d'un coup. Il a échoué — **pas sur le
+travail en cours, sur la recette elle-même** :
+
+```
+platform win32 -- Python 3.12.7 -- AppData/Local/Programs/Python/Python312
+ModuleNotFoundError: No module named 'ddgs'
+collected 1249 items / 2 errors / 9 deselected
+```
+
+`pytest` nu résolvait vers le Python **global**, auquel il manque
+**20 paquets** présents dans le venv : `ddgs`, `faster-whisper`, `pypdf`,
+`python-docx`, `pymupdf`, `ruff`, `mypy`, `ctranslate2`,
+`rapidocr-onnxruntime`…
+
+**Ce que ça voulait dire concrètement** : la commande officielle du
+projet testait un environnement qui **n'est pas celui dans lequel Luca's
+tourne**. `test_dependance_forme.py` et `test_modules.py` n'étaient
+*jamais exécutés par elle* — ils échouaient à l'import, et l'échec de
+collecte interrompait toute la suite. Les 1 298 rapportés jusqu'ici
+venaient du venv, jamais de `just test`.
+
+Même famille que `just lint` et `just mypy`, qui ne fonctionnaient pas du
+tout (§5.59) : les trois recettes supposaient des outils dans le PATH.
+`test`, `test-quick` et `test-integration` passent désormais par
+`venv/Scripts/python.exe -m pytest`.
+
+**La leçon, la troisième de la même forme en une session** : une commande
+de vérification qui ne s'exécute jamais, ou qui s'exécute ailleurs que
+là où vit le code, ne protège rien — et ne le dit pas.
+
+### État final, vérifié d'un seul coup
+
+```
+$ just check
+All checks passed!                              (ruff, tout le projet)
+1297 passed, 9 deselected
+TOTAL  3083 lignes   78 non couvertes   97%
+Success: no issues found in 108 source files    (mypy, tout le projet)
+code de retour : 0
+```
+
+⚠️ **1 297 et non 1 298** : `just test` exclut volontairement
+`test_voice.py` (`--ignore`), qui est un script de démonstration jouant
+du son et appelant edge-tts en réseau, pas un test unitaire. Vérifié :
+ce fichier contient exactement 1 test. L'écart est attendu, pas une
+régression.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
