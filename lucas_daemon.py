@@ -132,7 +132,8 @@ class LucasDaemon:
             if training_script.exists():
                 result = subprocess.run(
                     [sys.executable, str(training_script)],
-                    capture_output=True, text=True, timeout=3600
+                    capture_output=True, text=True, timeout=3600,
+                    check=False,  # le code de retour est inspecté juste après
                 )
                 if result.returncode == 0:
                     duration = time.time() - start
@@ -165,7 +166,8 @@ class LucasDaemon:
             if index_script.exists():
                 result = subprocess.run(
                     [sys.executable, str(index_script)],
-                    capture_output=True, text=True, timeout=600
+                    capture_output=True, text=True, timeout=600,
+                    check=False,  # le code de retour est inspecté juste après
                 )
                 duration = time.time() - start
                 if result.returncode == 0:
@@ -250,9 +252,14 @@ class LucasDaemon:
             """, (timestamp.isoformat(), str(filepath), app_name, img_hash))
             conn.commit()
             conn.close()
-        except Exception:
-            # Silencieux pour ne pas spammer les logs
-            pass
+        except Exception as e:  # noqa: BLE001 — une capture ratée ne doit
+            # pas arrêter le daemon, mais elle ne doit pas non plus
+            # disparaître : muet, un verrou SQLite ou un disque plein
+            # tuerait la fonctionnalité entière sans le moindre signe.
+            # Seul le TYPE est journalisé — le message d'une exception
+            # SQLite peut embarquer des valeurs de ligne (CLAUDE.md,
+            # « jamais afficher le contenu d'un fichier personnel »).
+            log(f"⚠️ Enregistrement du screenshot échoué : {type(e).__name__}", "WARN")
 
     # ── 5. Log émotionnel webcam ────────────────────────────
     def log_emotion(self):
@@ -289,8 +296,10 @@ class LucasDaemon:
             """, (datetime.now().isoformat(), emotion, 0.5, "webcam_brightness"))
             conn.commit()
             conn.close()
-        except Exception:
-            pass
+        except Exception as e:  # noqa: BLE001 — même motif que ci-dessus :
+            # ne pas arrêter le daemon, mais ne pas non plus s'éteindre
+            # sans bruit. Type seul, jamais le message.
+            log(f"⚠️ Enregistrement du log émotionnel échoué : {type(e).__name__}", "WARN")
 
     # ── 6. Tests auto ───────────────────────────────────────
     def run_tests(self):
@@ -298,6 +307,18 @@ class LucasDaemon:
         log("🧪 [TÂCHE] Tests automatiques...")
         db_log_task("auto_tests", "started")
         try:
+            # ⚠️ TÂCHE MORTE DEPUIS TOUJOURS — constaté le 06/08/2026.
+            # `tests/` n'existe pas dans ce projet : les 49 fichiers
+            # `test_*.py` sont à la RACINE (voir CLAUDE.md, § Structure
+            # Dossiers : « tous à la racine, pas dans tests/ »). Cette
+            # tâche part donc en "skipped" à chaque heure depuis sa
+            # création, sans que rien ne le signale.
+            #
+            # Volontairement NON réparé ici : pointer pytest sur la racine
+            # lancerait 1297 tests toutes les heures sur la machine de
+            # Cyril, avec un coût CPU réel et un risque d'interférence
+            # (plusieurs tests écrivent en base). C'est sa décision, pas
+            # un correctif de lint. Voir ROADMAP.md §5.59.
             tests_dir = LUCAS_ROOT / "tests"
             if not tests_dir.exists():
                 db_log_task("auto_tests", "skipped", "Dossier tests/ non trouvé")
@@ -306,7 +327,8 @@ class LucasDaemon:
             result = subprocess.run(
                 [sys.executable, "-m", "pytest", str(tests_dir), "-v", "--tb=short"],
                 capture_output=True, text=True, timeout=300,
-                cwd=str(LUCAS_ROOT)
+                cwd=str(LUCAS_ROOT),
+                check=False,  # le code de retour est inspecté juste après
             )
             if result.returncode == 0:
                 log("✅ Tous les tests passent")

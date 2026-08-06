@@ -68,6 +68,18 @@ _voice_manager = VoiceManager(log_event=save_event_from_any_thread)
 _AUDIO_MIME_TYPES = {".mp3": "audio/mpeg", ".wav": "audio/wav"}
 
 
+def _read_audio_b64(path: str) -> str:
+    """Read an audio file and return its base64 payload.
+
+    Split out so the blocking read can run in a worker thread: called
+    directly from the async WebSocket handler it would freeze the event
+    loop — and therefore every other connection — for the duration of
+    the read.
+    """
+    with open(path, "rb") as audio_file:
+        return base64.b64encode(audio_file.read()).decode("ascii")
+
+
 def _audio_mime_type(path: str) -> str:
     return _AUDIO_MIME_TYPES.get(Path(path).suffix.lower(), "application/octet-stream")
 
@@ -697,7 +709,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     message,
                     image_path=image_path,
                     allow_screen_capture=allow_screen_capture,
-                    on_activity=lambda kind, text: activity_events.append((kind, text)),
+                    # noqa B023 : la liaison tardive est inoffensive ici.
+                    # `activity_events` est recréée à chaque tour (l.693),
+                    # `ask()` est synchrone, et la liste est relue juste
+                    # après (l.707) — la lambda ne survit jamais à son
+                    # itération. Restructurer n'apporterait rien.
+                    on_activity=lambda kind, text: activity_events.append((kind, text)),  # noqa: B023
                 )
             finally:
                 lucas.close()
@@ -733,8 +750,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
                 else:
                     if audio_path:
-                        with open(audio_path, "rb") as audio_file:
-                            audio_b64 = base64.b64encode(audio_file.read()).decode("ascii")
+                        # Lecture DANS UN THREAD, comme la synthèse ci-dessus :
+                        # un `open()` bloquant ici gèlerait la boucle
+                        # d'événements — donc TOUTES les connexions
+                        # WebSocket — le temps de lire le fichier audio.
+                        # Le déport était déjà fait pour la synthèse
+                        # (asyncio.to_thread l.726) ; la lecture avait été
+                        # oubliée. Trouvé par ruff ASYNC230 le 06/08/2026.
+                        audio_b64 = await asyncio.to_thread(_read_audio_b64, audio_path)
                         mime = _audio_mime_type(audio_path)
                         # Chaque synthèse produit désormais un fichier UNIQUE
                         # (modules/voice_manager.py, corrigé le 05/08/2026 —

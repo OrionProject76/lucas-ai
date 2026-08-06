@@ -75,7 +75,7 @@ def _emit(on_activity: ActivityCallback | None, kind: str, text: str) -> None:
         return
     try:
         on_activity(kind, text)
-    except Exception:  # noqa: BLE001 — voir docstring
+    except Exception:  # noqa: BLE001, S110 — voir docstring
         pass
 
 

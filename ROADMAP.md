@@ -6113,6 +6113,101 @@ par une exception précise change le comportement, et c'est exactement ce
 qui a masqué un `NameError` le 05/08 (§5.39). Ça mérite une passe dédiée,
 pas un `--fix` en fin de session.
 
+## 5.59 Chantier ruff — 105 alertes, triées par nature et non par lot (06/08/2026)
+
+Ouvert à la demande de Cyril. Le principe de tri : **une alerte de lint
+n'est pas une alerte de lint**. Certaines sont du style, certaines
+décrivent un vrai défaut, certaines sont des faux positifs qu'il faut
+documenter plutôt que « corriger ».
+
+### Deux constats avant toute correction
+
+**1. Aucune configuration ruff n'existe.** `just lint` tourne sur les
+réglages par défaut de la version installée (0.16.1). Le périmètre de
+règles change donc à chaque montée de version : « 105 alertes » est une
+cible mouvante, pas un état.
+
+**2. `just lint` ne couvre qu'un quart du projet** —
+`core/ modules/ memory/ api/ ui/ test_router.py`, soit **25 des 105**.
+Répartition réelle :
+
+| Emplacement | Alertes | Dans `just lint` ? |
+|---|---|---|
+| racine (49 tests, `main.py`, `lucas_daemon.py`, `config.py`) | 73 | **non** |
+| `memory/` | 10 | oui |
+| `core/` | 6 | oui |
+| `modules/` | 6 | oui |
+| `demos/` | 5 | **non** |
+| `api/` | 3 | oui |
+| **`security/`** | 2 | **non** ⚠️ |
+
+⚠️ **`security/` n'est pas linté** — le module où `CLAUDE.md` place le
+plus d'exigence (« Liberté conditionnée à la protection »). Même trou que
+celui déjà comblé côté tests le 05/08.
+
+### ⚠️ Palier 1 — une erreur, annulée et refaite
+
+Première tentative : `ruff --select I001,RUF100,F401,… --fix`. Elle a
+supprimé **40 commentaires `noqa`**, dont 29 `# noqa: BLE001` qui
+portaient une justification écrite par le travail antérieur — « une panne
+TTS ne doit pas invalider une réponse déjà envoyée », « le World Model ne
+doit jamais faire échouer… », « voir docstring ». Ce n'était pas du
+bruit : c'était la trace d'`except Exception` **délibérés**. `BLE001`
+bondissait de 12 à 41 précisément parce que cette trace disparaissait.
+
+**Le piège, à retenir : `--select` REMPLACE le jeu de règles, il ne
+l'étend pas.** En sélectionnant un sous-ensemble sans `BLE001`, ruff a
+jugé les `# noqa: BLE001` inutiles (`RUF100`) et les a effacés. Tout
+`ruff --select <sous-ensemble> --fix` incluant `RUF100` efface les
+`noqa` de **toutes** les règles absentes du sous-ensemble.
+
+Commit annulé (`git revert`), rejoué sans `RUF100` : **37 corrections,
+zéro `noqa` retiré** (vérifié par `git diff | grep -c '^-.*noqa'`).
+
+### Palier 2 — les alertes qui décrivaient un vrai défaut
+
+| Alerte | Verdict | Traitement |
+|---|---|---|
+| `ASYNC230` `api/server.py` | **vrai défaut** | `open()` bloquant dans le handler WebSocket : la lecture du fichier audio gelait la boucle d'événements, donc **toutes** les connexions. La synthèse était déjà déportée (`asyncio.to_thread`), la lecture avait été oubliée. Extrait dans `_read_audio_b64()`, lu en thread |
+| `S110` ×2 `lucas_daemon.py` | **vrai défaut** | `pass` muet « pour ne pas spammer les logs » : un verrou SQLite ou un disque plein tuait la fonctionnalité sans le moindre signe. Journalisé — **type d'exception seul**, jamais le message, qui peut embarquer des valeurs de ligne |
+| `B023` `api/server.py` | **faux positif** | La lambda capture `activity_events` dans un `while True`, mais elle est consommée dans la même itération (`ask()` synchrone, liste relue 14 lignes plus bas). Documenté par `noqa`, pas restructuré |
+| `S110` `core/lucas_core.py` | **délibéré** | Déjà expliqué en docstring ; il manquait `S110` au `noqa` existant |
+| `PLW1510` ×3 `lucas_daemon.py` | **délibéré** | Les trois inspectent `result.returncode` juste après : `check=True` casserait la logique. `check=False` rendu explicite |
+
+### ⚠️ Trouvé en passant : une tâche du daemon morte depuis toujours
+
+En vérifiant le troisième `subprocess.run` :
+
+```python
+tests_dir = LUCAS_ROOT / "tests"
+if not tests_dir.exists():
+    db_log_task("auto_tests", "skipped", "Dossier tests/ non trouvé")
+    return
+```
+
+**`tests/` n'existe pas.** Les 49 fichiers `test_*.py` sont à la racine —
+`CLAUDE.md` le dit explicitement (« tous à la racine, pas dans
+`tests/` »). La tâche « tests automatiques toutes les heures » part donc
+en `skipped` **depuis sa création**, sans que rien ne le signale.
+
+**Volontairement non réparé** : pointer pytest sur la racine lancerait
+1 297 tests toutes les heures sur la machine de Cyril — coût CPU réel et
+risque d'interférence, plusieurs tests écrivant en base. C'est sa
+décision, pas un correctif de lint. Le constat est écrit à l'endroit
+exact du code.
+
+### Vérifications
+
+Suite complète **1 297 passés** après chaque palier. Et parce que des
+tests verts ne prouvent pas qu'un import retiré ne manquait pas à un
+chemin non couvert, les **27 modules du projet ont été importés
+explicitement, un par un — 27/27**.
+
+Le correctif `ASYNC230` touche le chemin audio du WebSocket : vérifié
+qu'il est réellement couvert — `test_websocket_sends_speech_when_requested`
+écrit un vrai fichier et compare
+`base64.b64decode(speech["audio_base64"]) == b"FAKE-MP3-BYTES"`.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
