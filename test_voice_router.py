@@ -405,10 +405,16 @@ def test_log_does_nothing_without_a_callback() -> None:
 def test_synthesize_piper_forwards_to_the_piper_engine(monkeypatch) -> None:
     manager = VoiceManager()
     calls: list[tuple[str, str]] = []
-    monkeypatch.setattr(
-        manager.piper, "synthesize",
-        lambda text, output_path: calls.append((text, output_path)) or output_path,
-    )
+
+    # Fonction nommée plutôt que `calls.append(...) or output_path` :
+    # l'idiome fonctionne (`append` rend None, donc falsy) mais s'appuie
+    # sur la valeur de retour d'une méthode qui n'en a pas — même motif
+    # que celui corrigé dans finance_manager.py (ROADMAP.md §5.60).
+    def _enregistre(text, output_path):
+        calls.append((text, output_path))
+        return output_path
+
+    monkeypatch.setattr(manager.piper, "synthesize", _enregistre)
 
     result = manager._synthesize_piper("bonjour", "data/sortie.wav")
 
@@ -427,10 +433,12 @@ def test_synthesize_piper_forwards_to_the_piper_engine(monkeypatch) -> None:
 def test_synthesize_piper_uses_a_different_path_on_each_call(monkeypatch) -> None:
     manager = VoiceManager()
     seen_paths: list[str] = []
-    monkeypatch.setattr(
-        manager.piper, "synthesize",
-        lambda text, output_path: seen_paths.append(output_path) or output_path,
-    )
+
+    def _enregistre(text, output_path):
+        seen_paths.append(output_path)
+        return output_path
+
+    monkeypatch.setattr(manager.piper, "synthesize", _enregistre)
 
     manager._synthesize_piper("bonjour")
     manager._synthesize_piper("au revoir")

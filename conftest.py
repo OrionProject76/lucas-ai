@@ -23,6 +23,8 @@
 # valeur est désormais surchargeable — et le contrôle « la surcharge
 # est-elle effective ? » a été fait avant de conclure quoi que ce soit.
 
+from collections.abc import Callable
+
 import pytest
 
 
@@ -58,3 +60,32 @@ def _classifieur_deterministe(monkeypatch):
     monkeypatch.setattr(intent, "_ask_classifier", lambda question, context="": None)
     yield
     intent._CACHE.clear()
+
+
+def event_recorder() -> tuple[list[tuple[str, str]], Callable[[str, str], None]]:
+    """Un enregistreur d'événements typé, pour remplacer les lambdas.
+
+    ⚠️ Pourquoi une fonction nommée plutôt qu'une lambda (06/08/2026)
+
+    Quatorze appels de la suite écrivaient
+    `log_event=lambda t, d="": events.append((t, d))`. Le code de
+    production déclare pourtant le bon type —
+    `Callable[[str, str], None] | None`. C'est mypy qui abandonne :
+    face à un type UNION, il ne sait pas contre quel membre vérifier
+    une lambda, et rend « Cannot infer type of lambda ».
+
+    Le correctif ne pouvait donc pas venir de la production, dont le
+    type est déjà juste. Une fonction nommée, elle, est inférée seule,
+    indépendamment de l'union.
+
+    Usage :
+        events, log_event = event_recorder()
+        Guardian(log_event=log_event).scan()
+        assert [t for t, _ in events] == ["security_..."]
+    """
+    events: list[tuple[str, str]] = []
+
+    def log_event(event_type: str, details: str = "") -> None:
+        events.append((event_type, details))
+
+    return events, log_event

@@ -625,6 +625,9 @@ def test_le_contenu_des_tableaux_est_extrait(rag, dossier):
     )
     texte, _ = _read(chemin)
 
+    # `_read` peut rendre None (lecture impossible) : le dire ici plutot
+    # que de laisser un TypeError sur `in`.
+    assert texte is not None, "le document n'a pas pu etre lu"
     assert "07/04/2026" in texte
     assert "Formation aide-soignant" in texte
 
@@ -642,6 +645,7 @@ def test_les_cellules_fusionnees_ne_sont_pas_repetees(rag, dossier):
     )
     texte, _ = _read(chemin)
 
+    assert texte is not None, "le document n'a pas pu etre lu"
     assert texte.count("Signature du responsable") == 1
 
 

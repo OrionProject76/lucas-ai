@@ -12,6 +12,7 @@ import subprocess
 
 import pytest
 
+from conftest import event_recorder
 from modules.automation_manager import (
     SHELL_LIKE_APPS,
     WHITELISTED_APPS,
@@ -23,12 +24,12 @@ from modules.automation_manager import (
 def launcher(monkeypatch):
     """AutomationManager dont le lancement réel est intercepté."""
     launched: list[list[str]] = []
-    events: list[tuple[str, str]] = []
+    events, log_event = event_recorder()
 
     monkeypatch.setattr(subprocess, "Popen", lambda cmd: launched.append(cmd))
     monkeypatch.setattr("modules.automation_manager.Path.exists", lambda self: True)
 
-    manager = AutomationManager(log_event=lambda t, d="": events.append((t, d)))
+    manager = AutomationManager(log_event=log_event)
     return manager, launched, events
 
 
@@ -160,10 +161,10 @@ def test_shell_detection_still_works_if_one_is_reintroduced(monkeypatch) -> None
     monkeypatch.setattr("modules.automation_manager.Path.exists", lambda self: True)
     monkeypatch.setattr(subprocess, "Popen", lambda cmd: None)
 
-    events: list[tuple[str, str]] = []
+    events, log_event = event_recorder()
     manager = AutomationManager(
         whitelist={"cmd": [r"C:\Windows\System32\cmd.exe"]},
-        log_event=lambda t, d="": events.append((t, d)),
+        log_event=log_event,
     )
     manager.open_app("cmd")
     assert [t for t, _ in events] == ["automation_shell_opened"]

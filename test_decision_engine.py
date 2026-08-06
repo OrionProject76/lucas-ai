@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pytest
 
+from conftest import event_recorder
 from core.decision_engine import (
     ILLUSTRATIVE_ACTIONS,
     ActionCategory,
@@ -94,8 +95,8 @@ def test_write_action_is_denied_when_confirmation_is_refused() -> None:
 
 def test_write_action_is_not_logged_even_when_approved() -> None:
     """Un volume/une luminosité changés ne laissent pas de trace utile à conserver."""
-    logged: list[tuple[str, str]] = []
-    engine = DecisionEngine(confirm=lambda spec: True, log_event=lambda t, d="": logged.append((t, d)))
+    logged, log_event = event_recorder()
+    engine = DecisionEngine(confirm=lambda spec: True, log_event=log_event)
     engine.register(ActionSpec("set_volume", ActionCategory.WRITE))
 
     engine.request("set_volume", _counter())
@@ -115,8 +116,8 @@ def test_execute_action_is_denied_by_default_without_confirmation(engine) -> Non
 
 
 def test_execute_action_proceeds_and_logs_when_confirmed() -> None:
-    logged: list[tuple[str, str]] = []
-    engine = DecisionEngine(confirm=lambda spec: True, log_event=lambda t, d="": logged.append((t, d)))
+    logged, log_event = event_recorder()
+    engine = DecisionEngine(confirm=lambda spec: True, log_event=log_event)
     engine.register(ActionSpec("take_screenshot", ActionCategory.EXECUTE))
 
     result = engine.request("take_screenshot", _counter())
@@ -127,8 +128,8 @@ def test_execute_action_proceeds_and_logs_when_confirmed() -> None:
 
 def test_execute_action_denied_when_confirmation_refused_is_also_logged() -> None:
     """Un refus n'est pas la même chose qu'un silence : les deux doivent apparaître en base."""
-    logged: list[tuple[str, str]] = []
-    engine = DecisionEngine(confirm=lambda spec: False, log_event=lambda t, d="": logged.append((t, d)))
+    logged, log_event = event_recorder()
+    engine = DecisionEngine(confirm=lambda spec: False, log_event=log_event)
     engine.register(ActionSpec("launch_app", ActionCategory.EXECUTE))
     run = _counter()
 

@@ -18,6 +18,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from conftest import event_recorder
 from modules import stt_engine as stt_module
 from modules.stt_engine import STTEngine, STTUnavailable, TranscriptResult
 from modules.stt_manager import STTManager
@@ -80,16 +81,16 @@ def test_is_available_reflects_the_backend() -> None:
 
 def test_unexpected_language_is_logged() -> None:
     """Une langue hors fr/en signale souvent un audio mal découpé."""
-    events: list[tuple[str, str]] = []
+    events, log_event = event_recorder()
     backend = _FakeBackend(TranscriptResult("hallo", "de", 0.8, 1.0))
-    STTEngine(backend=backend, log_event=lambda t, d="": events.append((t, d))).transcribe("x.wav")
+    STTEngine(backend=backend, log_event=log_event).transcribe("x.wav")
     assert [t for t, _ in events] == ["stt_unexpected_language"]
 
 
 def test_expected_language_is_not_logged() -> None:
-    events: list[tuple[str, str]] = []
+    events, log_event = event_recorder()
     STTEngine(
-        backend=_FakeBackend(), log_event=lambda t, d="": events.append((t, d))
+        backend=_FakeBackend(), log_event=log_event
     ).transcribe("x.wav")
     assert events == []
 

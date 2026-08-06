@@ -98,6 +98,11 @@ def test_the_extracted_city_keeps_its_accents() -> None:
 @pytest.mark.parametrize("separateur", [" ", NBSP, FINE])
 def test_french_thousands_grouping_is_computed(separateur: str) -> None:
     expression = extract_calculation(f"combien fait 1{separateur}234 + 5{separateur}678 ?")
+    # Verifie l'EXTRACTION avant l'evaluation : sans cette ligne, un
+    # separateur non reconnu ferait echouer le test sur un TypeError
+    # obscur (None passe a calculate) au lieu de dire quelle etape a
+    # casse.
+    assert expression is not None, f"aucune expression extraite avec {separateur!r}"
     assert Calculator().calculate(expression) == 6912
 
 
@@ -111,7 +116,9 @@ def test_two_digit_groups_are_never_glued() -> None:
 
 
 def test_a_non_breaking_hyphen_still_reads_as_a_minus() -> None:
-    assert Calculator().calculate(extract_calculation(f"combien fait 5678 {INSEC} 1234 ?")) == 4444
+    expression = extract_calculation(f"combien fait 5678 {INSEC} 1234 ?")
+    assert expression is not None, "le trait d'union insecable doit rester un moins"
+    assert Calculator().calculate(expression) == 4444
 
 
 # ── Dates dans les documents ──────────────────────────────────────────

@@ -17,6 +17,7 @@ from types import SimpleNamespace
 import psutil
 import pytest
 
+from conftest import event_recorder
 from security import (
     CRITICAL,
     INFO,
@@ -222,13 +223,13 @@ def test_scan_skips_a_process_without_a_name(monkeypatch) -> None:
 
 
 def test_scan_logs_only_non_trivial_findings(monkeypatch) -> None:
-    events: list[tuple[str, str]] = []
+    events, log_event = event_recorder()
     procs = [
         SimpleNamespace(info={"name": "svchost.exe", "exe": r"C:\Temp\svchost.exe", "pid": 1}),
     ]
     monkeypatch.setattr(psutil, "process_iter", lambda attrs=None: procs)
 
-    Guardian(log_event=lambda t, d="": events.append((t, d))).scan()
+    Guardian(log_event=log_event).scan()
     assert [t for t, _ in events] == ["security_process_impersonation"]
 
 
@@ -506,8 +507,8 @@ def test_scan_logs_findings_but_never_info_severity(monkeypatch) -> None:
 
     monkeypatch.setattr(PrivacyShield, "_describe_process", staticmethod(_describe))
 
-    logged: list[tuple[str, str]] = []
-    findings = PrivacyShield(log_event=lambda t, d="": logged.append((t, d))).scan()
+    logged, log_event = event_recorder()
+    findings = PrivacyShield(log_event=log_event).scan()
 
     assert len(findings) == 2, "les deux signaux (WARNING et INFO) sont retournés"
     assert len(logged) == 1, "seul le WARNING est journalisé, l'INFO reste silencieux"
@@ -725,15 +726,15 @@ def test_truncated_scan_info_is_not_logged(watched, monkeypatch) -> None:
     for i in range(10):
         (watched / f"f{i}.txt").write_text("x")
 
-    events: list[tuple[str, str]] = []
-    RansomwareWatch(log_event=lambda t, d="": events.append((t, d))).scan()
+    events, log_event = event_recorder()
+    RansomwareWatch(log_event=log_event).scan()
     assert events == []
 
 
 def test_findings_reach_the_event_log(watched) -> None:
-    events: list[tuple[str, str]] = []
+    events, log_event = event_recorder()
     (watched / "doc.locked").write_text("x")
-    RansomwareWatch(log_event=lambda t, d="": events.append((t, d))).scan()
+    RansomwareWatch(log_event=log_event).scan()
     assert "security_ransom_extension" in [t for t, _ in events]
 
 
@@ -846,9 +847,9 @@ def test_unreadable_canary_is_critical(watched) -> None:
 def monitor(tmp_path):
     from security.monitor import SecurityMonitor
 
-    events: list[tuple[str, str]] = []
+    events, log_event = event_recorder()
     mon = SecurityMonitor(
-        log_event=lambda t, d="": events.append((t, d)),
+        log_event=log_event,
         state_path=tmp_path / "state.json",
     )
     return mon, events
@@ -1401,9 +1402,9 @@ def test_read_startup_folder_empty_when_path_does_not_exist(monkeypatch, tmp_pat
 
 
 def test_persistence_watch_logs_non_info_findings_only(history) -> None:
-    logged: list[tuple[str, str]] = []
+    logged, log_event = event_recorder()
     watch = PersistenceWatch(
-        log_event=lambda t, d="": logged.append((t, d)), history=history
+        log_event=log_event, history=history
     )
     findings = [
         Finding(CRITICAL, "autostart_volatile", "danger", {"entree": "x"}),
