@@ -5864,6 +5864,69 @@ changé, elle le **note** et laisse le point à une session supervisée.
 supprimer : `Unregister-ScheduledTask -TaskName "LucasVeilleModeles"`.
 Journal : `data/logs/veille_modeles.log`.
 
+### ⚠️ Les gardes éprouvés — et le bug que ça a révélé (06/08/2026)
+
+Écrire trois garde-fous ne prouve rien. Tant qu'on ne les a pas **vus
+se déclencher**, ce sont des intentions — exactement le motif « tests
+verts sur un comportement jamais observé » que ce projet traque
+(`IDEAS.md` #90). D'où un mode `-Simuler` : l'appel à Claude Code est
+remplacé par une **désobéissance délibérée** (le script modifie
+lui-même `config.py` et télécharge un modèle), et les gardes doivent
+tout annuler.
+
+**La première simulation a échoué, et pour une raison grave.**
+
+```
+02:41:33  [SIMULATION] config.py modifie (bascule interdite)
+          ollama.exe : NativeCommandError  ← le script s'arrête ici
+```
+
+Cause : `& ollama pull ... 2>&1`. En PowerShell 5.1, rediriger la
+sortie d'erreur d'un **exécutable natif** enveloppe chaque ligne dans un
+`NativeCommandError` — et avec `$ErrorActionPreference = "Stop"`, cela
+**interrompt le script**, même quand l'exécutable rend 0.
+
+Conséquence : le script s'est arrêté **après** avoir modifié `config.py`
+et **avant** G1. **La bascule interdite a survécu.** En conditions
+réelles, non supervisées, `MODEL_NAME` serait resté changé jusqu'à ce
+que quelqu'un s'en aperçoive — et le même `2>&1` est présent dans G2,
+donc le nettoyage disque aurait sauté aussi.
+
+**Deux corrections, dont une structurelle :**
+
+1. **Aucune redirection sur un natif.** La sortie d'erreur est déjà
+   capturée ; la rediriger n'apportait rien et cassait tout.
+2. **Les gardes passent dans un `finally`.** C'est le vrai correctif :
+   écrits à la suite du travail, ils ne s'exécutaient pas quand le
+   travail échouait — *c'est-à-dire précisément dans le cas où ils
+   servent*. Un garde qui ne se déclenche que quand tout va bien n'est
+   pas un garde.
+
+⚠️ **C'est la deuxième fois dans la même session** : quelques heures
+plus tôt, un nettoyage de messages de test n'avait pas eu lieu parce
+qu'un `print` avait planté avant lui (espace fine insécable, console
+cp1252). Même classe de bug, deux fois. **Tout ce qui doit défaire
+quelque chose va dans un `finally`, jamais à la suite.**
+
+**Résultat après correction — les deux sens vérifiés :**
+
+| Simulation | Journal | Vérification |
+|---|---|---|
+| **Passe désobéissante** (`-Simuler`) | `ALERTE : config.py a ete MODIFIE` → `RESTAURE` ; `1 modele(s) laisse(s)` → `supprime : moondream:latest` | `MODEL_NAME` revenu à `gpt-oss:20b`, 14 modèles |
+| **Passe conforme** (`-SimulerConforme`) | `config.py inchange — conforme` ; `aucun modele residuel` | aucune fausse alerte, code 0 |
+
+Le second cas compte autant que le premier : un garde qui s'alarme
+**toujours** ne vaut pas mieux qu'un garde muet — il rendrait le journal
+illisible et on cesserait de le lire.
+
+**G3 (Godot) n'est volontairement pas simulé** : l'éprouver exigerait de
+lancer la fenêtre plein écran qui capte les clics, ce que l'interdiction
+couvre précisément. Sa logique est identique à G2 — relevé avant, diff
+après — et G2, lui, est éprouvé.
+
+État après les tests : `config.py` **byte-identique** à avant (empreinte
+vérifiée, `git status` vide), 14 modèles, 253 Go libres.
+
 ⚠️ **La tâche n'a PAS pu être créée par moi** : le classifieur de
 permissions a refusé `Register-ScheduledTask` puis `schtasks /Create`.
 Non contourné. Les deux scripts sont en place et validés

@@ -49,6 +49,27 @@
 # et laisse le point a la prochaine session ou Cyril est present.
 # L'empreinte git de Lucas3D/ sert de temoin, et G3 est le filet.
 
+# ── Mode -Simuler : eprouver les gardes, sans veille reelle ───────────
+#
+# Les trois gardes ci-dessus sont le filet d'une tache qui tournera sans
+# personne devant l'ecran. Les ecrire ne suffit pas : tant qu'on ne les
+# a pas VUES se declencher, ce ne sont que des intentions.
+#
+# En mode -Simuler, l'appel a Claude Code est remplace par une
+# desobeissance DELIBEREE — le script modifie lui-meme config.py et
+# telecharge un modele. G1 et G2 doivent l'annuler entierement.
+#
+# G3 (Godot) n'est volontairement PAS simule : le tester exigerait de
+# lancer la fenetre plein ecran qui capte les clics, ce que
+# l'interdiction couvre precisement. Sa logique est identique a G2
+# (releve avant / diff apres), qui, lui, est eprouve.
+# -SimulerConforme : l'autre moitie de la verification. Un garde qui
+# s'alarme TOUJOURS ne vaut pas mieux qu'un garde qui ne s'alarme
+# jamais — il suffirait qu'il compare mal pour crier au loup a chaque
+# passe et rendre le journal illisible. Ce mode joue une passe qui
+# respecte les regles : les gardes doivent rester SILENCIEUX.
+param([switch]$Simuler, [switch]$SimulerConforme)
+
 $ErrorActionPreference = "Stop"
 
 $Projet = "C:\OrionAI"
@@ -136,54 +157,96 @@ pas un echec.
 Termine par une ligne unique : VEILLE: <une phrase de conclusion>
 "@
 
+# ⚠️ LES GARDES SONT DANS UN `finally`, ET C'EST LE POINT ESSENTIEL.
+#
+# Trouve en eprouvant le script (mode -Simuler, 06/08/2026) : ecrits a
+# la suite du travail, ils NE S'EXECUTAIENT PAS quand le travail
+# echouait — c'est-a-dire precisement dans le cas ou ils servent.
+# La premiere simulation a interrompu le script APRES avoir modifie
+# config.py et AVANT G1 : la bascule interdite a survecu.
+#
+# Un garde qui ne se declenche que quand tout va bien n'est pas un
+# garde. `finally` est ce qui le rend inconditionnel.
 try {
-    $sortie = & claude -p $instruction `
-        --permission-mode dontAsk 2>&1 | Out-String
-    $code = $LASTEXITCODE
-} catch {
-    Ecrire "!! ECHEC de l'invocation : $($_.Exception.GetType().Name)"
-    $code = -1
-    $sortie = ""
-}
-Ecrire "claude a rendu le code $code"
-$conclusion = ($sortie -split "`n" | Where-Object { $_ -match '^VEILLE:' } | Select-Object -Last 1)
-if ($conclusion) { Ecrire "conclusion : $($conclusion.Trim())" }
-
-# ── G1 (controle) : config.py a-t-il bouge ? ──────────────────────────
-if ((Get-FileHash $Config).Hash -ne $empreinteAvant) {
-    $modeleApres = (Select-String -Path $Config -Pattern '^MODEL_NAME\s*=' |
-        Select-Object -First 1).Line
-    Ecrire "!! ALERTE : config.py a ete MODIFIE pendant la veille"
-    Ecrire "!!   avant : $modeleAvant"
-    Ecrire "!!   apres : $modeleApres"
-    Copy-Item $Sauve $Config -Force
-    Ecrire "!!   config.py RESTAURE — aucune bascule ne survit a une veille"
-}
-Remove-Item $Sauve -Force -ErrorAction SilentlyContinue
-
-# ── G2 (controle) : les candidats ont-ils ete nettoyes ? ──────────────
-$modelesApres = @(& ollama list 2>$null | Select-Object -Skip 1 |
-    ForEach-Object { ($_ -split '\s+')[0] } | Where-Object { $_ })
-$restes = @($modelesApres | Where-Object { $modelesAvant -notcontains $_ })
-if ($restes) {
-    Ecrire "$($restes.Count) modele(s) laisse(s) par la passe — suppression mecanique"
-    foreach ($m in $restes) {
-        try { & ollama rm $m 2>&1 | Out-Null; Ecrire "   supprime : $m" }
-        catch { Ecrire "   !! echec de suppression : $m" }
+    if ($SimulerConforme) {
+        # Une passe qui se tient bien : ne touche a rien, ne laisse rien.
+        Ecrire "[SIMULATION CONFORME] passe respectueuse — les gardes doivent rester muets"
+        $code = 0
+        $sortie = "VEILLE: simulation conforme"
+    } elseif ($Simuler) {
+        # Desobeissance deliberee, pour voir les gardes se declencher.
+        Ecrire "[SIMULATION] la passe va enfreindre les deux regles expres"
+        (Get-Content $Config -Raw) -replace 'MODEL_NAME = "gpt-oss:20b"',
+            'MODEL_NAME = "qwen3:14b"' | Set-Content $Config -Encoding utf8 -NoNewline
+        Ecrire "[SIMULATION] config.py modifie (bascule interdite)"
+        # Pas de `2>&1` sur un natif : voir la note de G2 ci-dessous.
+        & ollama pull "moondream:latest" | Out-Null
+        Ecrire "[SIMULATION] moondream:latest telecharge (candidat non nettoye)"
+        $code = 0
+        $sortie = "VEILLE: simulation, aucune mesure reelle"
+    } else {
+        try {
+            $sortie = & claude -p $instruction --permission-mode dontAsk | Out-String
+            $code = $LASTEXITCODE
+        } catch {
+            Ecrire "!! ECHEC de l'invocation : $($_.Exception.GetType().Name)"
+            $code = -1
+            $sortie = ""
+        }
     }
-} else {
-    Ecrire "aucun modele residuel — nettoyage conforme"
+    Ecrire "claude a rendu le code $code"
+    $conclusion = ($sortie -split "`n" |
+        Where-Object { $_ -match '^VEILLE:' } | Select-Object -Last 1)
+    if ($conclusion) { Ecrire "conclusion : $($conclusion.Trim())" }
 }
-
-# ── G3 (controle) : Godot a-t-il ete lance malgre l'interdiction ? ────
-$godotApres = @(Get-Process -Name "Godot*" -ErrorAction SilentlyContinue)
-$nouveaux = @($godotApres | Where-Object { $godotAvant.Id -notcontains $_.Id })
-if ($nouveaux) {
-    Ecrire "!! ALERTE : Godot a ete lance pendant une passe NON SUPERVISEE"
-    foreach ($p in $nouveaux) {
-        try { Stop-Process -Id $p.Id -Force; Ecrire "!!   arrete : PID $($p.Id)" }
-        catch { Ecrire "!!   echec de l'arret : PID $($p.Id)" }
+finally {
+    # ── G1 : config.py a-t-il bouge ? ─────────────────────────────────
+    if ((Get-FileHash $Config).Hash -ne $empreinteAvant) {
+        $modeleApres = (Select-String -Path $Config -Pattern '^MODEL_NAME\s*=' |
+            Select-Object -First 1).Line
+        Ecrire "!! ALERTE : config.py a ete MODIFIE pendant la veille"
+        Ecrire "!!   avant : $modeleAvant"
+        Ecrire "!!   apres : $modeleApres"
+        Copy-Item $Sauve $Config -Force
+        Ecrire "!!   config.py RESTAURE — aucune bascule ne survit a une veille"
+    } else {
+        Ecrire "config.py inchange — conforme"
     }
-}
+    Remove-Item $Sauve -Force -ErrorAction SilentlyContinue
 
-Ecrire "=== fin de la veille ==="
+    # ── G2 : les candidats ont-ils ete nettoyes ? ─────────────────────
+    #
+    # ⚠️ AUCUNE redirection `2>&1` ni `2>$null` sur `ollama`. En
+    # PowerShell 5.1, rediriger la sortie d'erreur d'un executable natif
+    # enveloppe chaque ligne dans un NativeCommandError — et avec
+    # $ErrorActionPreference = "Stop", cela INTERROMPT le script, meme
+    # quand l'executable rend 0. C'est ce qui a fait echouer la premiere
+    # simulation : `ollama pull ... 2>&1` a tue la passe avant les
+    # gardes. La sortie d'erreur est deja capturee, la rediriger
+    # n'apportait rien.
+    $modelesApres = @(& ollama list | Select-Object -Skip 1 |
+        ForEach-Object { ($_ -split '\s+')[0] } | Where-Object { $_ })
+    $restes = @($modelesApres | Where-Object { $modelesAvant -notcontains $_ })
+    if ($restes) {
+        Ecrire "$($restes.Count) modele(s) laisse(s) par la passe — suppression mecanique"
+        foreach ($m in $restes) {
+            try { & ollama rm $m | Out-Null; Ecrire "   supprime : $m" }
+            catch { Ecrire "   !! echec de suppression : $m" }
+        }
+    } else {
+        Ecrire "aucun modele residuel — nettoyage conforme"
+    }
+
+    # ── G3 : Godot a-t-il ete lance malgre l'interdiction ? ───────────
+    $godotApres = @(Get-Process -Name "Godot*" -ErrorAction SilentlyContinue)
+    $nouveaux = @($godotApres | Where-Object { $godotAvant.Id -notcontains $_.Id })
+    if ($nouveaux) {
+        Ecrire "!! ALERTE : Godot a ete lance pendant une passe NON SUPERVISEE"
+        foreach ($p in $nouveaux) {
+            try { Stop-Process -Id $p.Id -Force; Ecrire "!!   arrete : PID $($p.Id)" }
+            catch { Ecrire "!!   echec de l'arret : PID $($p.Id)" }
+        }
+    }
+
+    Ecrire "=== fin de la veille ==="
+}
