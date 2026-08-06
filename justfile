@@ -133,7 +133,7 @@ daemon-debug:
 # celui dans lequel Luca's tourne — et deux fichiers de tests n'étaient
 # jamais exécutés par elle.
 test:
-    venv/Scripts/python.exe -m pytest -v --ignore=test_voice.py --cov=core --cov=modules --cov=memory --cov=api --cov=security --cov-report=term-missing
+    venv/Scripts/python.exe -m pytest -v --ignore=test_voice.py --cov=core --cov=modules --cov=memory --cov=api --cov=security --cov=ui --cov-report=term-missing
 
 # Tests rapides (sans coverage)
 test-quick:

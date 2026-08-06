@@ -6672,6 +6672,90 @@ du son et appelant edge-tts en réseau, pas un test unitaire. Vérifié :
 ce fichier contient exactement 1 test. L'écart est attendu, pas une
 régression.
 
+## 5.63 Chantier `ui/` — le trou de couverture n'existait pas (06/08/2026)
+
+Ouvert à la demande de Cyril. **Première surprise : `ui/` était déjà
+propre** sur deux des trois portes — lint et mypy le couvrent depuis le
+chantier racine (§5.61), et passent. Il ne restait donc pas le chantier
+attendu.
+
+Le vrai manque était ailleurs : **`ui/` n'était pas mesuré par
+`just test`**. Sa couverture n'existait pas — personne ne pouvait savoir
+ce qui manquait.
+
+### Le chiffre était trompeur dans les deux sens
+
+Mesuré pour la première fois : `ui/avatar_widget.py` à **87 %**, avec 30
+lignes manquantes. Ces 30 lignes étaient... son bloc
+`if __name__ == "__main__":` — une démo de 64 lignes qui ouvre une
+fenêtre Qt et qu'**aucun test ne doit exécuter**.
+
+Le chiffre poussait donc à écrire un test artificiel pour combler un
+trou qui n'en était pas un. `.coveragerc` créé pour retirer du décompte
+ce qui n'est pas une vraie question : blocs de démonstration, branches
+`TYPE_CHECKING` (fausses par définition à l'exécution),
+`raise NotImplementedError`.
+
+**Résultat : `avatar_widget.py` passe à 100 %.** Le trou n'existait pas.
+
+### Ce qui manquait vraiment — `main_window.py`
+
+87 %, et là de vrais manques. Sept tests ajoutés
+(`test_main_window_paths.py`), tous sur les chemins d'**erreur** et de
+**voix** — ceux qui décident de ce que Cyril voit quand ça se passe mal :
+
+| Test | Ce qu'il protège |
+|---|---|
+| `_on_error` affiche l'erreur | Muette, une panne de génération laisserait Luca's figée sur « réfléchit… » sans explication — l'échec silencieux, transposé à l'interface |
+| `_on_error` rend la saisie | Après une erreur, Cyril doit pouvoir réessayer tout de suite |
+| **`_on_tts_error` écrit le message** | ⚠️ **Le cas qui compte le plus.** Piper indisponible sur du contenu sensible = rien n'est prononcé (règle TTS). Mais un silence non expliqué est indiscernable d'une panne : Cyril croirait la voix cassée alors que Luca's protège ses données |
+| SPEAKING seulement au démarrage du son | Basculer à la synthèse ferait « parler » l'avatar dans le silence |
+| retour à IDLE en fin de voix | — |
+| bascule TTS : état **et** bouton | Un bouton qui ment sur l'état réel de la voix est pire que pas de bouton |
+| le 1er jeton masque le statut | Sinon « Réflexion… » et la réponse se superposent |
+
+### ⚠️ Les tests ont été mis à l'épreuve, pas seulement écrits
+
+Sept tests verts ne prouvent rien s'ils passeraient aussi avec le
+comportement retiré. Chaque comportement a donc été **cassé
+délibérément**, un par un, pour vérifier que son test vire au rouge :
+
+```
+_on_error n'affiche plus l'erreur                   -> ROUGE (bon)
+_on_tts_error n'affiche plus le message             -> ROUGE (bon)
+l'avatar passe en SPEAKING trop tôt (avant le son)  -> ROUGE (bon)
+code restauré
+```
+
+Restauration vérifiée par `git diff` vide sur `ui/main_window.py`.
+
+### Ce qui reste non couvert, et pourquoi
+
+`main_window.py` : 91 %, 28 lignes. Elles se rangent en trois familles,
+toutes coûteuses à couvrir pour un gain faible :
+
+- **Replis d'import** (34-35, 40-42, 289-293) — n'arrivent que si
+  `AvatarWidget` ou `VoiceManager` échouent à s'importer.
+- **Lancements de threads réels** (573-586 `_speak`, 623-630 STT) — les
+  couvrir démarrerait de vrais `QThread` dans la suite. Leurs
+  *conséquences* (les handlers `_on_playback_started`, `_on_tts_error`…)
+  sont couvertes, c'est ce qui compte.
+- **Attentes de fermeture** (691, 693) — `wait(2000)` sur des threads qui
+  ne tournent pas en test.
+
+### État
+
+| | Avant | Après |
+|---|---|---|
+| `ui/` mesuré par `just test` | **non** | oui |
+| `ui/avatar_widget.py` | non mesuré (87 % trompeur) | **100 %** |
+| `ui/main_window.py` | non mesuré (87 %) | **91 %** |
+| Couverture totale | 97 % | **98 %** |
+| Tests | 1 297 | **1 304** |
+
+`just check` : code de retour **0** — lint, 1 304 tests, mypy sur 109
+fichiers.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

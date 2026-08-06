@@ -1,0 +1,28 @@
+# .coveragerc — ce que la couverture doit ignorer (06/08/2026)
+#
+# ── Pourquoi ce fichier existe ────────────────────────────────────────
+#
+# Créé en ouvrant le chantier `ui/`. `ui/avatar_widget.py` affichait 87 %
+# de couverture, et les 30 lignes manquantes étaient... son bloc
+# `if __name__ == "__main__":` — une démo de 64 lignes qui ouvre une
+# fenêtre Qt. Aucun test ne peut ni ne doit l'exécuter.
+#
+# Le chiffre était donc trompeur dans les deux sens : il donnait
+# l'impression d'un trou de couverture là où il n'y en a pas, et il
+# aurait poussé à écrire un test artificiel pour le combler.
+#
+# Une couverture n'est utile que si chaque ligne manquante est une vraie
+# question. Ce fichier retire du décompte ce qui n'en est pas une.
+
+[report]
+exclude_also =
+    # Blocs de démonstration : ouvrent une fenêtre, jouent du son.
+    # Lancés à la main, jamais par la suite.
+    if __name__ == .__main__.:
+
+    # Branches réservées au typage : `TYPE_CHECKING` est faux à
+    # l'exécution par définition (voir modules/piper_engine.py).
+    if TYPE_CHECKING:
+
+    # Méthodes abstraites : leur corps n'est jamais exécuté.
+    raise NotImplementedError
