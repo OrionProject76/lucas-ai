@@ -135,7 +135,7 @@ class VoiceManager:
             while pygame.mixer.music.get_busy():
                 pygame.time.Clock().tick(10)
             return True
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — un souci audio ne doit
             # jamais faire tomber le thread TTS ni l'UI.
             print(f"Erreur lecture audio: {e}")
             return False
@@ -151,7 +151,7 @@ class VoiceManager:
             if pygame.mixer.get_init():
                 pygame.mixer.music.stop()
                 pygame.mixer.music.unload()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — libérer au mieux
             # Pas de silence complet : si la libération échoue, la
             # synthèse suivante butera sur un fichier verrouillé et il
             # faut pouvoir relier les deux.

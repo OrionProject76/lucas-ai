@@ -33,6 +33,7 @@ import pytest
 
 from core.lucas_core import claims_action_success, is_vision_refusal
 
+
 # ── Fausses confirmations d'action ────────────────────────────────────
 
 

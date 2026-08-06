@@ -22,6 +22,7 @@ from core import lucas_core
 from core.lucas_core import LucasCore, fit_history_to_budget
 from test_memory_double import MemoryDouble
 
+
 # ── fit_history_to_budget() ───────────────────────────────────────────
 
 def test_the_budget_is_a_volume_not_a_message_count() -> None:

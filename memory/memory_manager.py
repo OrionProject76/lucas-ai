@@ -32,13 +32,13 @@ def save_event_from_any_thread(event_type: str, details: str = "") -> bool:
         memory = MemoryManager()
         memory.save_event(event_type, details)
         return True
-    except Exception:
+    except Exception:  # noqa: BLE001 — voir docstring
         return False
     finally:
         if memory is not None:
             try:
                 memory.close()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — une connexion non
                 # refermée fuit une ressource : à voir, pas à taire.
                 print(f"[Mémoire] Fermeture de connexion impossible : {e}")
 

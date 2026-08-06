@@ -37,9 +37,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from config import RAG_MAX_DISTANCE
-from core.local_llm import ask_local
-from modules.rag_manager import RAGManager
+from config import RAG_MAX_DISTANCE  # noqa: E402
+from core.local_llm import ask_local  # noqa: E402
+from modules.rag_manager import RAGManager  # noqa: E402
 
 # En dessous, la mesure ne veut rien dire : c'est le cas de la base
 # actuelle (2 chunks d'un document d'exemple), celui qu'on cherche

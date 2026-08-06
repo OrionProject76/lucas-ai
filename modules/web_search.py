@@ -125,7 +125,7 @@ class WebSearch:
         try:
             with DDGS() as ddgs:
                 return list(ddgs.text(query, max_results=max_results))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — le réseau ne doit jamais
             # faire tomber l'appelant : on dégrade, on ne plante pas.
             logger.error("Erreur recherche web : %s", e)
             return [{

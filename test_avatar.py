@@ -576,7 +576,7 @@ def test_mouth_ratio_is_clamped(avatar) -> None:
 # vérifie l'INVERSE), mais jamais la mise à jour de position elle-même.
 
 def test_mouse_move_updates_the_tracked_position(avatar) -> None:
-    from PySide6.QtCore import QPointF, Qt
+    from PySide6.QtCore import Qt, QPointF
     from PySide6.QtGui import QMouseEvent
 
     event = QMouseEvent(
@@ -590,7 +590,7 @@ def test_mouse_move_updates_the_tracked_position(avatar) -> None:
 
 def test_eyes_follow_the_tracked_position_outside_watching(avatar) -> None:
     """paintEvent() calcule le décalage des yeux à partir de mouse_pos : vérifié via un rendu réel."""
-    from PySide6.QtCore import QPointF, Qt
+    from PySide6.QtCore import Qt, QPointF
     from PySide6.QtGui import QMouseEvent
 
     avatar.set_state(IDLE)

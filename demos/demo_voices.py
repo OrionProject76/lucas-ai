@@ -51,7 +51,7 @@ def _play_edge(voice: str, sentence: str, output: Path) -> bool:
     manager = VoiceManager(voice=voice)
     try:
         manager._synthesize_edge(sentence, str(output))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — une voix indisponible ne doit
         # pas interrompre la comparaison des autres.
         print(f"    échec : {e}")
         return False

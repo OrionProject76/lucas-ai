@@ -34,6 +34,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import shutil
 import sys
@@ -43,9 +44,9 @@ from pathlib import Path
 if __package__ in (None, ""):  # exécution directe : python memory/index_documents.py
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from config import DOCUMENTS_DIR
-from modules.ocr_engine import OCREngine, OCRUnavailable
-from modules.rag_manager import RAGManager
+from config import DOCUMENTS_DIR  # noqa: E402
+from modules.ocr_engine import OCREngine, OCRUnavailable  # noqa: E402
+from modules.rag_manager import RAGManager  # noqa: E402
 
 # Formats lus sans dépendance supplémentaire.
 #
@@ -218,7 +219,7 @@ def _rasteriser_pdf(path: Path) -> Path:
             for i, page in enumerate(document):
                 pixmap = page.get_pixmap(dpi=200)
                 pixmap.save(str(tmp_dir / f"page_{i:03d}.png"))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — fitz lève des types variés
         shutil.rmtree(tmp_dir, ignore_errors=True)
         raise OCRUnavailable(f"rendu PDF impossible ({type(exc).__name__})") from exc
     return tmp_dir
@@ -271,13 +272,13 @@ def _read_pdf(path: Path, ocr_engine: OCREngine | None = None) -> str:
             # d'abandonner.
             try:
                 reader.decrypt("")
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 raise UnreadablePDF("PDF chiffré, mot de passe requis") from exc
 
         pages = [_extract_page(page) for page in reader.pages]
     except UnreadablePDF:
         raise
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — pypdf lève des types variés
         raise UnreadablePDF(f"illisible ({type(exc).__name__})") from exc
 
     texte = "\n\n".join(p.strip() for p in pages if p.strip())
@@ -322,7 +323,7 @@ def _read_docx(path: Path) -> str:
 
     try:
         document = docx.Document(str(path))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — python-docx lève des types variés
         raise UnreadableDOCX(f"illisible ({type(exc).__name__})") from exc
 
     blocs = [p.text.strip() for p in document.paragraphs if p.text.strip()]
@@ -483,7 +484,7 @@ def index_directory(
     directory = Path(directory)
     if not directory.is_dir():
         print(f"Dossier introuvable : {directory}")
-        print("Le créer et y déposer des documents, puis relancer.")
+        print(f"Le créer et y déposer des documents, puis relancer.")
         return 1
 
     rag = RAGManager()

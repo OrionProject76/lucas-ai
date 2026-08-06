@@ -39,7 +39,7 @@ def _ollama_models() -> list[str]:
         base = OLLAMA_URL.rsplit("/api/", 1)[0]
         response = requests.get(f"{base}/api/tags", timeout=OLLAMA_TIMEOUT)
         return [model["name"] for model in response.json().get("models", [])]
-    except Exception:
+    except Exception:  # noqa: BLE001 — absence = saut, jamais échec
         return []
 
 

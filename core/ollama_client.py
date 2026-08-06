@@ -66,5 +66,5 @@ def is_ready(base_url: str, timeout: float = 3.0) -> bool:
     try:
         response = requests.get(f"{base_url}/api/tags", timeout=timeout)
         return bool(response.json().get("models"))
-    except Exception:
+    except Exception:  # noqa: BLE001 — indisponible = pas prêt
         return False

@@ -2,7 +2,7 @@
 
 import re
 import time
-from collections.abc import Callable
+from typing import Callable
 
 from config import (
     CLOUD_HISTORY_MESSAGES,
@@ -16,16 +16,16 @@ from config import (
     REANCHOR_SYSTEM_PROMPT,
     REASONING_ENGINE_ENABLED,
     RECENT_EVENTS_IN_PROMPT,
-    SOURCE_HISTORY_MESSAGES,
     SYSTEM_PROMPT,
     VISION_ENABLED,
+    SOURCE_HISTORY_MESSAGES,
     VLM_ENABLED,
     VLM_MAX_CHARS,
     VLM_MODEL,
 )
-from core.aura_modes import AuraModeEngine, tone_hint
 from core.cloud_llm import ask_cloud
 from core.local_llm import ask_local
+from core.aura_modes import AuraModeEngine, tone_hint
 from core.memory_weighting import annotate_uncertain_events, annotate_uncertain_history
 from core.reasoning_engine import ReasoningEngine
 from core.router import (
@@ -75,7 +75,7 @@ def _emit(on_activity: ActivityCallback | None, kind: str, text: str) -> None:
         return
     try:
         on_activity(kind, text)
-    except Exception:
+    except Exception:  # noqa: BLE001 — voir docstring
         pass
 
 
@@ -583,7 +583,7 @@ class LucasCore:
             # réponse de mémoire générale comme venant des documents.
             try:
                 rag_context = RAGManager().get_context(user_message)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — panne d'un module optionnel
                 self.log_event("rag_unavailable", type(exc).__name__)
                 _emit(on_activity, "documents_searched", "documents personnels — recherche indisponible")
                 rag_context = (
@@ -1052,7 +1052,7 @@ class LucasCore:
             # deux donnerait deux écrans différents si Cyril change de
             # fenêtre entre-temps.
             screenshot = vision.capture_screen()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — voir docstring
             self.log_event("vision_failed", str(e)[:200])
             return ""
 
@@ -1070,7 +1070,7 @@ class LucasCore:
             from modules.vision_manager import VisionManager
 
             vision = VisionManager(model=VLM_MODEL)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — voir _describe_screen
             self.log_event("vision_failed", str(e)[:200])
             return ""
 
@@ -1145,7 +1145,7 @@ class LucasCore:
             from modules.ocr_engine import OCREngine
 
             result = OCREngine().extract_text(screenshot)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — un OCR absent dégrade la
             # réponse, il ne doit pas empêcher Luca's de répondre.
             self.log_event("ocr_failed", str(e)[:120])
             return ""
@@ -1170,7 +1170,7 @@ class LucasCore:
             description = vision.analyze_image(
                 screenshot, self._vision_prompt(user_message)
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.log_event("vision_failed", str(e)[:120])
             return ""
 

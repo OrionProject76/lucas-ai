@@ -107,7 +107,7 @@ def categorize_by_llm(label: str, ask: Callable[[list[dict]], str] | None = None
 
     try:
         answer = ask(build_prompt(label))
-    except Exception:
+    except Exception:  # noqa: BLE001 — un LLM indisponible ne doit pas
         # faire échouer tout un import de relevé.
         return UNCATEGORIZED
 
