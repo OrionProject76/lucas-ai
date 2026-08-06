@@ -6886,6 +6886,122 @@ code de retour : 0
 | Couverture | 97 %, `ui/` non mesuré | **100 %** |
 | Tests | 1 297 | **1 345** |
 
+## 5.65 Campagne de mutation finale — 99,5 %, et deux défauts de MESURE (06/08/2026)
+
+Section promise par le rapport de session
+(`cowork_workspace/reports/Rapport_Session_Qualite_2026-08-06.md`), qui y
+renvoyait avant qu'elle n'existe. Écrite le soir même, au contrôle de
+cohérence documentaire d'avant-Godot (§5.66) — une référence qui pointe
+dans le vide est exactement le genre de détail que ce contrôle cherche.
+
+**Le résultat, seconde passe complète sur toute la suite :**
+
+```
+MUTANTS      : 605       tués : 602   survivants : 1   ignorés : 4
+SCORE        : 99.5 %    durée : 53,4 min
+```
+
+**40 modules sur 41 à 100 %.** Le seul en dessous est `core/intent.py`
+(96,4 %), et son unique survivant est le mutant `intent.py:350`
+`False` → `True`, **prouvé équivalent** : `classify(precedente, "",
+_inherit=False)` passe un contexte vide, et la garde ligne 337 s'écrit
+`if _inherit and context and ...` — la condition est fausse quelle que
+soit la valeur de `_inherit`. Preuve et non argument : les deux versions
+comparées sur 5 questions elliptiques rendent une sortie identique
+caractère par caractère.
+
+**⚠️ Ce que le score ne dit pas, et qui compte plus que le score.**
+
+La première passe avait rendu 99,0 % — sur un jeu **amputé**. Deux
+défauts de mesure, tous deux dans mon outillage, pas dans le code testé :
+
+| Défaut | Effet | Comment il a été trouvé |
+|---|---|---|
+| Le garde de frontière de mot examinait le caractère suivant l'espace de `"not "`, presque toujours une lettre | **110 mutations de négation** silencieusement écartées — une catégorie entière | La seconde passe complète, en recomptant les mutants par module |
+| 8 survivants sur 11 réellement revérifiés, 11 annoncés | `privacy_shield:154` et `:189` comptés comme traités sans preuve | La même seconde passe |
+
+Les négations ont ensuite été mesurées séparément : **115 mutants, 114
+tués**. Un outil de mesure qui écarte discrètement ce qu'il ne sait pas
+traiter flatte son propre résultat — précisément ce que cette campagne
+cherche à débusquer dans le code.
+
+**Reste une zone d'ombre assumée** : 605 mutants appliqués mais **603
+mesurés**. 2 ont expiré (limite 180 s) et n'ont jamais été évalués. Ils
+sont comptés comme *non tués* dans le 99,5 % (sens prudent), et les 4
+« ignorés » se décomposent en ces 2 expirations + 2 points refusés par le
+garde de frontière de mot. Score sur le seul mesuré : **602/603 =
+99,83 %**. **Défaut d'outillage à corriger avant la prochaine
+campagne : le script ne journalise pas LESQUELS ont expiré.**
+
+**Et la réserve de fond** : 99,5 % ne veut pas dire « le code est sans
+bug ». Cela veut dire que *les mutations que mon outil sait produire sont
+toutes détectées par la suite*. Un bug de conception, une exigence mal
+comprise, une interaction entre modules — rien de cela ne se mute. La
+mutation mesure la **qualité des tests**, pas la justesse du produit.
+C'est pour ça que la validation en usage réel reste entière.
+
+Production vérifiée **intacte** après la campagne (`git diff --numstat`
+vide sur `modules/ core/ api/ memory/ security/ ui/`).
+
+## 5.66 Revalidation générale d'avant-Godot — 12 points en conditions réelles (06/08/2026)
+
+Demandée par Cyril avant d'ouvrir le chantier Godot : un état des lieux
+qui ne se contente pas de relancer `just check` (déjà vert, déjà
+documenté), mais **rejoue les points sensibles en usage réel**. Rapport
+complet : `cowork_workspace/reports/Etat_Lieux_Avant_Godot_2026-08-06.md`.
+
+**Ce que la vérification a confirmé** : suite verte (1 446 tests, 100 %
+de couverture, 0 ruff, 0 mypy sur 116 fichiers) ; jeton actif accepté et
+4 formes invalides rejetées en 401 ; CORS correct sur les 4 origines
+déclarées et refusé sur une origine étrangère ; Tailscale et le VPN
+Bitdefender **simultanément actifs** avec la route par défaut toujours
+sur l'Ethernet local (split tunneling intact) et les 3 adresses
+joignables ; `gpt-oss:20b` seul chargé, 100 % GPU, une seule instance
+Ollama ; personnalité conforme (se présente « Luca », tutoie, aucun
+script d'accueil figé — deux « salut » donnent deux réponses
+différentes) ; Decision Engine de bout en bout (`launch_notepad`,
+journalisé `result=executed`) ; les 2 CSV réels réimportés sans erreur ;
+4 tâches planifiées bien enregistrées ; les 4 documents de référence
+synchronisés avec `cowork_workspace/`.
+
+**Le bug TTS du 05/08 rejoué sous sa cause exacte** plutôt que constaté
+au repos : une instance `VoiceManager` partagée, deux synthèses
+**concurrentes** de longueurs très différentes. Chemins distincts,
+rapport de tailles 5,7× — aucune troncature. C'est le scénario qui
+produisait le bug, pas une approximation.
+
+**Deux écarts trouvés, aucun n'est une régression** :
+
+1. **Le daemon de sécurité ne tourne pas.** `get_status()` rend
+   `active=False`, dernier balayage le **01/08/2026 13:59** — 5 jours.
+   Aucun process, **aucune tâche planifiée**. Cohérent avec §4
+   (« le daemon étant prévu en service Windows via NSSM ») : l'install
+   NSSM n'a jamais eu lieu. Le niveau 1 est construit et testé (94
+   tests), il n'observe simplement rien. Le panneau le dit honnêtement
+   — c'est le correctif de la fenêtre 24 h (§5.59) qui le rend lisible
+   au lieu d'afficher un faux « 0 signal ».
+
+   ⚠️ Noté au passage, parce que c'est le sujet même de cette section :
+   les trois renvois de ce paragraphe ont d'abord été écrits **faux**
+   (§5.x, §5.60), et corrigés en les vérifiant un par un. Écrire une
+   référence de mémoire est un geste qui rate silencieusement. Le
+   contrôle qui les a rattrapées était un script **jetable**, écrit pour
+   l'occasion : aucun garde permanent n'existe aujourd'hui contre une
+   référence morte. En faire une vérification durable est une piste, pas
+   un acquis — rien n'a été construit dans cette passe, qui était de
+   vérification seule.
+2. **`ruff format` n'a jamais été appliqué** — 95 fichiers seraient
+   reformatés. État délibéré : `format` a été **séparé** de `lint` dans
+   le justfile (§5.59) pour qu'un reformatage massif ne se déclenche
+   jamais en effet de bord. Ce n'est pas une dette cachée, c'est une
+   décision en attente d'arbitrage.
+
+Deux points **non vérifiables sans le téléphone**, signalés comme tels
+plutôt que déclarés bons : les correctifs **mute** et **micro** du 05/08
+vivent dans la PWA (`static/js/voice_output.js`, `audio.js`). Leur
+présence dans le code est vérifiée, leur comportement non — il faut le
+S25 Ultra et une action de Cyril.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
