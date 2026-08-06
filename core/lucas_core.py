@@ -692,23 +692,33 @@ class LucasCore:
         if not is_cloud and should_use_calculator(user_message):
             from modules.calculator import Calculator
 
+            # ⚠️ `expression` ne peut PAS être None ici : should_use_calculator()
+            # ne rend True que si extract_calculation() aboutit — l'invariant
+            # vit dans core/router.py (l.345), mypy ne peut pas le voir.
+            #
+            # La garde n'est donc pas cosmétique : si quelqu'un relâche ce
+            # couplage un jour, mieux vaut ne rien dire que passer None à
+            # l'évaluateur. On ne produit alors AUCUN bloc de contexte —
+            # surtout pas celui de l'échec, qui annoncerait au modèle
+            # « une expression a été détectée » en désignant None.
             expression = extract_calculation(user_message)
-            result = Calculator().calculate(expression)
-            if result is not None:
-                calculation_context = (
-                    f"CALCUL RÉEL EFFECTUÉ : {expression} = {result}\n\n"
-                    "Utilise EXACTEMENT ce résultat. INTERDIT : recalculer, "
-                    "arrondir différemment, ou corriger ce nombre — même s'il "
-                    "te semble étrange, c'est le résultat réel."
-                )
-                _emit(on_activity, "calculated", f"calcul — {expression} = {result}")
-            else:
-                calculation_context = (
-                    f"UNE EXPRESSION A ÉTÉ DÉTECTÉE ({expression!r}) MAIS N'A "
-                    "PAS PU ÊTRE ÉVALUÉE (syntaxe invalide ou division par "
-                    "zéro).\n\nDis-le à Cyril plutôt que d'inventer un résultat."
-                )
-                _emit(on_activity, "calculated", f"calcul — expression invalide ({expression})")
+            if expression is not None:
+                result = Calculator().calculate(expression)
+                if result is not None:
+                    calculation_context = (
+                        f"CALCUL RÉEL EFFECTUÉ : {expression} = {result}\n\n"
+                        "Utilise EXACTEMENT ce résultat. INTERDIT : recalculer, "
+                        "arrondir différemment, ou corriger ce nombre — même s'il "
+                        "te semble étrange, c'est le résultat réel."
+                    )
+                    _emit(on_activity, "calculated", f"calcul — {expression} = {result}")
+                else:
+                    calculation_context = (
+                        f"UNE EXPRESSION A ÉTÉ DÉTECTÉE ({expression!r}) MAIS N'A "
+                        "PAS PU ÊTRE ÉVALUÉE (syntaxe invalide ou division par "
+                        "zéro).\n\nDis-le à Cyril plutôt que d'inventer un résultat."
+                    )
+                    _emit(on_activity, "calculated", f"calcul — expression invalide ({expression})")
 
         # Recherche web (modules/web_search.py, câblé le 04/08/2026).
         # Déclenchement volontairement étroit (voir should_use_websearch) :
@@ -834,7 +844,18 @@ class LucasCore:
         # ask(). Un témoin qui resterait vrai d'un tour sur l'autre
         # rouvrirait exactement la faille qu'il ferme.
         self._action_executed = False
-        if not is_cloud and should_use_automation(user_message):
+        # ⚠️ On teste `app_name is not None` plutôt que
+        # `should_use_automation(user_message)`, et c'est STRICTEMENT
+        # ÉQUIVALENT : cette fonction se réduit à
+        # `extract_app_name(text) is not None` (core/router.py l.505).
+        #
+        # Trois gains, aucun changement de comportement : l'extraction n'est
+        # plus faite deux fois, l'invariant devient lisible sur place, et
+        # `app_name` est un `str` garanti là où il servait — il alimentait
+        # `f"launch_{app_name}"`, qui aurait produit l'action fantôme
+        # « launch_None » si le couplage se relâchait un jour.
+        app_name = extract_app_name(user_message) if not is_cloud else None
+        if app_name is not None:
             from core.decision_engine import (
                 ActionDenied,
                 DecisionEngine,
@@ -842,7 +863,6 @@ class LucasCore:
             )
             from modules.automation_manager import AutomationManager
 
-            app_name = extract_app_name(user_message)
             action_name = f"launch_{app_name}"
             engine = DecisionEngine(confirm=lambda spec: True)
             for spec in automation_manager_actions():

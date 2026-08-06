@@ -165,8 +165,18 @@ class FinanceManager:
         # deviner par le Sniffer) reste une déduction bornée, pas un
         # essai au hasard.
         candidates = [d for d in (sniffed, ",", ";") if d]
+        # Dédoublonnage en conservant l'ordre. Écrit auparavant
+        # `[d for d in candidates if not (d in seen or seen.add(d))]` —
+        # l'idiome fonctionne (`set.add` rend None, donc falsy), mais il
+        # repose sur la valeur de retour d'une méthode qui n'en a pas, ce
+        # que mypy signale à juste titre. La boucle explicite dit la même
+        # chose sans astuce.
         seen: set[str] = set()
-        delimiters_to_try = [d for d in candidates if not (d in seen or seen.add(d))]
+        delimiters_to_try: list[str] = []
+        for d in candidates:
+            if d not in seen:
+                seen.add(d)
+                delimiters_to_try.append(d)
 
         header_row: list[str] | None = None
         columns: dict[str, str] = {}

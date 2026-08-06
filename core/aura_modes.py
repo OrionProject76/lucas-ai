@@ -285,6 +285,12 @@ class AuraModeEngine:
     _STATE_KEY = "aura_deep_focus"
 
     def __init__(self, store: tuple[Callable[[], str | None], Callable[[str], None]] | None = None) -> None:
+        # Annotations explicites : le déballage d'un `tuple | None` avec un
+        # repli `(None, None)` ne donne à mypy aucun type déductible pour
+        # les deux attributs. Les nommer dit ce que la classe accepte —
+        # soit les deux fonctions de stockage, soit aucune.
+        self._read: Callable[[], str | None] | None
+        self._write: Callable[[str], None] | None
         self._read, self._write = store if store else (None, None)
         self._deep_focus_active = False
         if self._read is not None:

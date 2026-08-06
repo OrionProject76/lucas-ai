@@ -20,8 +20,14 @@ from __future__ import annotations
 
 import ast
 import operator
+from collections.abc import Callable
 
-_OPERATEURS_BINAIRES = {
+# Annotations explicites : sans elles, mypy infère un type de valeur trop
+# large pour ces tables et refuse l'appel `_OPERATEURS_UNAIRES[...](x)`
+# (« Cannot call function of unknown type »). Le nommer sert aussi de
+# contrat : ces tables ne contiennent QUE des fonctions numériques —
+# c'est ce qui rend l'évaluateur sûr sans `eval()`.
+_OPERATEURS_BINAIRES: dict[type[ast.operator], Callable[[float, float], float]] = {
     ast.Add: operator.add,
     ast.Sub: operator.sub,
     ast.Mult: operator.mul,
@@ -30,7 +36,7 @@ _OPERATEURS_BINAIRES = {
     ast.Pow: operator.pow,
 }
 
-_OPERATEURS_UNAIRES = {
+_OPERATEURS_UNAIRES: dict[type[ast.unaryop], Callable[[float], float]] = {
     ast.USub: operator.neg,
     ast.UAdd: operator.pos,
 }

@@ -6409,6 +6409,74 @@ qu'il est réellement couvert — `test_websocket_sends_speech_when_requested`
 écrit un vrai fichier et compare
 `base64.b64decode(speech["audio_base64"]) == b"FAKE-MP3-BYTES"`.
 
+## 5.60 Les 6 erreurs mypy — deux invariants invisibles, aucun bug réel (06/08/2026)
+
+`just mypy`, réparé au §5.59, rapportait 6 erreurs sur 38 fichiers. Il
+n'avait jamais pu tourner ; c'était donc sa première lecture du code.
+
+**Verdict : aucun bug atteignable.** Les deux plus inquiétantes
+reposaient sur des invariants que mypy ne peut pas voir — vérifiés plutôt
+que supposés.
+
+### Les deux `str | None`
+
+`core/lucas_core.py` passait `extract_calculation(...)` à
+`Calculator().calculate(str)` et `extract_app_name(...)` à
+`open_app(str)`. Les deux extracteurs peuvent rendre `None`.
+
+**Atteignable ?** Non, et c'est structurel :
+
+```python
+def should_use_calculator(text):  # core/router.py l.345
+    return contains_any(text, KEYWORDS_CALCULATOR) and extract_calculation(text) is not None
+
+def should_use_automation(text):  # core/router.py l.505
+    return extract_app_name(text) is not None
+```
+
+Le routeur ne dit « oui » que si l'extraction aboutit. Cherché un
+contre-exemple sur des formulations volontairement bancales
+(« calcule », « ouvre », « lance le truc ») : **aucune divergence**.
+
+**Corrections, différentes selon le cas :**
+
+- **Calculateur** — garde explicite. Si le couplage se relâchait un jour,
+  on ne produit alors *aucun* bloc de contexte : surtout pas celui de
+  l'échec, qui annoncerait au modèle « une expression a été détectée » en
+  désignant `None`.
+- **Automation** — la condition devient `app_name is not None` au lieu de
+  `should_use_automation(user_message)`. **Strictement équivalent**, la
+  seconde se réduisant littéralement à la première. Vérifié sur 20
+  formulations : **0 divergence**. Trois gains, zéro changement de
+  comportement — l'extraction n'est plus faite deux fois, l'invariant
+  devient lisible sur place, et `app_name` est un `str` garanti là où il
+  servait à construire `f"launch_{app_name}"`, qui aurait produit
+  l'action fantôme `launch_None`.
+
+### Les quatre autres
+
+| Fichier | Cause | Traitement |
+|---|---|---|
+| `modules/finance_manager.py:169` | `[d for d in candidates if not (d in seen or seen.add(d))]` — idiome de dédoublonnage qui **fonctionne** (`set.add` rend `None`, donc falsy) mais s'appuie sur la valeur de retour d'une méthode qui n'en a pas | Boucle explicite : même résultat, sans astuce |
+| `modules/calculator.py:51` | Type de valeur des tables d'opérateurs non inféré → « Cannot call function of unknown type » | Annotées. Le type sert aussi de contrat : ces tables ne contiennent QUE des fonctions numériques — c'est ce qui rend l'évaluateur sûr sans `eval()` |
+| `core/aura_modes.py:288` ×2 | Déballage d'un `tuple | None` avec repli `(None, None)` : aucun type déductible | Attributs annotés explicitement |
+
+**`Success: no issues found in 38 source files`.**
+
+⚠️ Reste une **note**, pas une erreur : `modules/rag_manager.py:201` —
+« bodies of untyped functions are not checked ». Passer
+`--check-untyped-defs` révélerait un lot supplémentaire. Non fait ici :
+c'est un élargissement de périmètre, même nature que la question du jeu
+de règles ruff, et il revient à Cyril.
+
+### Vérifications
+
+`just lint` **All checks passed!**, `just mypy` **Success**, suite
+**1 298 passés**, dont les 57 de `test_false_action_claim.py` et
+`test_decision_engine.py` — qui couvrent précisément le chemin
+d'automation modifié, y compris le « ouvre le bloc note » singulier à
+l'origine de la fausse confirmation du 05/08.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
