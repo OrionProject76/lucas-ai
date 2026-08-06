@@ -6469,6 +6469,52 @@ contre-exemple sur des formulations volontairement bancales
 c'est un élargissement de périmètre, même nature que la question du jeu
 de règles ruff, et il revient à Cyril.
 
+### `--check-untyped-defs` activé — 1 seule erreur, et `security/` entre au périmètre
+
+Cyril l'a demandé juste après. Impact **mesuré avant activation**, comme
+pour la config ruff : je m'attendais à « un lot supplémentaire »,
+il y en avait **une**.
+
+Sans ce drapeau, mypy **ignore le corps de toute fonction sans
+annotations** — une large part du projet n'était donc pas vérifiée, en
+silence. C'est exactement le motif traqué ailleurs : un outil qui rend
+« Success » sur du code qu'il n'a pas lu.
+
+**L'erreur** — `modules/piper_engine.py` : `self._loaded_voice = None`
+en cache initial fige le type à `None`, et l'affectation du modèle chargé
+devient invalide.
+
+Correction non triviale : `PiperVoice` est importé **tardivement, à
+dessein** — `piper` est une dépendance optionnelle, l'importer en tête de
+module ferait échouer l'import du projet entier sur une machine sans
+Piper, alors que le repli TTS existe précisément pour ce cas. D'où un
+import sous `if TYPE_CHECKING:`, qui ne s'exécute jamais au runtime.
+
+**Vérifié que l'optionnalité tient toujours** :
+
+```
+module importe sans charger piper : True
+```
+
+Et vérifié que Piper fonctionne réellement, pas seulement qu'il type :
+`synthesize()` produit un **WAV de 64 556 octets**, cache rempli d'un
+vrai `PiperVoice`.
+
+**`security/` ajouté au périmètre mypy** : mesuré à **0 erreur sur 9
+fichiers**, donc gratuit — et c'est le module où `CLAUDE.md` place le
+plus d'exigence. Même correction de périmètre que pour `just lint`.
+
+⚠️ **Restent dehors, chiffres à l'appui** :
+
+| Périmètre | Erreurs | Nature |
+|---|---|---|
+| `ui/` | **13** | Toutes des attributs Qt inconnus des stubs PySide6 (`Qt.ScrollBarAsNeeded`…). Faux positifs de stub, pas des défauts — les traiter demanderait des `type: ignore` en série |
+| racine | **73** sur 24 fichiers | tests, `main.py`, `lucas_daemon.py` |
+
+Les intégrer est une décision de Cyril, pas un réglage d'outil.
+
+**`Success: no issues found in 47 source files`** (contre 38 avant).
+
 ### Vérifications
 
 `just lint` **All checks passed!**, `just mypy` **Success**, suite

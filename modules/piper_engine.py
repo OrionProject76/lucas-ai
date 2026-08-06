@@ -3,10 +3,21 @@
 # Isolé de VoiceManager pour que celui-ci reste lisible : ici on ne fait que
 # charger un modèle .onnx et produire un WAV. Aucune décision de routage.
 
+from __future__ import annotations
+
 import wave
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from config import PIPER_VOICE, PIPER_VOICES_DIR
+
+if TYPE_CHECKING:
+    # ⚠️ Import RÉSERVÉ au typage, jamais exécuté au runtime. `piper` est
+    # une dépendance optionnelle : le charger en tête de module ferait
+    # échouer l'import de tout le projet sur une machine sans Piper,
+    # alors que le repli TTS est précisément prévu pour ce cas. L'import
+    # réel reste dans `_load()`, à l'intérieur du try/except.
+    from piper import PiperVoice
 
 
 class PiperUnavailable(Exception):
@@ -23,7 +34,10 @@ class PiperEngine:
     def __init__(self, voice: str | None = None, voices_dir: str | None = None) -> None:
         self.voice = voice or PIPER_VOICE
         self.voices_dir = Path(voices_dir or PIPER_VOICES_DIR)
-        self._loaded_voice = None  # cache : le modèle fait ~60-75 Mo
+        # Annoté : sans type explicite, mypy déduit `None` de cette valeur
+        # initiale et refuse ensuite l'affectation du modèle chargé
+        # (trouvé en activant --check-untyped-defs, 06/08/2026).
+        self._loaded_voice: PiperVoice | None = None  # cache : ~60-75 Mo
 
     @property
     def model_path(self) -> Path:

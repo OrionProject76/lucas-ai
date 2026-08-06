@@ -178,8 +178,26 @@ format-check:
 
 # Type checking
 # Meme motif que lint : mypy n'est pas dans le PATH non plus.
+#
+# `--check-untyped-defs` active le 06/08/2026 a la demande de Cyril. Sans
+# lui, mypy IGNORE le corps de toute fonction sans annotations — soit une
+# large part du projet, silencieusement non verifiee. Impact mesure avant
+# activation : UNE seule erreur reelle (modules/piper_engine.py, un cache
+# initialise a None dont le type se figeait a `None`), corrigee.
+#
+# `security/` ajoute au perimetre : mesure a 0 erreur sur 9 fichiers,
+# donc gratuit — et c'est le module ou CLAUDE.md place le plus
+# d'exigence. Meme correction de perimetre que pour `just lint`.
+#
+# ⚠️ RESTENT HORS PERIMETRE, chiffres a l'appui (06/08/2026) :
+#   ui/     : 13 erreurs, toutes des attributs Qt que les stubs PySide6
+#             ne connaissent pas (ex. Qt.ScrollBarAsNeeded). Ce sont des
+#             faux positifs de stub, pas des defauts — les traiter
+#             demanderait des `type: ignore` en serie.
+#   racine  : 73 erreurs sur 24 fichiers (tests, main.py, daemon).
+# Les integrer est une decision de Cyril, pas un reglage d'outil.
 mypy:
-    venv/Scripts/python.exe -m mypy core/ modules/ memory/ api/ --ignore-missing-imports
+    venv/Scripts/python.exe -m mypy core/ modules/ memory/ api/ security/ --ignore-missing-imports --check-untyped-defs
 
 # Vérification complète (lint + test + type)
 check: lint test mypy
