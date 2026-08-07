@@ -111,6 +111,23 @@ VLM_MODEL = "llava"
 #   - accepter le va-et-vient, et le DIRE dans l'interface.
 VLM_NEEDS_VRAM_MO: int = 4700
 
+# ── Watchdog VRAM de l'avatar Godot — ajouté 07/08/2026 ───────────────
+#
+# Sous ce seuil de VRAM LIBRE, modules/vram_watchdog.py arrête
+# Lucas3D.exe pour laisser toute la marge à Ollama (l'avatar PySide6 2D
+# reste seul visible, sans action supplémentaire — il tourne déjà en
+# parallèle). Voir modules/vram_watchdog.py pour la logique.
+#
+# ⚠️ 1536 Mo est la valeur SUGGÉRÉE par le brief de session du
+# 07/08/2026, PAS une valeur mesurée comme tenant la route. Mesure
+# fraîche le même jour : gpt-oss:20b seul chargé, Godot ARRÊTÉ, VRAM
+# libre ~550 Mo — DÉJÀ sous ce seuil. Avec ce réglage, Godot ne pourrait
+# donc quasiment jamais rester actif dans les conditions réelles de ce
+# poste aujourd'hui. Cyril doit ajuster ce chiffre en connaissance de
+# cause — voir cowork_workspace/SESSION_LOG_2026-08-07.md.
+VRAM_WATCHDOG_THRESHOLD_MB: int = 1536
+VRAM_WATCHDOG_POLL_SECONDS: float = 12.0
+
 # ── Le VLM est DÉSACTIVÉ en v1.0 — décision de Cyril, 01/08/2026 ──────
 #
 # ⚠️ Ce n'est PAS un abandon de la description visuelle. C'est une

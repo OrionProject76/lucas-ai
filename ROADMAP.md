@@ -7339,6 +7339,46 @@ prochain incident sera lisible — c'était l'objectif, et il est atteint.
 Et elle a produit un résultat non prévu, qui vaut plus que la trace
 elle-même : la falsification du pari du 02/08 sur le rendu (ci-dessus).
 
+### 🟢 Watchdog VRAM — fait le 07/08/2026
+
+**Prérequis bloquant avant toute nouvelle brique visuelle Godot** (mesh
+définitif, shader, HUD — voir `cowork_workspace/REFERENCE_VISUELLE_AVATAR.md`
+§1 bis, conflit n°2). Détail complet de la session, audit et mesures brutes :
+`cowork_workspace/SESSION_LOG_2026-08-07.md`.
+
+`modules/vram_watchdog.py` (142 lignes) poll la VRAM libre (`GPUtil`, déjà
+une dépendance du projet) toutes les 12 s. Sous le seuil configuré
+(`config.VRAM_WATCHDOG_THRESHOLD_MB`), il arrête `Lucas3D.exe` (`taskkill
+/F`, même méthode que `demos/arreter_lucas3d.bat` — pas de P/Invoke).
+Au-dessus, il journalise que le retour à Godot est possible mais ne relance
+**rien automatiquement** — un compagnon de bureau ne se relance pas seul
+sans Cyril devant l'écran. Chaque bascule est journalisée dans
+`system_events` (`memory/lucas_memory.db`), table déjà existante — aucun
+nouveau système de stockage.
+
+**⚠️ Le seuil par défaut (1 536 Mo) n'est PAS une valeur mesurée comme
+tenant la route — c'est la valeur suggérée par le brief de session, gardée
+telle quelle et documentée comme telle.** Mesure fraîche du 07/08 :
+`gpt-oss:20b` **seul chargé, Godot arrêté**, laisse déjà moins de marge
+(546-590 Mo) que ce seuil. Avec ce réglage, Godot ne pourrait quasiment
+jamais rester actif dans les conditions mesurées aujourd'hui — à trancher
+par Cyril, voir `SESSION_LOG_2026-08-07.md` §1.3.
+
+**Testé en conditions réelles, pas seulement en théorie** : 7 tests
+unitaires mockés (`test_vram_watchdog.py`, tous passent, 1453 tests au
+total sur le dépôt) + un test de charge forcée **réel** — `gpt-oss:20b`
+chargé, Godot relancé, VRAM libre mesurée à 570-590 Mo par le module
+lui-même, `check_once()` exécuté sans aucun mock : `Lucas3D.exe` réellement
+arrêté (vérifié absent via `tasklist`), événement `vram_watchdog_fallback`
+retrouvé dans la vraie base (`system_events`, id 616). Trajet retour testé
+aussi : modèle déchargé, VRAM remontée à 13 262 Mo libres, événement
+`vram_watchdog_restore` retrouvé en base (id 617).
+
+**Anomalie notée au passage** : `demos/arreter_lucas3d.bat` invoqué via
+`cmd.exe /c` depuis Git Bash échoue silencieusement (aucune erreur, mais
+n'arrête rien) ; le même script via PowerShell fonctionne correctement.
+Pas creusé plus loin, mais à retenir pour la prochaine session.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
