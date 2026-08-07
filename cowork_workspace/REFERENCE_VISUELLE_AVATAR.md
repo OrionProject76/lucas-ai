@@ -353,6 +353,82 @@ l'avatar ? easter egg ?). Catalogué comme piste ouverte, pas à construire.
 
 ---
 
+## 1 quater. Deux vidéos Firefly supplémentaires — fenêtres et fonds, visage exclu (ajout du 07/08/2026)
+
+Même statut de vérification que § 1 ter : description transmise par
+Cyril (conversation distincte, pas cette session Claude Code), pas
+observation directe faite ici. **Consigne explicite de Cyril : le visage
+présent dans une des deux vidéos est à ignorer** — seuls les fenêtres et
+fonds d'écran sont retenus.
+
+**Fichiers probables, identifiés en recherchant sur le disque avant
+d'écrire** : le dossier `Downloads/` de Cyril contient en réalité
+**4 fichiers Firefly**, pas 2 — les 2 déjà cités au § 1 ter
+(« créer moi un visage holographique... », « J'adore celle que tu viens
+de crée... ») et 2 de plus, jamais mentionnées jusqu'ici :
+
+- `Firefly Un visage jeune Adulte, construit en nuage de particules
+  denses (des milliers de points bleu...).mp4` — le titre mentionne un
+  visage, cohérent avec « le visage... à ignorer » de la consigne
+- `Firefly Une Interface qui se substitue au bureau d'ordinateur
+  Windows 11...mp4` — le titre correspond directement au thème
+  fenêtres/fonds de cette section
+
+**2 + 2 = 4, ça correspond proprement** — contrairement au décompte du
+§ 1 ter qui ne tombait pas sur « 6 ». Une convergence, pas une certitude :
+les titres correspondent bien au thème décrit, mais leur contenu n'a pas
+été revisionné depuis ce poste, seule leur existence est vérifiée.
+
+### Concept de fenêtres flottantes — référence la plus aboutie à ce jour (transmis, pas vu ici)
+
+Structure-cadre transparente aux bords néon **magenta/rose**, sur un
+socle façon bureau en verre à liseré **cyan**, contenant plusieurs
+panneaux flottants avec du contenu d'interface réel (barre de
+progression, affichage numérique, listes de texte, icônes-boutons) — pas
+des cartes vides, du vrai contenu fonctionnel, organisé dans un cadre
+structuré plutôt qu'éparpillé.
+
+⚠️ **Point non tranché : introduction du magenta.** La palette actuelle de
+Luca's reste strictement cyan/bleu — vérifié directement dans
+`Lucas3D/scenes/face/face_root.tscn` : le commentaire du 02/08/2026
+(`git blame`, commit `e5067595`) explique le choix d'une palette
+« bleu glacier » désaturée et la hiérarchie de luminosité entre tête et
+traits, mais ne parle pas lui-même d'exclure d'autres teintes — c'est en
+relisant les valeurs `Color()` du fichier (toutes bleu/cyan, aucune
+composante magenta) que l'absence de magenta se confirme, pas le
+commentaire en tant que tel. Cette référence introduit une deuxième
+couleur (magenta) que Cyril n'a pas encore validée pour les fenêtres. Ne
+pas l'implémenter sans confirmation explicite — la structure/disposition
+des panneaux peut être retenue indépendamment de ce choix de couleur.
+
+### Fond d'écran (visage ignoré, consigne de Cyril) — confirme et enrichit le HUD Orbital déjà prévu (transmis, pas vu ici)
+
+Panneaux de données flottants variés : graphiques en barres, jauges
+circulaires, camemberts, anneaux concentriques orbitaux. Cohérent avec
+le **HUD Orbital** déjà catalogué (`IDEAS.md`, l. 23 et 130 — « widgets
+flottants autour du visage », vérifié : le terme n'est pas inventé pour
+cette section), apporte plus de variété de widgets que les références
+vues jusqu'ici.
+
+### Rappel de séquencement
+
+Cette section documente une référence pour plus tard — elle ne débloque
+aucune construction. Le contenu visuel (fenêtres, HUD) reste gaté par le
+click-through, **et ce chantier n'est PAS « en cours »** — correction
+faite en vérifiant plutôt qu'en reprenant la formulation reçue :
+`IDEAS.md` **#95** dit explicitement « Reporté par Cyril le 06/08/2026 »,
+et `ROADMAP.md` confirme (§ Click-through) : « on laisse en l'état, le
+correctif réel est différé. » Rien de plus récent dans ce dépôt n'indique
+un travail actif dessus. Une instruction séparée en cours ailleurs a été
+mentionnée en amont de cette section, mais elle n'a jamais été vue dans
+cette session — impossible d'en dire plus que ça sans la supposer. Ce
+qui est vérifiable ici, et qui suffit pour le séquencement : **ne pas
+commencer à construire sur cette base avant que le click-through soit
+réellement résolu**, quel que soit l'endroit où cette résolution
+intervient — pas dans ce document.
+
+---
+
 ## 2. Spécification de comportement (origine Three.js)
 
 ⚠️ **À ne jamais porter tel quel** — mauvaise technologie, le projet est en
