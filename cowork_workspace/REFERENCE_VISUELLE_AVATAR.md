@@ -245,6 +245,114 @@ intermédiaires stables.
 
 ---
 
+## 1 ter. Vidéos de référence supplémentaires (ajout du 07/08/2026)
+
+⚠️ **Numérotée « 1 ter », pas « § 2 » comme demandé initialement** — un
+« ## 2. Spécification de comportement » existe déjà plus bas dans ce
+document (Three.js). Renuméroter toute la suite du fichier pour libérer
+« § 2 » aurait cassé les renvois internes existants pour un gain
+cosmétique ; « 1 ter » suit le même principe que « 1 bis » juste
+au-dessus, sans rien déplacer.
+
+### ⚠️ Ce que ce document peut vérifier, et ce qu'il ne peut pas
+
+L'analyse frame par frame décrite ci-dessous ("6 vidéos" dans l'instruction
+d'origine) a eu lieu dans une **conversation distincte** (Cyril avec
+Claude, hors de cette session Claude Code) — exactement le même statut
+que les captures Desktop Pal du § 1 bis, jamais reçues ici non plus. Ce
+qui suit consigne donc **la description transmise**, pas une vérification
+visuelle faite depuis ce poste. **Ce rappel vaut pour TOUTE la suite de
+cette section** — les tournures factuelles ci-dessous (« trouvé dans... »,
+« apparaît dans... ») décrivent ce qui a été transmis, pas une observation
+faite ici.
+
+**Ce qui a pu être vérifié depuis ce poste, en revanche** : les fichiers
+existent réellement sur le disque de Cyril, mais leur compte exact ne
+tombe pas proprement sur six — recherche élargie faite au-delà de
+`Downloads/` après un premier passage incomplet :
+
+- `Downloads/Desktop Pal AI...mp4` (2 copies, `Downloads/` et une 3e dans
+  `Videos/Captures/`)
+- `Downloads/Firefly créer moi un visage holographique...mp4` et
+  `Downloads/Firefly J'adore celle que tu viens de crée...mp4` (2 fichiers,
+  visages IA générés — le rapprochement le plus probable avec les
+  « 4 enregistrements personnels » de l'instruction d'origine, sans
+  certitude que ce soit exactement ça)
+- `Videos/Captures/GARGANTUA — Traceur de rayons à trou noir de
+  Schwarzschild...mp4` (07/26) — la **vraie vidéo** Gargantua, trouvée en
+  élargissant la recherche ; `Downloads/Kimi_Agent_✅GARGANTUA.zip` (une
+  archive, pas une vidéo) avait été notée par erreur à sa place dans un
+  premier passage
+
+Entre 5 et 8 fichiers selon qu'on compte les doublons — **pas une
+correspondance propre à « 6 »**, à signaler plutôt qu'à arrondir. Ça ne
+prouve toujours pas qu'ils aient été regardés image par image, mais ça
+ancre le sujet dans du réel plutôt que dans une référence introuvable
+comme l'étaient le code Three.js et la maquette du § 0. À noter aussi :
+`VISION_LONG_TERME.md` (l. 81) mentionne déjà « les 8 vidéos de référence
+fournies le 30/07/2026 » pour le wireframe bleu/cyan — ces références du
+07/08 s'ajoutent à un historique déjà établi, ce n'est pas un premier
+envoi.
+
+### Desktop Pal AI — précise le § 1 bis, avec un rejet explicite à respecter
+
+Le visualiseur audio n'est pas juste une onde en bas d'écran : c'est une
+barre de fréquences qui encadre le visage comme une auréole quand Luca's
+parle — ce détail-là est retenu.
+
+**Rejeté explicitement par Cyril : les jauges batterie / « AC Line 100 % »
+/ température vues sur la capture Desktop Pal.** Ce sont des métriques de
+portable, sans objet sur le poste de Cyril (PC fixe Ryzen 9800X3D + RTX
+5080, toujours sur secteur). Ne pas les implémenter telles quelles.
+
+**Ce qui est gardé : la forme (jauge circulaire), pas le contenu
+d'origine.** À la place de batterie/température, utiliser des métriques
+qui ont un vrai sens sur ce poste : CPU, RAM, et surtout **VRAM en
+direct** — cohérent avec `modules/vram_watchdog.py`, déjà construit et
+testé en conditions réelles le 07/08/2026 (`ROADMAP.md`, section
+« Watchdog VRAM »). Une jauge VRAM temps réel dans le HUD Orbital aurait
+un vrai rôle fonctionnel : elle montrerait visuellement la même marge que
+le watchdog surveille, pas juste une décoration. À affiner plus tard avec
+Cyril, pas figé ici — mais à retenir comme sens de lecture pour tout
+futur travail sur le HUD Orbital.
+
+### Fenêtres flottantes et interactives — actées par Cyril comme faisant partie intégrante de l'interface, pas une option
+
+Référence concrète décrite comme trouvée dans 2 des enregistrements
+personnels (transmis, pas vue ici) : petites cartes/panneaux translucides
+rectangulaires (parfois étiquetés « DATA »),
+reliés entre eux par des fils lumineux fins, flottant en réseau 3D autour
+d'une structure centrale (cerveau filaire, structure de données). Donne
+enfin une référence visuelle concrète à deux idées déjà cataloguées mais
+jamais illustrées : `IDEAS.md` **#17** (Knowledge Graph Live 3D) et
+**#16** (Semantic Desktop — ⚠️ numéroté #16, pas #9 : #9 dans `IDEAS.md`
+est « Luca's Brain 3D », une idée différente ; vérifié en relisant le
+fichier avant d'écrire cette note). **Cette brique devient une exigence
+de l'interface v1**, au même titre que le visage et le HUD — pas un
+enrichissement futur optionnel.
+
+### Piste « corps robotique physique » — vue dans les mêmes enregistrements, PAS actée, décision en attente de Cyril
+
+Un robot androïde blanc/argenté à corps complet est décrit comme
+apparaissant dans plusieurs frames de la même vidéo source (transmis, pas
+vu ici). Direction différente de la tête
+holographique flottante déjà décidée (`VISION_LONG_TERME.md` **§2**,
+Pilier 1 — ⚠️ pas § 1 comme d'abord noté : la phrase « Tête holographique
+3D comme centre de gravité de l'interface » est à la ligne 79 du fichier,
+sous « ## 2. Les trois piliers » → « Pilier 1 — Le Visuel », pas sous
+« ## 1. Ce que Luca's est vraiment » qui s'arrête à la ligne 74 ; vérifié
+ligne par ligne avant de citer). Ne pas construire dans cette direction
+avant clarification explicite : ambiance/glow à récupérer seulement, ou
+vrai changement vers un corps physique ?
+
+### Rendu Gargantua (trou noir, style Interstellar) — piste optionnelle, non actée
+
+Cyril apprécie l'esthétique, évoque une intégration possible sans usage
+précis défini (fond d'un mode donné ? état « réflexion profonde » de
+l'avatar ? easter egg ?). Catalogué comme piste ouverte, pas à construire.
+
+---
+
 ## 2. Spécification de comportement (origine Three.js)
 
 ⚠️ **À ne jamais porter tel quel** — mauvaise technologie, le projet est en

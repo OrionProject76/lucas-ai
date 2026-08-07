@@ -323,6 +323,13 @@ créer) quand ce chantier sera réellement planifié — pas avant.
 | **Avatar QPainter V3** | 🟡 Partiel. Le rendu a été restauré et fiabilisé (voir §6), les modes sont câblés sur le comportement réel. Une refonte esthétique complète reste possible si Cyril la souhaite. |
 | **STT** | ⛔ Bloqué par le matériel — moteur écrit, voir ci-dessous. |
 
+⚠️ **Périmètre de l'avatar élargi le 07/08/2026** : `cowork_workspace/REFERENCE_VISUELLE_AVATAR.md`
+§1 ter définit désormais ce que « terminé » inclut pour cette phase — fenêtres
+flottantes/panneaux reliés (`IDEAS.md` #17, #16) comprises, actées comme exigence
+de l'interface v1, pas comme enrichissement optionnel. Ne change ni l'ordre ni le
+contenu du tableau ci-dessus : la brique s'ajoute au périmètre déjà en cours, elle
+ne le précède ni ne le contourne.
+
 #### 🟡 Vision v1.0 = OCR seul. Le VLM est suspendu, pas abandonné.
 
 **Décision de Cyril, 01/08/2026.** `VLM_ENABLED = False` dans `config.py`.
