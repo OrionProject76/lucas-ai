@@ -122,6 +122,129 @@ mesurée est de **805 Mo**. Une interface plein écran mangerait cette marge.
 
 ---
 
+## 1 bis. Cible détaillée — Desktop Pal AI (ajout du 07/08/2026)
+
+Référence la plus proche selon Cyril. **Note d'honnêteté : la capture n'a
+pas été reçue ici** — ce qui suit consigne *sa description*, pas une analyse
+d'image faite depuis ce poste.
+
+### Ce qui est validé comme cible
+
+| Élément | Cible |
+|---|---|
+| **Visage** | **Humanoïde 3D translucide bleu/cyan**, lumineux, presque fantomatique — vraie structure faciale sculptée : front, pommettes, yeux lumineux, expression |
+| **Yeux** | Lumineux blanc/cyan, **sans pupille marquée** — effet « entité d'énergie » |
+| **Environnement** | **HUD complet type JARVIS** tout autour : jauges **circulaires** (CPU/RAM/batterie), visualiseur audio en onde, horloge large, cadrans, lignes de données, sur fond bleu nuit profond |
+
+### L'écart réel avec l'existant, mesuré dans le code
+
+**Le visage actuel n'est pas « schématique » par style — il l'est par
+construction.** `face_root.tscn` :
+
+```
+Head      -> SphereMesh, échelle (1.0, 1.08, 0.92)
+             ellipsoïde, demi-axes 2.5 / 2.7 / 2.3
+EyeLeft   -> SphereMesh
+EyeRight  -> SphereMesh
+Mouth     -> BoxMesh
+```
+
+Trois sphères et un cube. **Il n'existe aucune géométrie faciale** — ni
+front, ni pommettes, ni arête nasale, rien à sculpter ni à éclairer. Ce
+n'est donc pas un réglage de shader : **il faut un mesh de tête**. C'est
+l'écart principal, et il est structurel.
+
+Côté HUD, `widget_system.gd` fournit déjà CPU/RAM/GPU — mais en
+`ProgressBar` **linéaires**. Les cadrans circulaires demandés sont un
+travail distinct (`draw_arc` sur un `Control`, ou un shader radial).
+
+### ⚠️ Desktop Pal est fait avec Unreal Engine
+
+Cyril le note lui-même, et c'est important à double titre.
+
+**D'abord, ça n'est pas transposable tel quel** : Unreal est conçu pour ce
+rendu, avec un budget mémoire et un pipeline d'éclairage sans commune
+mesure.
+
+**Ensuite, ça ne rouvre aucune question de moteur.** `CLAUDE.md` règle 2
+(« Godot 4 uniquement — PAS Unity/Unreal ») et règle 10 restent entières.
+Desktop Pal est une **référence esthétique**, pas une option technique. Si
+quelqu'un propose un jour « prenons Unreal », la réponse est déjà écrite.
+
+---
+
+### 🔴 Deux conflits mesurés entre cette cible et ce que la session a établi
+
+Ils ne disqualifient rien — ils disent **ce qu'il faudra arbitrer**. Mieux
+vaut le savoir avant d'ouvrir le chantier qu'après.
+
+#### Conflit 1 — « HUD occupant tout l'écran » rouvre l'incident du 06/08
+
+Un HUD plein écran est une fenêtre plein écran. Or, mesuré (§5.67) :
+
+- une fenêtre plein écran `always_on_top` est passée **par-dessus le
+  Gestionnaire des tâches**, le rendant inutilisable ;
+- sans `always_on_top`, un HUD plein écran **capte tous les clics du
+  bureau** — puisque le click-through est impossible en GDScript.
+
+➜ Un HUD immersif plein écran n'est **pas** un simple agrandissement de la
+fenêtre actuelle. Il **exige** la GDExtension `WS_EX_TRANSPARENT`
+(`IDEAS.md` #95), aujourd'hui reportée. **C'est un prérequis, pas un
+détail de finition.**
+
+#### Conflit 2 — le budget VRAM ne le permet probablement pas
+
+Chiffres **mesurés** les 06-07/08, pas estimés :
+
+| Configuration | VRAM |
+|---|---|
+| Godot 600×600, rendu actif | **~247 Mo** |
+| Godot 3840×2160, **rendu NUL** (fenêtre invisible) | **~976 Mo** |
+| Marge restante avec `gpt-oss:20b` résident + Godot 600×600 | **805 Mo** |
+
+Passer en plein écran coûte au moins **+729 Mo** — et cette valeur est
+**optimiste**, puisque les 976 Mo ont été mesurés avec **rien de dessiné**.
+Un HUD riche (jauges, ondes, cadrans, lignes de données) coûterait
+davantage.
+
+➜ **805 − 729 ≈ 76 Mo de marge, dans le meilleur des cas.** Autrement dit :
+**HUD plein écran riche + `gpt-oss:20b` résident ne tiennent
+vraisemblablement pas ensemble sur 16 Go.**
+
+Quatre sorties possibles, aucune tranchée, toutes pour Cyril :
+
+1. **HUD borné** (fenêtre large mais pas plein écran) — conserve le modèle.
+2. **Modèle plus léger** — ⚠️ relève de la règle 12 : *jamais de bascule de
+   modèle en production sans validation explicite de Cyril*.
+3. **Décharger le modèle** quand le HUD est déployé — le HUD devient un
+   mode, pas un décor permanent. Cohérent avec le principe JARVIS déjà
+   retenu : *l'interface répond, elle n'est pas permanente*.
+4. **Rendu à résolution interne réduite** puis mise à l'échelle
+   (`scaling_3d_scale`) — à mesurer, jamais supposé.
+
+La piste 3 est celle qui contredit le moins la direction déjà validée.
+
+---
+
+### Séquencement proposé — progressif, chaque étape testable
+
+Cyril le dit lui-même : « à séquencer, pas un ajustement rapide ».
+
+| Étape | Contenu | Pourquoi dans cet ordre |
+|---|---|---|
+| **A** | Remplacer les 3 sphères par un **mesh de tête humanoïde low-poly** | C'est l'écart structurel. Sans géométrie, aucun shader ne produira un visage. |
+| **B** | Shader hologramme translucide (SciFi Hologram MIT / Wireframe CC0, §3) + **yeux émissifs** | Ne peut se juger qu'une fois la géométrie en place |
+| **C** | Jauges **circulaires** (`draw_arc`), visualiseur d'onde, horloge large | Le HUD existe déjà en linéaire — évolution, pas création |
+| **D** | HUD immersif plein écran | **Bloqué par les deux conflits ci-dessus.** N'ouvrir qu'après arbitrage VRAM et GDExtension. |
+
+⚠️ **Le fallback reste ouvert** : `CLAUDE.md` et la décision du 02/08 posent
+que si le rendu Godot déçoit après un vrai effort, **le 2D QPainter reste la
+version stable** — ce n'est pas un échec, c'est l'option prévue depuis le
+début. L'avatar sphère actuel et le HUD masqué sont les états
+intermédiaires stables.
+
+---
+
 ## 2. Spécification de comportement (origine Three.js)
 
 ⚠️ **À ne jamais porter tel quel** — mauvaise technologie, le projet est en
