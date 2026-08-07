@@ -12,10 +12,45 @@ extends Node
 # persistante. Le vocabulaire des messages est défini dans
 # api/protocol.py, côté Python.
 #
-# ⚠️ 127.0.0.1 et non localhost : l'API n'écoute que sur la boucle
-# locale, sans authentification (voir config.py, décision du 01/08).
-@export var websocket_url: String = "ws://127.0.0.1:8000/ws"
+# ⚠️ 127.0.0.1 et non localhost — mesuré le 01/08 : 0,14 s contre 2,2 s,
+# Windows résout « localhost » en IPv6 d'abord (voir config.py).
+#
+# ── wss:// et non ws://, corrigé le 07/08/2026 ──────────────────────
+#
+# Ce commentaire disait « sans authentification » : FAUX depuis que
+# API_TOKEN a une vraie valeur dans .env (02/08) et que le serveur tourne
+# en HTTPS (mkcert, 05/08 — voir justfile `serve`, tâche planifiée
+# LucasAPIServer / start_server_hidden.vbs). Confirmé le 07/08 en testant
+# les deux : https://127.0.0.1:8000/status répond, http:// ne répond pas
+# du tout — le serveur ne parle PAS en clair aujourd'hui, quelle que soit
+# l'interface. `ws://` ici a toujours été un décalage jamais corrigé
+# depuis la bascule HTTPS du 05/08, pas une régression ponctuelle.
+#
+# Ça peut redevenir vrai un jour : si Godot se connectait un jour à un
+# serveur distant en HTTP pur (aucun cas réel aujourd'hui), il faudrait
+# alors resservir `ws://`. Tant que Godot tourne sur CE PC contre LE
+# serveur local (toujours le cas, voir plus bas dans ce fichier), le
+# schéma suit celui du serveur — pas un choix arbitraire par client.
+@export var websocket_url: String = "wss://127.0.0.1:8000/ws"
 @export var reconnect_interval: float = 3.0
+
+# Même fichier que config.py (python-dotenv) — pas un nouveau système de
+# secret. C:\OrionAI est déjà supposé partout ailleurs dans ce projet
+# (justfile, demos/*.ps1) : pas moins portable que le reste.
+const ENV_PATH := "C:/OrionAI/.env"
+
+# ⚠️ Épinglé sur la CA racine mkcert, PAS sur data/cert.pem -- testé les
+# deux, en vrai, le 07/08/2026. Épingler directement sur le certificat
+# serveur (data/cert.pem) semblait plus strict sur le papier, mais
+# mbedTLS (moteur TLS de Godot) le REFUSE : erreur -0x2700 au handshake,
+# reproduite deux fois. mbedTLS valide une CHAÎNE jusqu'à une autorité
+# reconnue, pas une correspondance exacte sur la feuille -- lui donner
+# la feuille comme "chaîne de confiance" ne fournit aucune autorité
+# valide pour vérifier sa propre signature. La CA racine mkcert
+# fonctionne (testée, connexion établie -- voir le test de bout en bout).
+# Chemin obtenu via `tools\mkcert.exe -CAROOT`, propre à cette machine
+# (profil Windows de Cyril) -- à reroute si CAROOT change un jour.
+const CERT_PATH := "C:/Users/PC/AppData/Local/mkcert/rootCA.pem"
 
 var socket: WebSocketPeer
 var connected: bool = false
@@ -54,9 +89,49 @@ func _process(delta: float):
 			WebSocketPeer.STATE_CONNECTING:
 				pass
 
+func _read_api_token() -> String:
+	var f := FileAccess.open(ENV_PATH, FileAccess.READ)
+	if f == null:
+		print(".env introuvable (", ENV_PATH, ") -- connexion sans jeton")
+		return ""
+	while not f.eof_reached():
+		var line := f.get_line()
+		if line.begins_with("API_TOKEN="):
+			return line.substr(len("API_TOKEN=")).strip_edges()
+	return ""
+
+# Sous-protocoles ["lucas.v1", "lucas-token.<jeton>"] -- même mécanisme
+# que static/js/websocket.js et api/server.py (WS_SUBPROTOCOL,
+# WS_TOKEN_SUBPROTOCOL_PREFIX). Le jeton voyage dans l'en-tête
+# Sec-WebSocket-Protocol, jamais dans l'URL : il n'atterrit donc jamais
+# en clair dans data/logs/server_startup.log (voir api/log_scrub.py).
+func _build_supported_protocols() -> PackedStringArray:
+	var token := _read_api_token()
+	var protocols := PackedStringArray(["lucas.v1"])
+	if token != "":
+		protocols.append("lucas-token." + token)
+	return protocols
+
+# TLSOptions.client(cert) épingle sur la CA racine mkcert (CERT_PATH) :
+# la connexion n'aboutit que face à un certificat signé par CETTE CA, pas
+# n'importe quelle autorité publique. Si le certificat n'a pas pu être
+# chargé (CAROOT déplacé, mkcert jamais lancé sur ce profil), repli sur
+# client_unsafe() -- aucune validation, mais la connexion reste possible
+# en attendant. Journalisé dans les deux cas, jamais silencieux.
+func _build_tls_options() -> TLSOptions:
+	if not websocket_url.begins_with("wss://"):
+		return null
+	var cert := X509Certificate.new()
+	if cert.load(CERT_PATH) == OK:
+		return TLSOptions.client(cert)
+	print("Certificat introuvable ou invalide (", CERT_PATH, ") -- ",
+		"validation TLS desactivee, repli client_unsafe")
+	return TLSOptions.client_unsafe()
+
 func _connect_to_server():
 	socket = WebSocketPeer.new()
-	var err = socket.connect_to_url(websocket_url)
+	socket.supported_protocols = _build_supported_protocols()
+	var err = socket.connect_to_url(websocket_url, _build_tls_options())
 	if err != OK:
 		print("Erreur connexion : ", err)
 	else:
@@ -78,6 +153,11 @@ func _handle_message(msg: String):
 	if data is Dictionary:
 		match data.get("type", ""):
 			"avatar_state":
+				# Horodaté : c'est la preuve qu'un vrai changement d'état
+				# backend traverse le pont, pas juste "le socket est ouvert"
+				# (voir le test de bout en bout du 07/08/2026).
+				print("[", Time.get_time_string_from_system(), "] avatar_state recu : ",
+					data.get("state", "idle"))
 				_apply_state(data.get("state", "idle"), data.get("text", ""))
 			"chat":
 				Global.chat_message_received.emit(data.get("text", ""), data.get("from_lucas", true))

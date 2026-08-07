@@ -7379,6 +7379,43 @@ aussi : modèle déchargé, VRAM remontée à 13 262 Mo libres, événement
 n'arrête rien) ; le même script via PowerShell fonctionne correctement.
 Pas creusé plus loin, mais à retenir pour la prochaine session.
 
+### 🟢 Pont WebSocket Godot ↔ FastAPI — fait et vérifié le 07/08/2026
+
+`Lucas3D/scripts/websocket_client.gd` était toujours en `ws://` sans
+jeton depuis sa création (01/08), alors que le serveur est passé en
+HTTPS + authentification dès le 05-06/08 : l'avatar Godot ne recevait
+donc **rien de réel** du backend, quel que soit le mesh/shader/HUD qu'on
+y aurait mis. Détail complet, audit et mesures :
+`cowork_workspace/SESSION_LOG_2026-08-07_websocket.md`.
+
+**Audit avant correctif** : confirmé qu'aucune tentative de fix n'avait
+jamais existé (`git blame`/`git log` : un seul commit de contenu depuis
+la création). Confirmé que `wss://` est le bon choix — pas supposé : le
+serveur réellement actif (tâche planifiée `LucasAPIServer`, HTTPS via
+mkcert) ne répond qu'en HTTPS, `http://` ne répond rien. `API_TOKEN` est
+réellement configuré (43 caractères, vérifié sans l'afficher) — un
+commentaire de `api/server.py` affirmant le contraire (« SANS EFFET
+aujourd'hui ») était stale, corrigé au passage.
+
+**Correctif** : schéma `wss://`, jeton lu dans le même `.env` que
+`config.py` (aucun nouveau fichier de secret), transmis en sous-protocole
+`lucas-token.<jeton>` — même mécanisme que `static/js/websocket.js`,
+jamais dans l'URL. TLS épinglé sur la CA racine mkcert
+(`TLSOptions.client()`) : **épingler directement sur `data/cert.pem`
+semblait plus strict mais mbedTLS le refuse** (erreur -0x2700, testé et
+reproduit deux fois avant de trouver la bonne approche) — corrigé pour
+épingler sur la CA (`tools\mkcert.exe -CAROOT`), qui fonctionne.
+
+**Vérifié en conditions réelles, pas juste "le socket s'ouvre"** : test
+de bout en bout avec le serveur et Godot réellement lancés — un vrai
+message chat a déclenché un vrai `LucasCore.ask()`, et Godot a reçu et
+journalisé, horodaté, la séquence `thinking` → `speaking` → `idle` sur
+sa propre connexion. Serveur coupé en cours de route : Godot n'a pas
+crashé, a journalisé une déconnexion propre, s'est reconnecté seul et a
+rejoué le cycle complet avec succès. **Le binaire exporté
+(`build/Lucas3D.exe`) a été régénéré et revérifié** avec le même
+résultat — pas seulement les scripts sources.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

@@ -141,11 +141,12 @@ class ChatRequest(BaseModel):
 
 # ── Jeton partagé (prérequis pour le pont mobile, ROADMAP.md §2) ───────
 #
-# Posé le 02/08/2026, SANS EFFET aujourd'hui : API_TOKEN est vide par
-# défaut (config.py), et un jeton vide désactive la vérification —
-# exactement le comportement d'avant. Il ne devient contraignant que le
-# jour où Cyril renseigne une valeur dans .env, ce qui doit précéder tout
-# passage de API_HOST à "0.0.0.0", jamais le suivre.
+# Posé le 02/08/2026. Vide par défaut (config.py) désactive la
+# vérification — mais ⚠️ CORRIGÉ le 07/08/2026 (audit du pont WebSocket
+# Godot) : ce commentaire disait « SANS EFFET aujourd'hui », FAUX depuis
+# qu'un vrai .env avec un vrai API_TOKEN existe (créé pour le pont
+# mobile, ROADMAP.md §5.30). Vérifié le 07/08 : 43 caractères présents —
+# la vérification est bien active, pas un no-op silencieux.
 
 
 def _token_is_valid(fourni: str | None) -> bool:
