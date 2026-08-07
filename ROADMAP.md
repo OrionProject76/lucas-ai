@@ -7214,6 +7214,55 @@ premiers essais ont échoué** :
 D'où les **chemins absolus vers System32** : un script de secours ne doit
 pas dépendre du PATH de celui qui le lance.
 
+#### Sortie de Godot redirigée — et le filet de sécurité qui marchait par chance
+
+**Le bruit** : Cyril a signalé « Reconnexion… / Connexion en cours… » en
+boucle dans son terminal. Source identifiée : `websocket_client.gd`
+(l. 63 et 69), qui réessaie `ws://127.0.0.1:8000/ws` toutes les 3 s — et
+échoue toujours (`ws://` contre un serveur HTTPS, aucun jeton ; c'est
+l'étape 2). **773 lignes** pendant l'étape 0, **518** pendant le test
+VRAM.
+
+Cause de la pollution : un `Start-Process` nu depuis le terminal de
+Claude Code — le process enfant **hérite de la sortie standard de la
+console parente**. Corrigé par `demos/lancer_lucas3d.ps1`, qui redirige
+stdout et stderr vers des fichiers. *(`-RedirectStandardOutput` et
+`-RedirectStandardError` ne peuvent pas viser le même fichier en
+PowerShell 5.1 — d'où deux fichiers.)*
+
+⚠️ **Le fichier `.ps1` a dû être réencodé en UTF-8 AVEC BOM** : sans BOM,
+PowerShell 5.1 le lit en ANSI, les tirets longs deviennent du charabia et
+l'**analyse** du script échoue. Piège déjà connu, retombé dedans.
+
+**🔴 Et surtout : le filet de sécurité était cassé, sans que rien ne le
+dise.** En le retestant, `arreter_lucas3d.bat` a affiché **quatre messages
+contradictoires à la fois** (« arrêté », « ne tournait pas », « TOUJOURS
+présent », « plus aucun process ») et **n'a pas tué le process**.
+
+Cause : **fins de ligne LF (Unix)**, alors que `cmd.exe` exige **CRLF**.
+Son analyseur mange alors des caractères en début de ligne — `setlocal`
+devient `tlocal`, `REM` devient `M` — et les branches `if/else`
+s'exécutent toutes.
+
+**Le plus instructif** : une version **plus courte** du même script, déjà
+en LF, avait fonctionné quelques minutes plus tôt, test à l'appui.
+`cmd.exe` échoue de façon dépendante du contenu et de la taille — **le
+premier succès était de la chance, pas une preuve**. Un filet de sécurité
+ne doit jamais en dépendre. `.gitattributes` force désormais `eol=crlf`
+sur `*.bat` et `*.cmd`.
+
+**Second défaut trouvé en corrigeant le premier** : la vérification
+donnait un **faux positif**. `taskkill /F` rend la main avant que Windows
+n'ait libéré le process, et le script annonçait « TOUJOURS présent » sur
+un process bel et bien mort. Une alerte qui crie au loup est pire que pas
+d'alerte : elle enverrait Cyril ouvrir le Gestionnaire des tâches pour
+rien, précisément quand il a besoin de pouvoir se fier au script. Corrigé
+par trois essais espacés d'une seconde.
+
+**Retesté sur les deux cas** — process en cours (tué, vérifié
+indépendamment) et process déjà arrêté (message correct, aucune fausse
+alerte).
+
 #### Écart de périmètre — le HUD était toujours là
 
 Le premier rendu montré à Cyril était l'interface complète. Cause : le HUD

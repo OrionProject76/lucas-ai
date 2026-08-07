@@ -1,5 +1,19 @@
 @echo off
-setlocal
+REM /!\ FINS DE LIGNE CRLF OBLIGATOIRES - NE PAS CONVERTIR EN LF.
+REM
+REM cmd.exe exige CRLF dans un fichier .bat. Avec des fins de ligne Unix
+REM (LF seul), son analyseur mange des caracteres en debut de ligne :
+REM `setlocal` devient `tlocal`, `REM` devient `M`, et les branches
+REM if/else s'executent TOUTES. Mesure le 07/08/2026 : le script a
+REM affiche a la fois "arrete", "ne tournait pas" et "TOUJOURS present",
+REM et n'a PAS tue le process.
+REM
+REM Plus pernicieux encore : une version PLUS COURTE du meme script avait
+REM fonctionne quelques minutes plus tot, deja en LF. cmd.exe echoue de
+REM facon dependante du contenu et de la taille - le premier succes etait
+REM de la CHANCE, pas une preuve. Un filet de securite ne doit jamais en
+REM dependre. Voir .gitattributes, qui force CRLF sur *.bat.
+setlocal enabledelayedexpansion
 REM ============================================================
 REM  ARRET D'URGENCE DE LUCAS3D  --  06/08/2026
 REM ============================================================
@@ -44,8 +58,24 @@ if %ERRORLEVEL% EQU 0 (
 )
 
 REM Verification reelle : on ne fait pas confiance au code de retour seul.
-"%SYS%\tasklist.exe" /FI "IMAGENAME eq Lucas3D.exe" 2>nul | "%SYS%\find.exe" /I "Lucas3D.exe" >nul
-if %ERRORLEVEL% EQU 0 (
+REM
+REM /!\ ATTENDRE AVANT DE VERIFIER - corrige le 07/08/2026.
+REM taskkill /F rend la main AVANT que Windows n'ait libere le process.
+REM Verifier dans la foulee donnait un FAUX POSITIF : le script annoncait
+REM "TOUJOURS present" alors que le process etait bel et bien mort
+REM (verifie independamment dans la seconde qui suivait). Une alerte qui
+REM crie au loup est pire que pas d'alerte : elle enverrait Cyril ouvrir
+REM le Gestionnaire des taches pour rien, precisement au moment ou il a
+REM besoin de pouvoir se fier a ce script. Trois essais d'une seconde.
+set "RESTE=1"
+for /L %%i in (1,1,3) do (
+    if "!RESTE!"=="1" (
+        "%SYS%\timeout.exe" /t 1 /nobreak >nul 2>&1
+        "%SYS%\tasklist.exe" /FI "IMAGENAME eq Lucas3D.exe" 2>nul | "%SYS%\find.exe" /I "Lucas3D.exe" >nul
+        if errorlevel 1 set "RESTE=0"
+    )
+)
+if "!RESTE!"=="1" (
     echo   [!!] ATTENTION : un process Lucas3D.exe est TOUJOURS present.
     echo        Ouvrir le Gestionnaire des taches et le tuer a la main.
 ) else (
