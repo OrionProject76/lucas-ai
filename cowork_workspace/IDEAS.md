@@ -129,6 +129,15 @@ nouveau système.
 Fenêtre transparente, borderless, always-on-top, **click-through** (laisse passer les clics vers Windows en dessous).
 Visage low-poly stylisé, shaders néon cyan/bleu avec glow. Flottement organique (oscillation, respiration, réaction événements). Animations : parle (bouche), pense (yeux brillent), triste (violet), alerte (rouge). HUD Orbital : widgets flottants (CPU, RAM, météo, tâches).
 
+> 📄 **Référence visuelle consolidée (07/08/2026)** :
+> `cowork_workspace/REFERENCE_VISUELLE_AVATAR.md` — direction esthétique
+> validée (JARVIS, Blade Runner 2049), spécification de comportement
+> (nuage de points, fondu d'opacité, déformation), deux shaders Godot
+> repérés, et surtout **les contraintes mesurées les 06-07/08** qui
+> bornent cette Phase 1 : pas de plein écran par défaut, click-through
+> impossible en GDScript, coût VRAM lié à la taille de fenêtre.
+> À lire AVANT d'ouvrir ce module.
+
 **Roadmap détaillée du module Avatar :**
 
 - **Phase 1 — Assets**
