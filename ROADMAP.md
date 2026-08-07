@@ -7416,6 +7416,86 @@ rejoué le cycle complet avec succès. **Le binaire exporté
 (`build/Lucas3D.exe`) a été régénéré et revérifié** avec le même
 résultat — pas seulement les scripts sources.
 
+### 🟢 Latence de bascule `gpt-oss:20b` mesurée, et la direction du routage actée — 07/08/2026
+
+Fait suite à `cowork_workspace/reports/Dimensionnement_VRAM_Interface_LLM_2026-08-07.md`
+(mesures VRAM/qualité par palier) et à §5.44-5.45 ci-dessus (comparatif
+initial, bascule sur `gpt-oss:20b` seul en production).
+
+**5 essais réels de chargement à froid**, Ollama vérifié vide
+(`api/ps`) avant chacun, modèle déchargé (`keep_alive: 0`) entre chaque
+essai. Chronométrage via les champs natifs Ollama (`load_duration` +
+`prompt_eval_duration`, nanoseconde), pas une estimation :
+
+| Essai | 1er token utilisable |
+|---|---|
+| 1 | **10,78 s** |
+| 2 | 3,55 s |
+| 3 | 3,59 s |
+| 4 | 3,53 s |
+| 5 | 3,53 s |
+
+**Comportement net, pas du bruit** : le tout premier chargement (Ollama
+resté longtemps sans avoir chargé ce modèle) coûte ~10,8 s ; les
+suivants, une fois les poids passés dans le cache disque/OS, se
+stabilisent à **3,53-3,59 s** (écart de 0,06 s entre eux — très
+reproductible). Cause probable, cohérente avec le comportement Windows
+déjà observé ailleurs dans ce projet : lecture depuis le cache fichier
+plutôt que depuis le SSD à froid.
+
+**Lecture qualitative** : ~3,5 s de silence en pleine conversation est
+**perceptible et gênant, à la limite du disruptif** — ni imperceptible,
+ni franchement tolérable pour un assistant vocal/conversationnel. C'est
+d'ailleurs cohérent avec le motif déjà documenté en §5.44 qui avait fait
+écarter l'alternance automatique entre deux gros modèles (« 3,2 s de
+rechargement à chaque bascule », jugé disqualifiant pour un routeur qui
+alterne à chaque message). La différence ici : dans le mécanisme acté
+ci-dessous, l'escalade vers `gpt-oss:20b` n'aurait lieu que sur les
+requêtes identifiées comme complexes — occasionnellement, pas à chaque
+message — ce qui change la tolérance acceptable sans changer le chiffre
+mesuré.
+
+⚠️ **Point de vigilance pour la session de conception détaillée** : §5.45
+a déjà mesuré qu'`INTENT_MODEL` différent de `MODEL_NAME` coûte un
+rechargement par message (0,3 s quand les deux sont identiques, 3,5-13,3 s
+sinon). Le mécanisme d'escalade à concevoir devra explicitement dire ce
+que devient `INTENT_MODEL` une fois `qwen3:14b` par défaut — le
+laisser diverger reproduirait exactement le problème déjà réglé.
+
+**Routage multi-modèle — direction actée le 07/08/2026, phasée.**
+
+Décidé sur la base des mesures réelles du 07/08
+(`cowork_workspace/reports/Dimensionnement_VRAM_Interface_LLM_2026-08-07.md`) :
+`qwen3:14b` (9 486 Mo, 0/15 guichet, 0/15 vouvoiement, tient
+confortablement même au palier HUD complet) devient le **modèle par
+défaut pour l'usage quotidien**. `gpt-oss:20b` (12 549 Mo, marge fine
+parfois négative aux paliers 1-2) se charge **à la demande** pour les
+requêtes complexes.
+
+**Phase 1 (actée maintenant) — mécanisme hybride façon « advisor »
+(Option C).** `qwen3:14b` traite la requête en premier. S'il estime que
+la question dépasse sa portée, il le signale lui-même pour déclencher
+l'escalade vers `gpt-oss:20b` — pas de classification automatique de la
+complexité en amont pour l'instant. Design détaillé (comment `qwen3:14b`
+signale, seuil de déclenchement, latence de bascule acceptable compte
+tenu de la mesure ci-dessus) : **à faire dans une session dédiée
+ultérieure**, pas dans celle-ci.
+
+**Phase 2 (différée, pas abandonnée) — détection automatique de la
+complexité (Option A).** À reprendre explicitement quand l'usage réel de
+la Phase 1 aura montré la fréquence effective de bascule — pas en
+anticipant sans données d'usage.
+
+**Ce qui ne change pas** : le watchdog VRAM (`vram_watchdog.py`) gère
+déjà le repli d'interface (2D QPainter) pendant toute bascule de charge
+— aucun nouveau code d'interface requis pour ce chantier. Aucune
+bascule de modèle par défaut en session live sans validation explicite
+de Cyril sur le design complet de l'escalade, une fois celui-ci défini.
+
+**Rien d'implémenté dans cette session** : ni le mécanisme d'escalade,
+ni un changement de `config.MODEL_NAME` — `gpt-oss:20b` reste le modèle
+de production tel quel jusqu'à ce que la Phase 1 soit conçue et validée.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
