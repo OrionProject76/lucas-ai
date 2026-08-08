@@ -1314,11 +1314,12 @@ dédié**. S'appliquent à TOUS les modules `#98`–`#105` ci-dessous.
 ⚠️ **Document vivant, jamais figé** — principe posé par Cyril le 08/08/2026,
 même logique que `VISION_LONG_TERME.md` : ce qui est acté dans `#97`–`#105`
 n'est pas une version finale. Luca's reste évolutive à ce stade et à jamais.
-Ce bloc s'est déjà complété quatre fois le 08/08/2026 (2e passe : Groupe H
+Ce bloc s'est déjà complété cinq fois le 08/08/2026 (2e passe : Groupe H
 étendu de H-1/H-2 à H-1…H-7 ; 3e passe : RT-6 ajouté ; 4e passe : RT-7
 ajouté ; 5e passe : A-4, B-4 étendu, B-5, C-5, H-8, H-9 et `#106` Lois
-d'Asimov ajoutés) — à corriger et enrichir à chaque nouvelle session
-d'idées, sans jamais prétendre être clos.
+d'Asimov ajoutés ; 6e passe : B-6, B-7, C-6, D-7, G-5 ajoutés, F-1 précisé
+smartphone-uniquement, E-1 marqué implémenté) — à corriger et enrichir à
+chaque nouvelle session d'idées, sans jamais prétendre être clos.
 
 - **RT-1 — Français d'abord + transparence de traduction.** Toute sortie de
   Luca's en français, tout contenu non-français traduit avant présentation.
@@ -1445,6 +1446,17 @@ Au service de l'objectif retraite.
   recettes simples et rapides, pensées pour des repas après un service
   physique — pas de cuisine élaborée. Objectif : réduire gaspillage et
   facture alimentaire, au service du même objectif que B-2.
+- **B-6 — Suggestions d'activités gratuites le week-end, localisées**
+  *(ajouté 08/08/2026, 6e passe)*. Digest hebdomadaire « quoi faire
+  gratuitement près de chez toi ce week-end » (expositions gratuites,
+  marchés, événements municipaux) via le module Web existant. Petit
+  plaisir sans impact sur le budget.
+- **B-7 — Inventaire léger des garanties/factures** *(ajouté 08/08/2026,
+  6e passe)*. Version ciblée de la veille administrative : Luca's retient
+  « achat X, garantie jusqu'au Y » pour les achats significatifs (issus
+  des mails déjà lus via `#100` C-1), et le ressort si l'appareil tombe en
+  panne dans la période. Évite de payer une réparation qui aurait été
+  couverte.
 
 **Rien n'est construit.** Catalogage uniquement.
 
@@ -1481,6 +1493,11 @@ Au service de l'objectif retraite.
   public gratuit, moncompteformation.gouv.fr) et recherche des formations
   éligibles correspondant au projet de reconversion aide-soignant déjà
   catalogué (`#63`). Zéro coût, exploite un droit déjà acquis.
+- **C-6 — Assistant CV/lettre de motivation pour la reconversion**
+  *(ajouté 08/08/2026, 6e passe)*. Lié à C-5 : le moment venu, Luca's aide
+  à rédiger et adapter CV/lettres de motivation selon les offres, en
+  s'appuyant sur la connaissance du parcours de Cyril déjà présente en
+  mémoire. Zéro coût, génération de texte pure.
 
 **Rien n'est construit.** Catalogage uniquement.
 
@@ -1521,6 +1538,21 @@ Au service de l'objectif retraite.
   direct sans dépendre du téléphone. Activation toujours gatée par
   `VISION_LONG_TERME.md` §4.1/§4.2 (pas d'écoute ambiante permanente
   automatique).
+- **D-7 — Lecture d'écran du smartphone (S25 Ultra)** *(ajouté 08/08/2026,
+  6e passe)*. Distinct du micro/caméra (déjà couvert par le pipeline
+  PWA/`getUserMedia` existant). Lire ce qui s'affiche sur l'écran du
+  téléphone lui-même demande un mécanisme différent : l'API Android
+  **MediaProjection** (capture d'écran système), permission dédiée,
+  probablement une petite app compagnon native — `getUserMedia` seul ne
+  capture que caméra/micro, jamais l'écran d'autres applications.
+  Deviendrait l'équivalent mobile du système de modes de vision déjà
+  nommé pour le PC (éteint / capture écran / capture document / visionne
+  puis supprime / visionne et sauvegarde). **Garde-fou OTP étendu** : même
+  principe que pour les mails (`#100` C-1) — un code de vérification
+  affiché pendant une capture n'est jamais résumé, loggé ni transmis.
+  **RT-3** : strictement local. Gating chez moi/dehors (`VISION_LONG_TERME.md`
+  §4.2) : capture à la demande explicite uniquement, jamais continue —
+  particulièrement strict « dehors ».
 
 **Rien n'est construit.** Catalogage uniquement.
 
@@ -1528,15 +1560,25 @@ Au service de l'objectif retraite.
 
 ## #102 — Groupe E : Espace de travail Luca's (synthèse du 08/08/2026)
 
-- **E-1 — Espace de travail / poste de commandement.** Extension visuelle et
+- **E-1 — Espace de travail / poste de commandement.** ✅ **Implémenté le
+  08/08/2026** (brief dédié `cowork_workspace/BRIEF_WORKSPACE_E1.md`, voir
+  `ROADMAP.md` §5.73) : `modules/workspace_manager.py` +
+  `GET /workspace/summary` + `static/workspace.html`. Extension visuelle et
   fonctionnelle de `cowork_workspace/` : tableau de bord affichant rapports
-  produits, demandes en attente de validation, analyses, tâches à
-  faire/faites, plannings, objectifs en cours + avancement. Lit les fichiers
-  de `cowork_workspace/` + les tables SQLite (mémoire, journal d'actions,
+  produits, demandes en attente de validation, actions récentes
+  (`action_log`), objectifs en cours (mémoire prospective) — v1 sans
+  « avancement » chiffré, ce champ n'existe pas dans le schéma mémoire,
+  jamais de donnée fabriquée (`#97` RT-2). Lit les fichiers de
+  `cowork_workspace/` + les tables SQLite (mémoire, journal d'actions,
   objectifs). Interface web classique, **zéro VRAM, zéro rendu 3D**.
-  Structure **modulaire et évolutive** (sections/fenêtres réorganisables),
-  mais évolutions **pilotées par Cyril** (proposition → validation), pas
-  d'auto-remodelage autonome de l'interface.
+  Structure **modulaire et évolutive** (sections/fenêtres réorganisables) —
+  **v1 livrée en mise en page fixe**, la réorganisation reste une évolution
+  **pilotée par Cyril** (proposition → validation), pas construite
+  maintenant, et pas d'auto-remodelage autonome de l'interface.
+  **Direction esthétique (précisée 08/08/2026)** : épuré, moderne,
+  fonctionnel, intuitif — identité visuelle propre à Luca's/Cyril, pas un
+  thème générique importé tel quel (tokens de couleur réutilisés de
+  `static/css/style.css`, pas un thème dashboard séparé).
 - **E-2 — Volet dataviz professionnel.** Graphiques et analyses de qualité
   pro (Chart.js/Plotly, rendu web léger, zéro VRAM) : portefeuille,
   projections d'investissement (B-1), dépenses (B-2), cours de marché (B-3).
@@ -1563,14 +1605,22 @@ Au service de l'objectif retraite.
 
 ## #103 — Groupe F : Interface & présence (synthèse du 08/08/2026)
 
-- **F-1 — Refonte PWA « poste de commandement »** (sans graphe 3D). La PWA
-  existante devient l'interface façon vidéo JARVIS : cercle animé d'état
+- **F-1 — Refonte PWA « poste de commandement »** — ⚠️ **précisé
+  08/08/2026, 6e passe : smartphone uniquement**, sans graphe 3D, **sans
+  fonction d'appel**. La PWA existante, **sur smartphone spécifiquement**,
+  devient l'interface façon vidéo JARVIS : cercle animé d'état
   (Online/Listening/Thinking), badge modèle, barre de commande, cartes
   contextuelles, transcription. HTML/CSS/animations légères, **zéro GPU**.
   **Écarté** : le graphe 3D de bulles flottantes (lourd, incompatible avec
   la priorité « VRAM au cerveau ») — reste au catalogue comme « option
-  lourde, plus tard ». Coexiste avec l'avatar fantôme minimal (présence
-  bureau) : la PWA = expérience complète, l'avatar = présence discrète.
+  lourde, plus tard ». **Confirmé (08/08/2026)** : uniquement le style
+  visuel de la scène d'appel de la vidéo de référence (cartes
+  contextuelles façon « on the call now... »), jamais la fonction d'appel
+  elle-même — reste annulée (`#98` A-3). **Répartition par appareil,
+  précisée dans cette même passe** : sur PC, avatar fantôme minimal
+  (présence bureau) + Workspace (`#102` E-1, déjà implémenté) ; sur
+  smartphone, cette interface complète façon JARVIS. Deux appareils, deux
+  rôles distincts, pas la même interface partout.
 - **F-2 — TTS interchangeable (adaptateur).** Module TTS conçu avec une
   interface interchangeable. Par défaut : local (Piper/edge_tts, qualité
   correcte). Évolution possible vers un TTS cloud premium (type ElevenLabs,
@@ -1607,6 +1657,12 @@ Au service de l'objectif retraite.
   d'elle-même — chaque nouveauté passe par Cyril avant adoption. Remplace
   « l'accès internet illimité » par un flux de veille supervisé (même
   bénéfice, plus sûr).
+- **G-5 — Note vocale universelle « à moi-même »** *(ajouté 08/08/2026,
+  6e passe)*. Un seul point d'entrée vocal (« note pour moi : ... ») que
+  Luca's route automatiquement vers le bon type de mémoire selon le
+  contenu — tâche, idée, rappel, dépense à noter. Réduit la friction
+  d'usage quotidien : pas besoin de savoir dans quel module ranger
+  l'info, Cyril parle, Luca's range.
 
 **Rien n'est construit.** Catalogage uniquement.
 
