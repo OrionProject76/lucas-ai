@@ -1,12 +1,23 @@
 # ui/main_window.py — interface Luca's
 # Avatar animé + TTS auto + Streaming fluide + HUD dark
 
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import (
+    Q_ARG,
+    Q_RETURN_ARG,
+    QMetaObject,
+    QObject,
+    Qt,
+    QThread,
+    Signal,
+    Slot,
+)
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QTextEdit,
     QVBoxLayout,
@@ -249,10 +260,34 @@ class STTWorker(QThread):
             self.error.emit(str(e))
 
 
+class ConfirmationBridge(QObject):
+    """
+    Pont de confirmation pour core/os_controller.py (Brique 2, 08/08/2026).
+
+    Un QMessageBox ne peut s'afficher que sur le thread GUI, mais
+    OSController est généralement appelé depuis le QThread worker qui
+    exécute LucasCore.ask() (même contrainte que le streaming du chat). Ce
+    pont vit sur le thread GUI ; MainWindow.confirm_destructive() (plus
+    bas) l'invoque en toute sécurité depuis n'importe quel thread.
+    """
+
+    @Slot(str, result=bool)
+    def confirm_destructive_action(self, message: str) -> bool:
+        reply = QMessageBox.question(
+            None,
+            "Confirmer l'action",
+            message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return reply == QMessageBox.StandardButton.Yes
+
+
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.lucas = LucasCore()
+        self._confirmation_bridge = ConfirmationBridge()
         self.worker = None
         self.tts_worker = None
         self.context_worker = None
@@ -390,6 +425,29 @@ class MainWindow(QWidget):
         self._set_avatar_state("IDLE")
 
     # ── Avatar states ──
+    def confirm_destructive(self, message: str) -> bool:
+        """
+        À injecter comme `confirm_destructive` dans core/os_controller.py.
+
+        Sûr depuis n'importe quel thread : si l'appelant est déjà sur le
+        thread GUI, appel direct (un `BlockingQueuedConnection` émis vers
+        son propre thread ferait un deadlock — son event loop, bloquée en
+        attente, ne traiterait jamais l'appel en file). Sinon, invoqué via
+        `QMetaObject.invokeMethod` en connexion bloquante : le thread
+        appelant attend le résultat, affiché sur le thread GUI.
+        """
+        app_instance = QApplication.instance()
+        assert app_instance is not None, "MainWindow exige une QApplication déjà construite"
+        if QThread.currentThread() is app_instance.thread():
+            return self._confirmation_bridge.confirm_destructive_action(message)
+        return bool(QMetaObject.invokeMethod(
+            self._confirmation_bridge,
+            "confirm_destructive_action",
+            Qt.ConnectionType.BlockingQueuedConnection,
+            Q_RETURN_ARG(bool),
+            Q_ARG(str, message),
+        ))
+
     def _set_status(self, text: str, variant: str = "connecting"):
         """
         Affiche un message de statut dans la bonne couleur.

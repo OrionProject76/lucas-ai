@@ -19,6 +19,7 @@ from core.decision_engine import (
     ActionSpec,
     DecisionEngine,
     automation_manager_actions,
+    os_controller_actions,
 )
 
 
@@ -202,26 +203,21 @@ def test_get_returns_the_registered_spec(engine) -> None:
 
 # ── ILLUSTRATIVE_ACTIONS : aspirationnel, aucun callable réel ───────────
 #
-# Aucun n'est câblé à une vraie action système (voir l'en-tête du module) —
-# ces tests vérifient seulement que la catégorisation elle-même est celle
-# annoncée : lecture pour consulter un réglage, écriture pour le changer,
-# exécution pour capturer l'écran.
+# Réduit à la luminosité le 08/08/2026 (Brique 2, OS Controller) : volume/
+# presse-papier/capture d'écran sont devenus RÉELS, voir
+# os_controller_actions() plus bas. Aucun de ceux qui restent ici n'est
+# câblé à une vraie action système (voir l'en-tête du module).
 
 def test_illustrative_actions_are_not_auto_registered() -> None:
     """DecisionEngine() démarre vide : à un appelant futur d'enregistrer explicitement."""
-    assert DecisionEngine().get("get_volume") is None
+    assert DecisionEngine().get("get_brightness") is None
 
 
 @pytest.mark.parametrize(
     "name, expected_category",
     [
-        ("get_volume", ActionCategory.READ),
-        ("set_volume", ActionCategory.WRITE),
         ("get_brightness", ActionCategory.READ),
         ("set_brightness", ActionCategory.WRITE),
-        ("read_clipboard", ActionCategory.READ),
-        ("write_clipboard", ActionCategory.WRITE),
-        ("take_screenshot", ActionCategory.EXECUTE),
     ],
 )
 def test_illustrative_actions_match_the_documented_model(name, expected_category) -> None:
@@ -265,6 +261,33 @@ def test_automation_manager_actions_cannot_silently_drift(monkeypatch) -> None:
 
     names = {spec.name for spec in automation_manager_actions()}
     assert names == {"launch_nouvelle_appli"}
+
+
+# ── os_controller_actions() : RÉEL, core/os_controller.py (08/08/2026) ──
+
+def test_os_controller_actions_cover_every_public_method() -> None:
+    names = {spec.name for spec in os_controller_actions()}
+    assert names == {
+        "move_file", "rename_file", "take_screenshot",
+        "set_volume", "write_clipboard",
+        "get_volume", "read_clipboard",
+    }
+
+
+def test_os_controller_actions_categories_match_the_documented_model() -> None:
+    by_name = {spec.name: spec for spec in os_controller_actions()}
+    assert by_name["get_volume"].category == ActionCategory.READ
+    assert by_name["read_clipboard"].category == ActionCategory.READ
+    assert by_name["set_volume"].category == ActionCategory.WRITE
+    assert by_name["write_clipboard"].category == ActionCategory.WRITE
+    assert by_name["move_file"].category == ActionCategory.EXECUTE
+    assert by_name["rename_file"].category == ActionCategory.EXECUTE
+    assert by_name["take_screenshot"].category == ActionCategory.EXECUTE
+
+
+def test_os_controller_actions_are_not_auto_registered() -> None:
+    """Même prudence qu'ILLUSTRATIVE_ACTIONS et automation_manager_actions()."""
+    assert DecisionEngine().get("move_file") is None
 
 
 if __name__ == "__main__":

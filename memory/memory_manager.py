@@ -1,6 +1,7 @@
 # memory/memory_manager.py — sauvegarde et relit l'historique des conversations
 # + événements système significatifs (voir VISION_LONG_TERME.md, mémoire 3 niveaux)
 
+import json
 import shutil
 import sqlite3
 from datetime import UTC, datetime
@@ -12,8 +13,9 @@ DB_PATH = Path(__file__).parent / "lucas_memory.db"
 
 # Bump à chaque migration de schéma qui doit déclencher une sauvegarde
 # automatique (_backup_if_migrating) — 1 = état avant la mémoire à 5
-# types (Brique 3, 08/08/2026).
-SCHEMA_VERSION = 2
+# types (Brique 3, 08/08/2026), 2 = état avant la colonne action_log.params
+# (Brique 2, OS Controller, 08/08/2026).
+SCHEMA_VERSION = 3
 
 # Mémoire à 5 types (IDEAS.md #2) — distincte du transcript de chat
 # (`conversations`) : un fait retenu, pas un message. Listes en Python,
@@ -176,6 +178,11 @@ class MemoryManager:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # params : JSON sérialisé, nullable — ajouté pour core/os_controller.py
+        # (Brique 2, 08/08/2026). Additif, rétrocompatible : tout appelant
+        # existant de save_action() (lancement d'appli) continue de
+        # fonctionner sans modification, params reste NULL pour lui.
+        self._migrate_add_column("action_log", "params", "TEXT")
 
         # État persistant clé/valeur — voir set_state/get_state plus bas
         # pour la raison (LucasCore est recréé à chaque requête, donc tout
@@ -412,16 +419,22 @@ class MemoryManager:
 
     # ── Journal des actions gouvernées (Decision Engine, nouveau) ────
 
-    def save_action(self, action: str, source: str, result: str) -> None:
+    def save_action(
+        self, action: str, source: str, result: str, *, params: dict | None = None
+    ) -> None:
         """
         Enregistre une décision de core/decision_engine.py — pas un
         événement système générique. `result` typiquement "executed" ou
         "denied" (voir core/decision_engine.py::ActionCategory), `source`
-        le déclencheur de la demande (ex. "chat").
+        le déclencheur de la demande (ex. "chat", "os_controller").
+
+        `params` (ajouté 08/08/2026 pour core/os_controller.py) : les
+        arguments de l'action, sérialisés en JSON — NULL si absent, tout
+        appelant existant (lancement d'appli) continue sans modification.
         """
         self.cursor.execute(
-            "INSERT INTO action_log (action, source, result) VALUES (?, ?, ?)",
-            (action, source, result),
+            "INSERT INTO action_log (action, source, result, params) VALUES (?, ?, ?, ?)",
+            (action, source, result, json.dumps(params) if params is not None else None),
         )
         self.conn.commit()
 
@@ -430,18 +443,24 @@ class MemoryManager:
         Les N actions gouvernées les plus récentes — consultation future
         par le panneau sécurité/API (pas construit ici, voir ROADMAP.md
         §5.25 pour le périmètre exact de ce qui est câblé aujourd'hui).
+
+        `params` est désérialisé depuis son JSON — `None` si absent, ou si
+        une ligne pré-migration ne portait rien.
         """
         self.cursor.execute(
             """
-            SELECT action, source, result, created_at
+            SELECT action, source, result, params, created_at
             FROM action_log
             ORDER BY id DESC
             LIMIT ?
             """,
             (limit,),
         )
-        columns = ("action", "source", "result", "created_at")
-        return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+        columns = ("action", "source", "result", "params", "created_at")
+        rows = [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+        for row in rows:
+            row["params"] = json.loads(row["params"]) if row["params"] is not None else None
+        return rows
 
     # ── Mémoire à 5 types (remember/recall/forget, IDEAS.md #2) ───────
     #

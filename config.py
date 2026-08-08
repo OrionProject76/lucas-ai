@@ -720,6 +720,22 @@ SYSTEM_PROMPT = (
 # nom de son entreprise. Signalé ici pour qu'une relecture future ne prenne
 # pas l'écart pour une incohérence à « corriger ».
 
+# --- OS Controller (core/os_controller.py) — Brique 2 du noyau, 08/08/2026 ---
+# Liste blanche stricte : organisation de fichiers, capture d'écran, volume,
+# presse-papiers. Jamais C:\Windows ni Program Files — un dossier utilisateur
+# uniquement, refusé explicitement plutôt que par omission.
+ALLOWED_DIRECTORIES: list[str] = [
+    str(Path.home() / "Documents"),
+    str(Path.home() / "Desktop"),
+    str(Path.home() / "Downloads"),
+]
+
+# Écraser un fichier existant (déplacement/renommage) exige une confirmation
+# explicite (QMessageBox côté UI, refus par défaut sans UI — voir
+# core/os_controller.py::OSController). Pas un interrupteur de confort : le
+# désactiver reviendrait à écraser des fichiers de Cyril sans le prévenir.
+CONFIRM_DESTRUCTIVE: bool = True
+
 # --- UI ---
 WINDOW_TITLE = "Luca's"
 WINDOW_WIDTH = 900

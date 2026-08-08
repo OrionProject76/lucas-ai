@@ -111,19 +111,45 @@ def automation_manager_actions() -> tuple[ActionSpec, ...]:
     )
 
 
+# ── RÉEL : core/os_controller.py (Brique 2, 08/08/2026) ─────────────────
+#
+# get_brightness/set_brightness restent ASPIRATIONNELS : aucun callable
+# réel derrière (aucune bibliothèque de luminosité écran retenue cette
+# session) — voir ILLUSTRATIVE_ACTIONS ci-dessous, qui ne contient plus
+# que ce qui n'existe vraiment pas encore.
+def os_controller_actions() -> tuple[ActionSpec, ...]:
+    """
+    ActionSpec réels pour core/os_controller.py — même patron que
+    automation_manager_actions() : générés à chaque appel plutôt que
+    recopiés, pour ne jamais dériver d'une méthode ajoutée/retirée là-bas.
+
+    move_file/rename_file/take_screenshot = EXECUTE (écrit un fichier ou
+    produit un effet externe, journalisé). set_volume/write_clipboard =
+    WRITE (paramètre système réversible, confirmé mais pas journalisé par
+    DecisionEngine — OSController journalise lui-même chaque appel dans
+    action_log, y compris READ, ce qui est plus large que
+    LOGGED_CATEGORIES ici). get_volume/read_clipboard = READ, jamais de
+    confirmation.
+    """
+    return (
+        ActionSpec("move_file", ActionCategory.EXECUTE, "Déplacer un fichier entre dossiers autorisés"),
+        ActionSpec("rename_file", ActionCategory.EXECUTE, "Renommer un fichier dans un dossier autorisé"),
+        ActionSpec("take_screenshot", ActionCategory.EXECUTE, "Capturer l'écran"),
+        ActionSpec("set_volume", ActionCategory.WRITE, "Changer le niveau sonore"),
+        ActionSpec("write_clipboard", ActionCategory.WRITE, "Écrire dans le presse-papier"),
+        ActionSpec("get_volume", ActionCategory.READ, "Lire le niveau sonore actuel"),
+        ActionSpec("read_clipboard", ActionCategory.READ, "Lire le contenu du presse-papier"),
+    )
+
+
 # ── ASPIRATIONNEL : aucun callable réel derrière, aucun de ces noms ─────
 # n'existe dans le projet aujourd'hui. Sert d'exemple de catégorisation
-# pour un futur chantier OS Controller (CLAUDE.md, Priorités S6) — pas
-# une liste de ce qui est construit. Ne pas confondre avec
-# automation_manager_actions() ci-dessus.
+# pour un futur chantier (luminosité écran) — pas une liste de ce qui est
+# construit. Ne pas confondre avec automation_manager_actions() ou
+# os_controller_actions() ci-dessus.
 ILLUSTRATIVE_ACTIONS: tuple[ActionSpec, ...] = (
-    ActionSpec("get_volume", ActionCategory.READ, "Lire le niveau sonore actuel"),
-    ActionSpec("set_volume", ActionCategory.WRITE, "Changer le niveau sonore"),
     ActionSpec("get_brightness", ActionCategory.READ, "Lire la luminosité actuelle de l'écran"),
     ActionSpec("set_brightness", ActionCategory.WRITE, "Changer la luminosité de l'écran"),
-    ActionSpec("read_clipboard", ActionCategory.READ, "Lire le contenu du presse-papier"),
-    ActionSpec("write_clipboard", ActionCategory.WRITE, "Écrire dans le presse-papier"),
-    ActionSpec("take_screenshot", ActionCategory.EXECUTE, "Capturer l'écran"),
 )
 
 

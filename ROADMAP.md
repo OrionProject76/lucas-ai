@@ -7637,6 +7637,99 @@ future ne finisse jamais versionnée par erreur.
 
 Prochaine étape : Brique 2 (OS Controller).
 
+## 5.69 Noyau minimal — Brique 2 : OS Controller, liste blanche, 08/08/2026
+
+Deuxième brique du brief du 08/08/2026 (§5.68 ci-dessus pour le contexte
+complet, l'ordre acté et les points de clarification déjà tranchés).
+
+`core/os_controller.py` (nouveau) : `OSController` — `move_file`,
+`rename_file`, `take_screenshot` (délègue à `VisionManager.capture_screen()`,
+aucun second chemin de capture), `get_volume`/`set_volume` (pycaw, mesuré
+réellement sur cette machine avant d'écrire le code — `AudioUtilities.
+GetSpeakers().EndpointVolume`, pas `.Activate()` comme le suggéraient
+d'anciens tutoriels, l'API a changé), `read_clipboard`/`write_clipboard`
+(`pyperclip`, pas `QApplication.clipboard()` : ce module doit fonctionner
+identiquement depuis l'UI PySide6 et depuis le pont mobile FastAPI, où
+aucune boucle Qt ne tourne).
+
+**Lancer une application reste dans `modules/automation_manager.py`** —
+`OSController` ne le redéfinit pas, `core/decision_engine.py` enregistre
+les deux générateurs séparément (`automation_manager_actions()` +
+`os_controller_actions()`, nouveau, même patron : généré à chaque appel,
+jamais recopié). `ILLUSTRATIVE_ACTIONS` réduit à `get_brightness`/
+`set_brightness` : le reste (volume, presse-papiers, capture) est devenu
+réel, retiré de la liste aspirationnelle.
+
+**Dossiers autorisés** (`config.ALLOWED_DIRECTORIES`) : Documents/Desktop/
+Downloads du profil utilisateur uniquement, jamais `C:\Windows` ni
+`Program Files` — refusé par construction (liste positive), pas par
+omission. Vérification par résolution de chemin (`Path.resolve()`,
+symlinks compris), jamais par préfixe de chaîne : `"Documents2"` commence
+comme `"Documents"` sans y être contenu, testé explicitement.
+
+**Écrasement de fichier = confirmation**, jamais automatique. Point de
+clarification tranché par Cyril avant ce plan : `QMessageBox.question()`
+minimale, cantonnée à ce module, **pas** les cartes d'approbation
+d'IDEAS.md #80 (toujours différées). Callable `confirm_destructive`
+injecté, refus par défaut sans lui — même garde que
+`DecisionEngine.confirm` : un mécanisme indisponible n'autorise jamais.
+
+**Pont de threading Qt (`ui/main_window.py::ConfirmationBridge`)** —
+précision explicite de Cyril avant ce plan : `OSController` tourne
+généralement hors du thread GUI (même contrainte que le streaming du
+chat), un `QMessageBox` ne peut s'afficher que sur ce thread.
+`MainWindow.confirm_destructive()` teste `QThread.currentThread() is
+QApplication.instance().thread()` — appel direct si déjà sur le thread
+GUI (un `BlockingQueuedConnection` vers son propre thread ferait un
+deadlock, documenté et évité), sinon `QMetaObject.invokeMethod(...,
+Qt.ConnectionType.BlockingQueuedConnection, Q_RETURN_ARG(bool),
+Q_ARG(str, message))`.
+
+**Vérifié en conditions réelles, pas seulement en théorie** : un script
+séparé a d'abord reproduit le mécanisme (QThread réel + `QMessageBox.
+question` mocké) pour confirmer que `worker.wait()` ne pompe PAS la file
+d'événements du thread appelant — un piège de deadlock silencieux, évité
+en pompant via `app.processEvents()` en boucle. Le test définitif
+(`test_confirm_destructive_from_a_background_thread_does_not_deadlock`,
+`test_main_window_paths.py`) exerce ensuite le VRAI pont depuis un VRAI
+thread distinct, pas une simulation de l'aiguillage.
+
+**Journal d'audit** : colonne `action_log.params` (JSON, migration
+additive via `_migrate_add_column`, `SCHEMA_VERSION` 2→3 — nouveau backup
+automatique déclenché comme en Brique 3). `save_action()`/
+`load_recent_actions()` étendus, rétrocompatibles (tout appelant existant
+continue sans modification, `params` reste `NULL`). Actions READ
+(`get_volume`, `read_clipboard`) jamais journalisées — cohérent avec
+`ActionCategory.READ` de `core/decision_engine.py`.
+
+**Non wiré dans le flux de chat** : comme `remember()`/`recall()` en
+Brique 3, `OSController` est construit et testé mais aucun déclencheur en
+langage naturel n'existe encore dans `core/lucas_core.py` — le brief n'en
+spécifiait aucun, et l'inventer aurait été de la portée non demandée.
+
+**35 tests dédiés** (`test_os_controller.py` : 22, extension de
+`test_decision_engine.py` : +3, `test_main_window_paths.py` : +3 pour le
+pont de confirmation, dont le test de thread réel), suite complète
+rejouée à 1490/1490. `ruff`/`mypy` (`just mypy`, `--ignore-missing-imports
+--check-untyped-defs`) propres sur tous les fichiers touchés.
+
+**Base réelle de Cyril vérifiée intacte après coup** (comptage de lignes
+uniquement, même discipline qu'en Brique 3) : `system_events` toujours à
+632, un seul fichier `.bak-*` (celui de la Brique 3), aucune nouvelle
+écriture.
+
+**⚠️ Vérification manuelle V5 non faite par Cyril** : la boîte de dialogue
+réelle n'a pas été cliquée par lui (session sans écran interactif) — ce
+qui est vérifié, c'est la plomberie complète (thread, blocage, retour de
+valeur) avec `QMessageBox.question` mocké. Le clic réel reste à faire par
+Cyril quand `OSController` sera câblé sur un vrai déclencheur.
+
+Nouvelles dépendances installées et ajoutées à `requirements.txt` :
+`pycaw`, `comtypes`, `pyperclip` (ce dernier déjà présent transitivement,
+rendu explicite).
+
+Prochaine étape : Brique 1 (routeur hybride local/cloud).
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

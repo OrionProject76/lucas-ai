@@ -425,3 +425,64 @@ def test_closing_waits_for_the_running_workers(window, monkeypatch) -> None:
 
     assert "tts" in attentes, "le worker TTS doit être attendu"
     assert "stt" in attentes, "le worker STT doit être attendu"
+
+
+# ── ConfirmationBridge (core/os_controller.py, Brique 2, 08/08/2026) ────
+#
+# Pont de confirmation pour les actions destructrices de l'OS Controller.
+# QMessageBox ne peut s'afficher que sur le thread GUI ; ces tests
+# vérifient les deux branches de MainWindow.confirm_destructive() : appel
+# direct sur le thread GUI, et QMetaObject.invokeMethod en connexion
+# bloquante depuis un thread réellement distinct.
+
+def test_confirm_destructive_on_the_gui_thread_calls_the_bridge_directly(window, monkeypatch) -> None:
+    monkeypatch.setattr(
+        window._confirmation_bridge, "confirm_destructive_action", lambda message: True
+    )
+
+    assert window.confirm_destructive("écraser ?") is True
+
+
+def test_confirm_destructive_on_the_gui_thread_reflects_a_refusal(window, monkeypatch) -> None:
+    monkeypatch.setattr(
+        window._confirmation_bridge, "confirm_destructive_action", lambda message: False
+    )
+
+    assert window.confirm_destructive("écraser ?") is False
+
+
+def test_confirm_destructive_from_a_background_thread_does_not_deadlock(window, app, monkeypatch) -> None:
+    """
+    Le vrai test de ce pont : exercé depuis un VRAI QThread distinct, pas
+    en simulant l'aiguillage. Un BlockingQueuedConnection émis depuis le
+    thread GUI lui-même ferait un deadlock (voir la docstring de
+    confirm_destructive) — c'est ce que la branche "même thread" évite.
+
+    `app.processEvents()` en boucle, pas `worker.wait()` : ce dernier ne
+    pompe pas la file d'événements du thread appelant, donc l'appel en
+    attente sur le thread GUI ne serait jamais traité — vérifié en
+    reproduisant le blocage avant d'écrire ce test.
+    """
+    import time
+
+    from PySide6.QtCore import QThread
+    from PySide6.QtWidgets import QMessageBox
+
+    monkeypatch.setattr(
+        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
+    )
+    result: dict[str, bool] = {}
+
+    class _Worker(QThread):
+        def run(self):
+            result["value"] = window.confirm_destructive("écraser depuis un autre thread ?")
+
+    worker = _Worker()
+    worker.start()
+    deadline = time.monotonic() + 5
+    while worker.isRunning() and time.monotonic() < deadline:
+        app.processEvents()
+        time.sleep(0.01)
+
+    assert not worker.isRunning(), "le thread ne s'est jamais terminé — deadlock probable"
+    assert result.get("value") is True
