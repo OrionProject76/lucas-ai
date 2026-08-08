@@ -12,6 +12,9 @@ PySide6>=6.11.0          # UI, QThread streaming, avatar QPainter
 # ─── LLM & HTTP ────────────────────────────
 requests>=2.32.0         # Appels Ollama (core/local_llm.py, core/llm_worker.py)
 ollama>=0.6.0            # Client Ollama pour la vision (modules/vision_manager.py)
+anthropic>=0.121.0       # API cloud — Brique 1, core/cloud_llm.py, 08/08/2026
+keyring>=25.7.0          # Clé API Anthropic dans le Gestionnaire d'identification
+                          # Windows (config.py) — jamais dans .env pour ce secret
 
 # ─── API & Mobile bridge ───────────────────
 fastapi>=0.128.0         # api/server.py — REST + WebSocket

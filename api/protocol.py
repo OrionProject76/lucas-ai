@@ -62,20 +62,27 @@ def avatar_state(state: str, text: str = "") -> dict:
     return message
 
 
-def chat(text: str, from_luca: bool = True) -> dict:
+def chat(text: str, from_luca: bool = True, destination: str | None = None) -> dict:
     """
     Message de conversation.
 
     Le champ s'appelait « from_orion » avant le renommage technique du
     02/08/2026 (voir ROADMAP §6) — renommé en même temps que le client
     Godot (scripts/websocket_client.gd), sur les deux faces du contrat.
+
+    `destination` (ajouté 08/08/2026, Brique 1 — routeur hybride) : "local"
+    ou "cloud", provenance de la réponse. Additif, absent si non fourni —
+    ignoré sans casse côté Godot, qui ne le lit pas.
     """
-    return {
+    message: dict = {
         "type": "chat",
         "text": text,
         "from_lucas": from_luca,
         "source_agent": DEFAULT_SOURCE_AGENT,
     }
+    if destination is not None:
+        message["destination"] = destination
+    return message
 
 
 def system(cpu: float, ram: float, gpu: float = 0.0) -> dict:

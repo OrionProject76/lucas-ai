@@ -7730,6 +7730,101 @@ rendu explicite).
 
 Prochaine étape : Brique 1 (routeur hybride local/cloud).
 
+## 5.70 Noyau minimal — Brique 1 : routeur hybride local/cloud (Anthropic), 08/08/2026
+
+Troisième brique du brief du 08/08/2026 (§5.68 pour le contexte complet).
+Chargé la skill `claude-api` avant d'écrire ce chantier — jamais deviné de
+nom de modèle ni de forme d'API.
+
+**`config.py`** : `OPENAI_API_KEY` (stub jamais utilisé, aucun appel
+OpenAI n'a jamais existé) remplacé par `ANTHROPIC_API_KEY`, lue via
+`keyring` (Gestionnaire d'identification Windows) — jamais `.env`, jamais
+en clair, décision explicite de Cyril tranchée avant ce plan.
+`ANTHROPIC_MODEL = "claude-opus-5"` (modèle par défaut imposé par la
+skill, aucune demande contraire de Cyril). `ANTHROPIC_EFFORT = "medium"` —
+écart volontaire par rapport au défaut "high" de l'API : le plafond
+mensuel (`CLOUD_BUDGET_EUR`, défaut 10€) rendrait "high"/"xhigh"
+disproportionné pour un usage domestique. Le thinking adaptatif reste
+actif (paramètre `thinking` omis = adaptatif par défaut sur claude-opus-5,
+vérifié dans la skill). Tarifs USD comparés directement à un plafond EUR,
+sans conversion — simplification assumée et documentée en commentaire,
+pas cachée.
+
+**`scripts/set_anthropic_key.py`** (nouveau) : seul moyen de peupler le
+Credential Manager — `getpass.getpass()`, jamais `input()` en clair.
+
+**`core/cloud_llm.py`** — réécrit de zéro (stub de 12 lignes, aucun appel
+réseau n'a jamais existé). `_to_anthropic_format()` sépare les blocs
+`role="system"` (plusieurs, intercalés — format Ollama utilisé partout
+ailleurs dans le projet) du reste, puisque l'API Anthropic exige un
+`system` unique hors du tableau `messages`. `stop_reason == "refusal"`
+vérifié AVANT de lire `response.content` — un refus des garde-fous
+Anthropic rend un HTTP 200 normal avec un contenu vide ou partiel,
+lire `content[0]` sans ce test aurait planté (piège documenté par la
+skill pour claude-opus-5). Chaque appel journalise son coût réel
+(`_record_usage()`) dans la nouvelle table `cloud_usage`.
+
+**`core/router.py`** : `cloud_is_available()` relit `ANTHROPIC_API_KEY`
+(renommage). `cloud_budget_available()` (nouveau) ajouté comme troisième
+condition de `route()`, après `cloud_is_available()` — ne peut que ramener
+vers le local, jamais l'inverse, même invariant que le test de
+disponibilité déjà en place. `cloud_budget_warning()` (nouveau) : signal
+séparé à 80 % du plafond, jamais consulté par `route()` elle-même —
+consommé par `core/lucas_core.py::ask()` via la console de flux
+existante (`on_activity`), pas mêlé à la logique de sécurité/coût.
+
+**`memory/memory_manager.py`** : table `cloud_usage` (une ligne par mois,
+`ON CONFLICT` incrémental — même patron que `set_state()`),
+`record_cloud_usage()`/`cloud_usage_this_month()`. `SCHEMA_VERSION` 3→4,
+nouveau backup automatique déclenché comme aux Briques 2/3.
+
+**🔴 Piège retrouvé en écrivant les tests, avant qu'il ne devienne un bug
+caché** : `cloud_budget_available()`, `cloud_budget_warning()` et
+`_record_usage()` appelaient d'abord `MemoryManager()` nu — exactement le
+défaut de paramètre figé qui a coûté la découverte du §5.68
+(`save_event_from_any_thread`). Corrigé avant commit, pas après coup :
+les trois passent désormais `db_path=memory_manager.DB_PATH` explicite,
+lu dans le corps de la fonction à chaque appel — un `monkeypatch` de
+`DB_PATH` dans un test fonctionne réellement.
+
+**`api/protocol.py`** : `chat()` gagne un paramètre `destination`
+optionnel, additif — absent du dict si non fourni, donc aucune casse
+côté Godot (test de non-régression explicite). `api/server.py` l'ajoute
+au JSON `/chat` (REST) et au message `chat` du WebSocket, via
+`getattr(lucas, "last_destination", "local")` — pas un accès direct :
+plusieurs doublures de test (`_FakeCore`, `_SilentCore`, deux `_FauxCore`)
+n'ont pas cet attribut, ajouté après elles.
+
+**⚠️ Le streaming du chat desktop (PySide6) ne passe jamais par le
+cloud** — vérifié avant de toucher `ui/main_window.py` : `LLMWorker`
+parle directement à Ollama via `LucasCore.prepare()`, "toujours local"
+par conception documentée (aucun streaming cloud n'existe). Le routage
+hybride ne s'exerce donc que sur `api/server.py` (REST + WebSocket —
+PWA mobile, Godot), pas sur le client desktop. Aucune bulle de chat
+PySide6 n'affiche donc la provenance — cohérent avec l'exclusion du
+brief (« Aucune refonte UI », « pas de modification PWA »), pas un
+oubli.
+
+**38 tests dédiés** (`test_cloud_llm.py` : 10, extension de
+`test_router.py` : +7, `test_memory_manager.py` : +3, extension de
+`test_couverture_residuelle.py` : réécriture des tests OPENAI_API_KEY,
+`test_protocol.py` : +1), suite complète à 1510/1510, `ruff`/`mypy`
+propres (un `# type: ignore[call-overload]` documenté : `converted` est
+un `list[dict]` générique, pas le `TypedDict` strict que mypy attend —
+forme runtime vérifiée par les tests, friction de typage pas un bug).
+
+**Base réelle de Cyril vérifiée intacte après coup** (comptage de lignes
+uniquement) : aucune nouvelle écriture, aucun nouveau `.bak-*`.
+
+**⚠️ V1 non vérifiée en conditions réelles** : aucune clé Anthropic
+n'était disponible dans cette session pour faire un vrai appel cloud —
+seul `test_cloud_llm.py` (mocké) prouve la plomberie. Cyril devra
+enregistrer sa clé (`scripts/set_anthropic_key.py`) et poser une vraie
+question complexe pour valider V1 en conditions réelles.
+
+Prochaine étape : Brique 4 (avatar QPainter, 7 états) — dernière brique,
+indépendante des trois précédentes.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

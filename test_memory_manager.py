@@ -445,5 +445,40 @@ def test_migration_backup_is_a_no_op_on_an_already_migrated_database(tmp_path) -
     assert list(tmp_path.glob("already_at_v2.db.bak-*")) == []
 
 
+# ── Coût cloud mensuel (Brique 1, routeur hybride, 08/08/2026) ──────────
+
+def test_cloud_usage_this_month_is_zero_on_a_fresh_database(memory) -> None:
+    assert memory.cloud_usage_this_month() == {
+        "input_tokens": 0, "output_tokens": 0, "cost_eur": 0.0,
+    }
+
+
+def test_record_cloud_usage_accumulates_within_the_month(memory) -> None:
+    memory.record_cloud_usage(input_tokens=1000, output_tokens=500, cost_eur=0.02)
+    memory.record_cloud_usage(input_tokens=2000, output_tokens=1000, cost_eur=0.04)
+
+    usage = memory.cloud_usage_this_month()
+
+    assert usage["input_tokens"] == 3000
+    assert usage["output_tokens"] == 1500
+    assert usage["cost_eur"] == pytest.approx(0.06)
+
+
+def test_cloud_usage_switches_to_local_only_at_100_percent(monkeypatch, tmp_path) -> None:
+    """
+    Reproduit le scénario de validation V3 du brief : plafond artificiel à
+    0,01€, un seul appel suffit à le dépasser.
+    """
+    import config
+
+    monkeypatch.setattr(config, "CLOUD_BUDGET_EUR", 0.01)
+    memory = MemoryManager(db_path=tmp_path / "test.db")
+    try:
+        memory.record_cloud_usage(input_tokens=1000, output_tokens=500, cost_eur=0.02)
+        assert memory.cloud_usage_this_month()["cost_eur"] >= config.CLOUD_BUDGET_EUR
+    finally:
+        memory.close()
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

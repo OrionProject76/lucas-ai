@@ -14,8 +14,9 @@ DB_PATH = Path(__file__).parent / "lucas_memory.db"
 # Bump à chaque migration de schéma qui doit déclencher une sauvegarde
 # automatique (_backup_if_migrating) — 1 = état avant la mémoire à 5
 # types (Brique 3, 08/08/2026), 2 = état avant la colonne action_log.params
-# (Brique 2, OS Controller, 08/08/2026).
-SCHEMA_VERSION = 3
+# (Brique 2, OS Controller, 08/08/2026), 3 = état avant la table cloud_usage
+# (Brique 1, routeur hybride, 08/08/2026).
+SCHEMA_VERSION = 4
 
 # Mémoire à 5 types (IDEAS.md #2) — distincte du transcript de chat
 # (`conversations`) : un fait retenu, pas un message. Listes en Python,
@@ -244,6 +245,21 @@ class MemoryManager:
         self.cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_memories_type_expiration
             ON memories(memory_type, expiration)
+        """)
+
+        # Compteur de coût cloud mensuel (Brique 1, routeur hybride,
+        # 08/08/2026) — une ligne par mois, mise à jour incrémentale via
+        # ON CONFLICT (même patron que set_state() plus bas). Sert
+        # core/router.py::cloud_budget_available()/cloud_budget_warning().
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS cloud_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                year_month TEXT NOT NULL UNIQUE,
+                input_tokens INTEGER NOT NULL DEFAULT 0,
+                output_tokens INTEGER NOT NULL DEFAULT 0,
+                cost_eur REAL NOT NULL DEFAULT 0.0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
         """)
 
         self.conn.commit()
@@ -546,6 +562,47 @@ class MemoryManager:
         self.cursor.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
         self.conn.commit()
         return self.cursor.rowcount > 0
+
+    # ── Coût cloud mensuel (Brique 1, routeur hybride, 08/08/2026) ───────
+
+    def record_cloud_usage(self, input_tokens: int, output_tokens: int, cost_eur: float) -> None:
+        """
+        Accumule l'usage cloud du mois courant. `year_month` calculé côté
+        Python (UTC), jamais `strftime('%Y-%m', 'now')` en SQL — cohérent
+        avec `created_at`/`CURRENT_TIMESTAMP` déjà en UTC ailleurs dans ce
+        fichier (voir minutes_since_last_exchange()).
+        """
+        year_month = datetime.now(UTC).strftime("%Y-%m")
+        self.cursor.execute(
+            """
+            INSERT INTO cloud_usage (year_month, input_tokens, output_tokens, cost_eur, updated_at)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(year_month) DO UPDATE SET
+                input_tokens = input_tokens + excluded.input_tokens,
+                output_tokens = output_tokens + excluded.output_tokens,
+                cost_eur = cost_eur + excluded.cost_eur,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (year_month, input_tokens, output_tokens, cost_eur),
+        )
+        self.conn.commit()
+
+    def cloud_usage_this_month(self) -> dict:
+        """
+        Usage cloud du mois courant. `{"input_tokens": 0, "output_tokens": 0,
+        "cost_eur": 0.0}` si rien n'a encore été enregistré ce mois-ci —
+        jamais None, pour que core/router.py puisse comparer directement
+        sans vérification supplémentaire.
+        """
+        year_month = datetime.now(UTC).strftime("%Y-%m")
+        self.cursor.execute(
+            "SELECT input_tokens, output_tokens, cost_eur FROM cloud_usage WHERE year_month = ?",
+            (year_month,),
+        )
+        row = self.cursor.fetchone()
+        if row is None:
+            return {"input_tokens": 0, "output_tokens": 0, "cost_eur": 0.0}
+        return {"input_tokens": row[0], "output_tokens": row[1], "cost_eur": row[2]}
 
     # ── État persistant léger (clé/valeur) ────────────────────────────
     #

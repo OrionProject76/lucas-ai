@@ -29,6 +29,7 @@ from core.local_llm import ask_local
 from core.memory_weighting import annotate_uncertain_events, annotate_uncertain_history
 from core.reasoning_engine import ReasoningEngine
 from core.router import (
+    cloud_budget_warning,
     extract_app_name,
     extract_calculation,
     extract_city,
@@ -277,6 +278,11 @@ def claims_action_success(answer: str) -> bool:
 class LucasCore:
     def __init__(self):
         self.memory = MemoryManager()
+        # Provenance de la dernière réponse ("local"/"cloud") — Brique 1,
+        # routeur hybride, 08/08/2026. Défaut "local" avant tout appel à
+        # ask(), pour qu'un lecteur externe (api/server.py) trouve toujours
+        # une valeur définie, jamais None.
+        self.last_destination = "local"
 
     @property
     def aura(self) -> AuraModeEngine:
@@ -1268,12 +1274,20 @@ class LucasCore:
         # rien envoyé — un effet de bord déclenché par un affichage.
         self.aura.handle_command(user_message)
         destination = route(user_message, self.recent_context())
+        self.last_destination = destination
         _emit(
             on_activity, "routed",
             "question reçue — traitée en CLOUD"
             if destination == "cloud"
             else f"question reçue — traitée en LOCAL ({MODEL_NAME})",
         )
+        if destination == "cloud":
+            # Signal séparé, jamais mêlé au routage lui-même (voir la
+            # docstring de cloud_budget_warning()) — juste porté à la
+            # connaissance de Cyril via la console de flux existante.
+            warning = cloud_budget_warning()
+            if warning is not None:
+                _emit(on_activity, "cloud_budget_warning", warning)
         messages = self._build_messages(
             user_message,
             destination,

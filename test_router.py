@@ -70,8 +70,14 @@ def test_route(question: str, expected: str, why: str, monkeypatch) -> None:
 
     C'est le même défaut que celui déjà corrigé pour `API_TOKEN` dans
     `test_server.py` : un test ne doit jamais dépendre d'un secret local.
+
+    `cloud_budget_available` mocké de même — sans ça, route() ouvrirait une
+    vraie MemoryManager() sur le DB_PATH par défaut (memory/lucas_memory.db
+    de Cyril) dès qu'un cas attend "cloud", exactement le piège corrigé
+    ailleurs dans la suite (voir ROADMAP.md §5.68).
     """
     monkeypatch.setattr("core.router.cloud_is_available", lambda: True)
+    monkeypatch.setattr("core.router.cloud_budget_available", lambda: True)
     assert route(question) == expected, f"« {question} » devrait être {expected} ({why})"
 
 
@@ -98,6 +104,7 @@ def test_the_availability_test_can_only_make_routing_more_local(monkeypatch) -> 
     jamais l'inverse — la règle 3 n'est pas assouplie.
     """
     monkeypatch.setattr("core.router.cloud_is_available", lambda: True)
+    monkeypatch.setattr("core.router.cloud_budget_available", lambda: True)
     avec = [route(q) for q in ("analyse mon portfolio", "quelle heure il est",
                                "résume le document")]
     monkeypatch.setattr("core.router.cloud_is_available", lambda: False)
@@ -366,6 +373,105 @@ def test_normalisation_is_shared_by_every_keyword_list() -> None:
     assert ".lower()" not in source, (
         "une comparaison en minuscules seule ignore accents et apostrophes"
     )
+
+
+# ── IBAN, espaces insécables (Brique 1, 08/08/2026) ─────────────────────
+
+def test_iban_with_non_breaking_spaces_never_routes_to_cloud(monkeypatch) -> None:
+    """
+    Couvre le critère V2 du brief : un IBAN copié depuis un document
+    français contient souvent une espace fine insécable (U+202F) entre
+    les groupes de 4 — is_sensitive()/route() ne doivent pas la laisser
+    passer, même combinée à un mot-clé cloud comme "analyse".
+    """
+    monkeypatch.setattr("core.router.cloud_is_available", lambda: True)
+    monkeypatch.setattr("core.router.cloud_budget_available", lambda: True)
+    iban = "FR76 3000 6000 0112 3456 7890 189"
+
+    assert is_sensitive(f"voici mon iban {iban}")
+    assert route(f"analyse cet iban {iban}") == "local"
+
+
+# ── Budget cloud mensuel (Brique 1, 08/08/2026) ──────────────────────────
+
+def test_cloud_route_falls_back_to_local_when_budget_exhausted(monkeypatch) -> None:
+    monkeypatch.setattr("core.router.cloud_is_available", lambda: True)
+    monkeypatch.setattr("core.router.cloud_budget_available", lambda: False)
+
+    assert route("analyse mes options stratégiques") == "local"
+
+
+def test_cloud_route_available_when_budget_and_key_are_both_fine(monkeypatch) -> None:
+    monkeypatch.setattr("core.router.cloud_is_available", lambda: True)
+    monkeypatch.setattr("core.router.cloud_budget_available", lambda: True)
+
+    assert route("analyse mes options stratégiques") == "cloud"
+
+
+def test_cloud_budget_available_reflects_real_usage(monkeypatch, tmp_path) -> None:
+    """
+    Contre la VRAIE table cloud_usage (via MemoryManager), pas seulement
+    la fonction mockée — couvre le critère V3 du brief, plafond artificiel
+    à 0,01€.
+    """
+    import config
+    from core.router import cloud_budget_available
+    from memory import memory_manager
+
+    monkeypatch.setattr(memory_manager, "DB_PATH", tmp_path / "test_budget.db")
+    monkeypatch.setattr(config, "CLOUD_BUDGET_EUR", 0.01)
+
+    assert cloud_budget_available() is True  # rien dépensé encore
+
+    memory = memory_manager.MemoryManager(db_path=tmp_path / "test_budget.db")
+    try:
+        memory.record_cloud_usage(input_tokens=1000, output_tokens=500, cost_eur=0.02)
+    finally:
+        memory.close()
+
+    assert cloud_budget_available() is False  # plafond dépassé -> bascule locale
+
+
+def test_cloud_budget_warning_triggers_at_80_percent(monkeypatch, tmp_path) -> None:
+    import config
+    from core.router import cloud_budget_warning
+    from memory import memory_manager
+
+    monkeypatch.setattr(memory_manager, "DB_PATH", tmp_path / "test_warning.db")
+    monkeypatch.setattr(config, "CLOUD_BUDGET_EUR", 10.0)
+
+    assert cloud_budget_warning() is None  # rien dépensé
+
+    memory = memory_manager.MemoryManager(db_path=tmp_path / "test_warning.db")
+    try:
+        memory.record_cloud_usage(input_tokens=1000, output_tokens=500, cost_eur=8.5)
+    finally:
+        memory.close()
+
+    warning = cloud_budget_warning()
+    assert warning is not None
+    assert "8.50" in warning
+
+
+def test_cloud_budget_warning_never_changes_the_routing_decision(monkeypatch, tmp_path) -> None:
+    """
+    Signal séparé, jamais mêlé à route() elle-même — voir la docstring de
+    cloud_budget_warning().
+    """
+    import config
+    from memory import memory_manager
+
+    monkeypatch.setattr(memory_manager, "DB_PATH", tmp_path / "test_no_mix.db")
+    monkeypatch.setattr(config, "CLOUD_BUDGET_EUR", 10.0)
+    monkeypatch.setattr("core.router.cloud_is_available", lambda: True)
+
+    memory = memory_manager.MemoryManager(db_path=tmp_path / "test_no_mix.db")
+    try:
+        memory.record_cloud_usage(input_tokens=1000, output_tokens=500, cost_eur=9.0)
+    finally:
+        memory.close()
+
+    assert route("analyse mes options stratégiques") == "cloud"
 
 
 # ── _build_messages() ─────────────────────────────────────────────────

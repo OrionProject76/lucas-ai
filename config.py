@@ -56,11 +56,52 @@ AVAILABLE_MODELS = ["qwen2.5", "llama3.2", "mistral", "codellama"]
 OLLAMA_CONNECT_TIMEOUT = 10   # secondes pour se connecter à Ollama
 OLLAMA_READ_TIMEOUT = 120     # secondes pour recevoir la réponse
 
-# --- IA cloud (optionnel, désactivé pour l'instant) ---
-# Jamais de clé en dur ici : ce fichier est suivi par git.
-# La valeur vient de .env (ignoré par git) ou des variables d'environnement.
-# Voir .env.example pour le modèle. Chaîne vide = cloud désactivé.
-OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+# --- IA cloud (API Anthropic) — Brique 1 du noyau, 08/08/2026 ---
+# Jamais dans .env, jamais en clair : clé lue depuis le Gestionnaire
+# d'identification Windows (module `keyring`), décision explicite de Cyril
+# avant ce chantier. Aucun fallback vers une variable d'environnement — un
+# fallback silencieux masquerait l'absence de clé plutôt que de la dire
+# clairement. Voir scripts/set_anthropic_key.py pour l'enregistrer.
+#
+# ⚠️ Le nom historique de ce réglage était OPENAI_API_KEY : trompeur, car
+# aucun appel OpenAI n'a jamais existé dans le projet (core/cloud_llm.py
+# était un stub de 12 lignes). Renommé en même temps que le stub devient
+# un vrai appel — pas un simple changement cosmétique.
+try:
+    import keyring
+
+    ANTHROPIC_API_KEY: str = keyring.get_password("lucas_ai", "anthropic_api_key") or ""
+except Exception:  # noqa: BLE001 — backend keyring indisponible (CI, machine
+    # sans Credential Manager) : cloud désactivé plutôt qu'un crash au démarrage.
+    ANTHROPIC_API_KEY = ""
+
+# claude-opus-5 : modèle par défaut imposé sauf demande contraire explicite
+# (référence claude-api). $5/$25 par million de tokens (input/output).
+ANTHROPIC_MODEL = "claude-opus-5"
+
+# Coût "effort" — profondeur de réflexion adaptative. "medium" plutôt que le
+# défaut "high" de l'API : compromis délibéré vu le plafond mensuel serré
+# (10€) — "high"/"xhigh" consommeraient le budget en quelques questions
+# complexes. Le thinking adaptatif reste actif (paramètre omis = adaptatif
+# par défaut sur claude-opus-5), seul l'effort est réduit.
+ANTHROPIC_EFFORT = "medium"
+
+# Plafond de tokens de sortie par réponse — couvre pensée adaptative +
+# réponse visible (les deux partagent ce budget sur claude-opus-5).
+ANTHROPIC_MAX_TOKENS = 4096
+
+# ⚠️ Tarifs en USD (prix Anthropic officiels), comparés directement à un
+# plafond en EUR sans conversion de change — simplification assumée pour
+# un budget personnel approximatif, pas une comptabilité précise. Signalé
+# explicitement plutôt que caché : à corriger si l'écart devient sensible.
+ANTHROPIC_PRICE_INPUT_PER_MTOK: float = 5.0
+ANTHROPIC_PRICE_OUTPUT_PER_MTOK: float = 25.0
+
+# Plafond de coût cloud mensuel. Au-delà : bascule automatique en local
+# jusqu'au mois suivant — jamais de dépassement silencieux (voir
+# core/router.py::cloud_budget_available()). 80 % du plafond -> avertissement
+# (core/router.py::cloud_budget_warning()), 100 % -> refus, jamais l'inverse.
+CLOUD_BUDGET_EUR: float = float(os.getenv("CLOUD_BUDGET_EUR", "10"))
 
 # --- Voix (TTS) ---
 # Deux moteurs, un routeur : core.router.route_voice() décide.

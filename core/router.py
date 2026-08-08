@@ -123,7 +123,11 @@ def route(text: str, context: str = "") -> str:
     # sortir une donnée qui serait restée sur la machine — la règle 3
     # n'est pas assouplie, elle s'applique simplement à un cloud qui
     # existe vraiment.
-    if contains_any(text, KEYWORDS_CLOUD) and cloud_is_available():
+    if (
+        contains_any(text, KEYWORDS_CLOUD)
+        and cloud_is_available()
+        and cloud_budget_available()
+    ):
         return "cloud"
     return "local"
 
@@ -133,12 +137,63 @@ def cloud_is_available() -> bool:
     Le cloud est-il réellement utilisable, ou seulement documenté ?
 
     Lu à chaque appel plutôt qu'au chargement du module : Cyril peut
-    renseigner sa clé dans `.env` sans redémarrer, et un routage figé au
+    renseigner sa clé (Gestionnaire d'identification Windows, voir
+    scripts/set_anthropic_key.py) sans redémarrer, et un routage figé au
     démarrage lui donnerait l'impression que le réglage n'a rien fait.
     """
-    from config import OPENAI_API_KEY
+    from config import ANTHROPIC_API_KEY
 
-    return bool(OPENAI_API_KEY)
+    return bool(ANTHROPIC_API_KEY)
+
+
+def cloud_budget_available() -> bool:
+    """
+    Le budget cloud du mois est-il encore disponible ?
+
+    Relu à chaque appel, comme cloud_is_available() ci-dessus — jamais figé
+    au démarrage. À 100 % du plafond mensuel (config.CLOUD_BUDGET_EUR),
+    bascule locale jusqu'au mois suivant : jamais de dépassement silencieux
+    (brief du 08/08/2026, Brique 1). Ce test ne peut que ramener vers le
+    local, jamais l'inverse — même invariant que le test cloud_is_available()
+    déjà en place dans route().
+    """
+    from config import CLOUD_BUDGET_EUR
+    from memory import memory_manager
+
+    # db_path=memory_manager.DB_PATH explicite, jamais MemoryManager() nu :
+    # même piège que save_event_from_any_thread (ROADMAP.md §5.68) — le
+    # défaut de paramètre de __init__ est figé à la définition de la
+    # fonction, un monkeypatch de DB_PATH dans un test ne l'atteindrait
+    # jamais autrement.
+    memory = memory_manager.MemoryManager(db_path=memory_manager.DB_PATH)
+    try:
+        return memory.cloud_usage_this_month()["cost_eur"] < CLOUD_BUDGET_EUR
+    finally:
+        memory.close()
+
+
+def cloud_budget_warning() -> str | None:
+    """
+    Message d'avertissement si le budget cloud mensuel atteint 80 %, sinon
+    None. Ne change JAMAIS la décision de routage elle-même (route() ne
+    l'appelle pas) — un signal séparé, consommé par l'UI/le contexte du
+    prompt, jamais mêlé à la logique de sécurité/coût de route().
+    """
+    from config import CLOUD_BUDGET_EUR
+    from memory import memory_manager
+
+    memory = memory_manager.MemoryManager(db_path=memory_manager.DB_PATH)
+    try:
+        cost = memory.cloud_usage_this_month()["cost_eur"]
+    finally:
+        memory.close()
+
+    if CLOUD_BUDGET_EUR <= 0 or cost < 0.8 * CLOUD_BUDGET_EUR:
+        return None
+    return (
+        f"Budget cloud à {cost:.2f}€ sur {CLOUD_BUDGET_EUR:.2f}€ ce mois-ci "
+        "— bascule automatique en local au plafond."
+    )
 
 
 # Mots-clés qui signalent que la question porte sur ce qui est affiché à

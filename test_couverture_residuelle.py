@@ -204,19 +204,54 @@ def test_the_cloud_says_it_is_not_configured_rather_than_failing(monkeypatch) ->
     """Sans clé, le message doit expliquer QUOI faire, pas planter."""
     from core import cloud_llm
 
-    monkeypatch.setattr(cloud_llm, "OPENAI_API_KEY", "")
+    monkeypatch.setattr(cloud_llm, "ANTHROPIC_API_KEY", "")
     reponse = cloud_llm.ask_cloud([{"role": "user", "content": "salut"}])
     assert "non configuré" in reponse.lower()
-    assert "OPENAI_API_KEY" in reponse
+    assert "set_anthropic_key" in reponse
 
 
-def test_the_cloud_with_a_key_says_it_is_not_implemented_yet(monkeypatch) -> None:
-    """Avec une clé, le message change — sinon Cyril croirait sa clé ignorée."""
+def test_the_cloud_with_a_key_calls_anthropic_and_returns_the_text(monkeypatch, tmp_path) -> None:
+    """
+    Avec une clé, un vrai appel Anthropic est tenté — mocké ici, pas
+    réseau réel (voir test_cloud_llm.py pour la couverture complète de
+    core/cloud_llm.py, ce test-ci ne fait que garder la présence d'une clé
+    sous surveillance de mutation).
+    """
+    import anthropic
+
     from core import cloud_llm
 
-    monkeypatch.setattr(cloud_llm, "OPENAI_API_KEY", "sk-factice")
+    monkeypatch.setattr(cloud_llm, "ANTHROPIC_API_KEY", "sk-ant-factice")
+    monkeypatch.setattr(
+        "memory.memory_manager.DB_PATH", tmp_path / "test_cloud_usage.db"
+    )
+
+    class _FakeTextBlock:
+        type = "text"
+        text = "réponse factice"
+
+    class _FakeUsage:
+        input_tokens = 10
+        output_tokens = 5
+
+    class _FakeResponse:
+        def __init__(self):
+            self.stop_reason = "end_turn"
+            self.content = [_FakeTextBlock()]
+            self.usage = _FakeUsage()
+
+    class _FakeMessages:
+        def create(self, **kwargs):
+            return _FakeResponse()
+
+    class _FakeClient:
+        def __init__(self, api_key):
+            self.messages = _FakeMessages()
+
+    monkeypatch.setattr(anthropic, "Anthropic", _FakeClient)
+
     reponse = cloud_llm.ask_cloud([{"role": "user", "content": "salut"}])
-    assert "pas encore" in reponse.lower()
+    assert reponse == "réponse factice"
 
 
 # ══ 4. Routage et extraction ══════════════════════════════════════════
@@ -230,10 +265,10 @@ def test_cloud_availability_is_read_at_each_call_not_frozen(monkeypatch) -> None
     import config
     from core.router import cloud_is_available
 
-    monkeypatch.setattr(config, "OPENAI_API_KEY", "")
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "")
     assert cloud_is_available() is False
 
-    monkeypatch.setattr(config, "OPENAI_API_KEY", "sk-factice")
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "sk-ant-factice")
     assert cloud_is_available() is True, "la clé doit être relue, pas mémorisée"
 
 

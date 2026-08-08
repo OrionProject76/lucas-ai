@@ -59,6 +59,16 @@ def test_chat_uses_the_field_names_godot_reads() -> None:
     }
 
 
+def test_chat_carries_destination_when_provided() -> None:
+    """
+    Ajouté 08/08/2026 (Brique 1, routeur hybride) — additif, absent si non
+    fourni (test ci-dessus, inchangé), pour ne rien casser côté Godot qui
+    ne le lit pas.
+    """
+    message = protocol.chat("bonjour", destination="cloud")
+    assert message["destination"] == "cloud"
+
+
 def test_activity_carries_kind_and_text() -> None:
     assert protocol.activity("screen_read", "écran lu — texte trouvé") == {
         "type": "activity",

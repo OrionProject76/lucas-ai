@@ -235,10 +235,14 @@ def chat(req: ChatRequest):
     lucas = LucasCore()
     try:
         answer = lucas.ask(req.message)
+        # getattr, pas un accès direct : plusieurs doublures de test
+        # (test_server.py, test_server_intent_mutants.py) n'ont pas cet
+        # attribut, ajouté après elles (Brique 1, 08/08/2026).
+        destination = getattr(lucas, "last_destination", "local")
     finally:
         lucas.close()
 
-    return {"response": answer, "status": "ok"}
+    return {"response": answer, "status": "ok", "destination": destination}
 
 
 @app.get("/history", dependencies=[Depends(verify_token)])
@@ -731,7 +735,12 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_json(
                 protocol.avatar_state(protocol.STATE_SPEAKING, answer)
             )
-            await websocket.send_json(protocol.chat(answer, from_luca=True))
+            await websocket.send_json(
+                protocol.chat(
+                    answer, from_luca=True,
+                    destination=getattr(lucas, "last_destination", "local"),
+                )
+            )
 
             # Voix (pont mobile TTS) : le texte part D'ABORD, la synthèse
             # ensuite — edge_tts prend plusieurs secondes (réseau), et
