@@ -1314,10 +1314,11 @@ dédié**. S'appliquent à TOUS les modules `#98`–`#105` ci-dessous.
 ⚠️ **Document vivant, jamais figé** — principe posé par Cyril le 08/08/2026,
 même logique que `VISION_LONG_TERME.md` : ce qui est acté dans `#97`–`#105`
 n'est pas une version finale. Luca's reste évolutive à ce stade et à jamais.
-Ce bloc s'est déjà complété trois fois le 08/08/2026 (2e passe : Groupe H
+Ce bloc s'est déjà complété quatre fois le 08/08/2026 (2e passe : Groupe H
 étendu de H-1/H-2 à H-1…H-7 ; 3e passe : RT-6 ajouté ; 4e passe : RT-7
-ajouté) — à corriger et enrichir à chaque nouvelle session d'idées, sans
-jamais prétendre être clos.
+ajouté ; 5e passe : A-4, B-4 étendu, B-5, C-5, H-8, H-9 et `#106` Lois
+d'Asimov ajoutés) — à corriger et enrichir à chaque nouvelle session
+d'idées, sans jamais prétendre être clos.
 
 - **RT-1 — Français d'abord + transparence de traduction.** Toute sortie de
   Luca's en français, tout contenu non-français traduit avant présentation.
@@ -1394,6 +1395,12 @@ jamais prétendre être clos.
   impossibles proprement sans service cloud payant (Twilio ~1-3€/mois) plus
   restriction OS sur l'injection audio ; SMS annulés. **Ne pas construire.**
   Ajouté à `#7 Exclusions validées`.
+- **A-4 — Time-blocking intelligent** *(ajouté 08/08/2026, 5e passe —
+  extension du Mode Garde/Poste)*. Au-delà de couper les notifications
+  pendant le service (A-2), Luca's organise activement les tâches/rappels/
+  objectifs dans les créneaux où Cyril est réellement disponible — agenda
+  basé sur la charge réelle d'un métier physique (fatigue, horaires
+  postés), pas un agenda théorique.
 
 **Rien n'est construit.** Catalogage uniquement.
 
@@ -1426,7 +1433,18 @@ Au service de l'objectif retraite.
 - **B-4 — Veille administrative.** Suivi des échéances récurrentes
   (déclaration trimestrielle prime d'activité CAF, impôts, assurance,
   contrôle technique). Rappels anticipés via les canaux `#98` A-1. Gratuit,
-  évite les pénalités de retard.
+  évite les pénalités de retard. **Extraction automatique des dates
+  contractuelles** *(ajouté 08/08/2026, 5e passe)* : à la
+  numérisation/réception d'un contrat perso (bail, LOA, assurance,
+  abonnement), Luca's extrait automatiquement échéance, préavis de
+  résiliation, conditions de renouvellement — alimente B-4 sans ressaisie
+  manuelle. Cas d'usage concret déjà identifié : LOA véhicule se terminant
+  juillet 2027, préavis à ne pas manquer.
+- **B-5 — Assistant courses/repas économique** *(ajouté 08/08/2026, 5e
+  passe)*. Croise les promotions (via B-3/futur suivi de prix) avec des
+  recettes simples et rapides, pensées pour des repas après un service
+  physique — pas de cuisine élaborée. Objectif : réduire gaspillage et
+  facture alimentaire, au service du même objectif que B-2.
 
 **Rien n'est construit.** Catalogage uniquement.
 
@@ -1458,6 +1476,11 @@ Au service de l'objectif retraite.
   Luca's peut rappeler quelle carte utiliser et ouvrir un gestionnaire dédié
   (Bitwarden, wallet téléphone) au bon moment, sans jamais détenir de
   numéro. **Non négociable.** Ajouté à `#7 Exclusions validées`.
+- **C-5 — Suivi CPF + formations financées** *(ajouté 08/08/2026, 5e
+  passe)*. Consultation du solde du Compte Personnel de Formation (système
+  public gratuit, moncompteformation.gouv.fr) et recherche des formations
+  éligibles correspondant au projet de reconversion aide-soignant déjà
+  catalogué (`#63`). Zéro coût, exploite un droit déjà acquis.
 
 **Rien n'est construit.** Catalogage uniquement.
 
@@ -1636,6 +1659,18 @@ Le vrai chantier porteur, désigné comme tel dans le document source.
   Luca's (documents perso, Memory Palace) doit rester nourri uniquement de
   sources que Cyril contrôle explicitement — jamais d'ingestion automatique
   de contenu glané en ligne sans validation.
+- **H-8 — Sauvegarde et résilience des données** *(ajouté 08/08/2026, 5e
+  passe)*. Trou identifié dans l'architecture actuelle : mémoire, finances,
+  documents concentrés sur un seul PC, aucune stratégie de sauvegarde
+  posée. Sauvegarde chiffrée automatique et régulière vers disque externe
+  (+ option cloud perso chiffré avant envoi, type Proton Drive). Procédure
+  de restauration **testée**, pas supposée fonctionner. Sans ça, une panne
+  disque efface des mois de mémoire construite.
+- **H-9 — Surveillance de fuites de données personnelles** *(ajouté
+  08/08/2026, 5e passe)*. Vérification périodique via l'API gratuite Have I
+  Been Pwned : alerte si l'email de Cyril apparaît dans une fuite de
+  données connue, avec recommandation de changer le mot de passe concerné.
+  Zéro coût, renforce Privacy Shield.
 
 ### Règles Absolues de Cyril — versées dans `VISION_LONG_TERME.md`
 
@@ -1656,6 +1691,39 @@ par H-2 ci-dessus) :
    « AGI/ASI » non retenu dans la charte — un modèle local orchestré, si
    capable soit-il, n'est ni l'un ni l'autre. Le titre ci-dessus est exact et
    ambitieux ; les termes AGI/ASI seraient une fausse promesse.)*
+
+**Rien n'est construit.** Catalogage uniquement.
+
+---
+
+## #106 — Fondation philosophique : Lois d'Asimov (adoptées le 08/08/2026, 5e passe)
+
+Cyril a demandé l'intégration des Lois de la Robotique d'Asimov comme
+fondation philosophique de Luca's, en complément des Règles Absolues
+ci-dessus.
+
+**Statut** : texte narratif de science-fiction, pas une spec technique
+exécutable — sert de mission statement, pas de code à interpréter
+littéralement. Leur traduction opérationnelle concrète existe déjà dans les
+Règles Absolues et les RT de `#97`.
+
+| Loi d'Asimov | Déjà traduite dans |
+|---|---|
+| **Première** — ne pas nuire à un humain, ni par inaction | Règles Absolues N°1 et N°2 |
+| **Deuxième** — obéir aux ordres, sauf conflit avec la Première | Règle Absolue N°5 + tout le régime de confirmation déjà bâti (OS Controller, routage cloud, etc.) |
+| **Troisième** — auto-préservation, subordonnée aux deux précédentes | Règle Absolue N°4 (défense active, jamais offensive) |
+
+**Loi Zéro — annulée, retirée de la charte** (décision de Cyril,
+08/08/2026). Ne figure plus dans les lois adoptées par Luca's, y compris
+sous sa forme reformulée en « vigilance/signalement ». Seules les trois
+lois originales, hiérarchisées Première > Deuxième > Troisième, sont
+retenues.
+
+**Hiérarchie retenue** : Première > Deuxième > Troisième pour les
+décisions opérationnelles (déjà en place via les Règles Absolues).
+
+Versée dans `VISION_LONG_TERME.md`, section `4.1ter`, juste après les
+Règles Absolues de Cyril (`4.1bis`).
 
 **Rien n'est construit.** Catalogage uniquement.
 

@@ -373,6 +373,34 @@ document — elles les chapeautent. La règle 4, en particulier, ne fait que
 rendre explicite ce que §4.1 impliquait déjà (« protection », pas
 « pouvoir offensif ») : aucune levée de garde-fou n'en découle.
 
+### 4.1ter Fondation philosophique : Lois d'Asimov — adoptées le 08/08/2026
+
+Formalisées lors de la même session d'idéation que `4.1bis` (synthèse
+versée dans `IDEAS.md` `#106`). Cyril a demandé l'intégration des Lois de
+la Robotique d'Asimov comme fondation philosophique de Luca's, en
+complément — pas en remplacement — des Règles Absolues ci-dessus.
+
+**Statut** : texte narratif de science-fiction, pas une spec technique
+exécutable — un mission statement, pas du code à interpréter
+littéralement. Sa traduction opérationnelle concrète existe déjà dans les
+Règles Absolues (`4.1bis`) et les règles transversales RT-1 à RT-7
+(`IDEAS.md` `#97`).
+
+| Loi d'Asimov | Déjà traduite dans |
+|---|---|
+| **Première** — ne pas nuire à un humain, ni par inaction | Règles Absolues N°1 et N°2 |
+| **Deuxième** — obéir aux ordres, sauf conflit avec la Première | Règle Absolue N°5 + tout le régime de confirmation déjà bâti (OS Controller, routage cloud, etc.) |
+| **Troisième** — auto-préservation, subordonnée aux deux précédentes | Règle Absolue N°4 (défense active, jamais offensive) |
+
+**Loi Zéro — annulée, retirée de la charte** (décision explicite de
+Cyril, 08/08/2026). Ne figure plus dans les lois adoptées par Luca's, y
+compris sous une forme reformulée en « vigilance/signalement ». Seules les
+trois lois originales sont retenues.
+
+**Hiérarchie retenue pour les décisions opérationnelles** : Première >
+Deuxième > Troisième — déjà en place via les Règles Absolues, cette
+section ne fait qu'en nommer la filiation avec Asimov.
+
 ### 4.2 Écoute/vision ambiante contextuelle — « chez moi » vs « dehors » (précisé le 02/08/2026)
 
 ⚠️ Cette précision devait être ajoutée ici en même temps que l'entrée
