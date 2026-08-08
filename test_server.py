@@ -406,6 +406,67 @@ def test_workspace_summary_relays_real_data_without_transformation(client, monke
     assert client.get("/workspace/summary").json() == fake_summary
 
 
+# ── Disposition du Workspace (glisser-déposer + tailles, 09/08/2026) ───
+
+
+def test_workspace_layout_get_requires_the_token(client, monkeypatch) -> None:
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    assert client.get("/workspace/layout").status_code == 401
+
+
+def test_workspace_layout_put_requires_the_token(client, monkeypatch) -> None:
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    payload = {"order": ["reports", "requests", "actions", "objectives"], "sizes": {}}
+    assert client.put("/workspace/layout", json=payload).status_code == 401
+
+
+def test_workspace_layout_get_relays_real_data_without_transformation(client, monkeypatch) -> None:
+    fake_layout = {
+        "order": ["objectives", "actions", "requests", "reports"],
+        "sizes": {"reports": "S", "requests": "L", "actions": "XL", "objectives": "M"},
+    }
+    monkeypatch.setattr("api.server.workspace_get_layout", lambda: fake_layout)
+
+    assert client.get("/workspace/layout").json() == fake_layout
+
+
+def test_workspace_layout_put_saves_and_confirms(client, monkeypatch) -> None:
+    calls: dict = {}
+
+    def fake_save(order, sizes):
+        calls["order"] = order
+        calls["sizes"] = sizes
+
+    monkeypatch.setattr("api.server.workspace_save_layout", fake_save)
+
+    payload = {
+        "order": ["actions", "reports", "objectives", "requests"],
+        "sizes": {"reports": "M", "requests": "S", "actions": "L", "objectives": "XL"},
+    }
+    response = client.put("/workspace/layout", json=payload)
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    assert calls["order"] == payload["order"]
+    assert calls["sizes"] == payload["sizes"]
+
+
+def test_workspace_layout_put_rejects_an_invalid_layout(client, monkeypatch) -> None:
+    """400, pas 500 — une disposition invalide est une entrée refusée, pas une panne serveur."""
+    from modules.workspace_manager import InvalidLayout
+
+    def fake_save(order, sizes):
+        raise InvalidLayout("carte inconnue")
+
+    monkeypatch.setattr("api.server.workspace_save_layout", fake_save)
+
+    payload = {"order": ["reports"], "sizes": {}}
+    response = client.put("/workspace/layout", json=payload)
+
+    assert response.status_code == 400
+    assert "carte inconnue" in response.json()["detail"]
+
+
 # ── WebSocket ─────────────────────────────────────────────────────────
 
 def _next_of_type(ws, message_type: str, limit: int = 12) -> dict:

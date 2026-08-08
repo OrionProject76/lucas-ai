@@ -1,7 +1,45 @@
-/* static/css/workspace.css — mise en page du tableau de bord Workspace
-   (IDEAS.md #102, E-1). Aucune couleur définie ici : les tokens viennent
-   de style.css (:root), chargé avant ce fichier — une seule identité
-   visuelle Luca's, pas un thème dashboard séparé. */
+/* static/css/workspace.css — mise en page + identité visuelle du Workspace
+   (IDEAS.md #102, E-1).
+
+   Style "Terminal pro" tranché par Cyril le 09/08/2026 après comparatif
+   sur maquette interactive — remplace l'exploration violette envisagée
+   un temps (jamais committée) : sobre, police monospace, glow ambre
+   discret, coins peu arrondis, glass léger. Distinct du chat/avatar
+   (cyan, glow appuyé, blur prononcé, coins arrondis) — deux zones, deux
+   identités visuelles, jamais mélangées.
+
+   Tokens NEUTRES (--bg, --text, --text-dim, --error) viennent de
+   style.css, chargé avant ce fichier. Tous les tokens D'ACCENT (couleur,
+   glow, blur, rayon, police) sont définis ici, localement — aucune
+   modification de style.css/index.html dans cette passe, donc aucun bump
+   de CACHE_NAME nécessaire : workspace.css n'est PAS dans SHELL_FILES de
+   static/sw.js (vérifié en relisant sw.js avant d'écrire ce fichier, pas
+   supposé — voir ROADMAP.md §5.76 pour le détail). */
+
+:root {
+    /* #f0a94e — ambre tranché par Cyril sur maquette. Dans la même
+       famille que l'ambre déjà présent ailleurs dans l'app (halo
+       WATCHING de l'avatar, badge d'activité, pastille d'alerte
+       sécurité — tous #ff9600 ou proche) : cohérent avec le vocabulaire
+       "mise en avant" déjà établi, pas une couleur totalement étrangère
+       au projet, même si pas une reprise à l'identique comme le cyan du
+       chat (ROADMAP.md §5.75) ou le violet écarté (§5.76). */
+    --amber-neon: #f0a94e;
+    --amber-border: rgba(240, 169, 78, 0.5);
+    --amber-panel-bg: rgba(45, 30, 10, 0.45);
+    /* Glow STATIQUE uniquement — aucun @keyframes dans ce fichier. Même
+       règle que le chat (ROADMAP.md §5.75) : lueur ambiante constante,
+       jamais clignotante. Seul l'avatar (hors périmètre) varie. */
+    --glow-amber: 0 0 3px rgba(240, 169, 78, 0.3), 0 0 8px rgba(240, 169, 78, 0.15);
+    --glow-amber-strong: 0 0 6px rgba(240, 169, 78, 0.6), 0 0 14px rgba(240, 169, 78, 0.3);
+    /* Glass LÉGER — demande explicite : "backdrop-filter: blur() discret
+       (~6-8px)", pas le blur(14px) prononcé du chat. */
+    --workspace-blur: blur(7px);
+    /* Coins peu arrondis — demande explicite, remplace les 14-16px
+       hérités du premier jet de cette page. */
+    --workspace-radius: 6px;
+    --workspace-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
 
 #workspace {
     display: flex;
@@ -9,6 +47,8 @@
     height: 100vh;
     height: 100dvh;
     overflow: hidden;
+    background-color: var(--bg);
+    font-family: var(--workspace-mono);
 }
 
 #workspace-header {
@@ -17,23 +57,20 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border-cyan);
-    background: var(--panel-bg);
-    /* Workspace/dataviz future (E-1/E-2, précisé 08/08/2026) : verre
-       seulement (backdrop-filter), jamais le glow néon appuyé du
-       chat/avatar — des données denses (rapports, futurs graphiques)
-       doivent rester lisibles sans lutter contre une lueur. Voir
-       l'annulation explicite du glow hérité de .icon-btn plus bas. */
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--amber-border);
+    background: var(--amber-panel-bg);
+    backdrop-filter: var(--workspace-blur);
+    -webkit-backdrop-filter: var(--workspace-blur);
+    box-shadow: var(--glow-amber);
 }
 
 #workspace-header h1 {
     margin: 0;
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     font-weight: 600;
     letter-spacing: 0.04em;
+    color: var(--amber-neon);
 }
 
 #workspace-controls {
@@ -43,80 +80,197 @@
 }
 
 #workspace-status {
-    font-size: 0.78rem;
+    font-size: 0.74rem;
     color: var(--text-dim);
     white-space: nowrap;
 }
 
+/* Boutons ronds hérités de .icon-btn (style.css, identité chat cyan) —
+   reskinnés ici en carré peu arrondi + ambre, cohérence "terminal" pour
+   les deux seuls contrôles de cette page (actualiser, retour au chat). */
 #workspace-controls .icon-btn {
-    width: 34px;
-    height: 34px;
-    font-size: 0.95rem;
-    /* Annule le glow néon hérité de .icon-btn (style.css) — sobriété
-       demandée pour le Workspace, garde uniquement l'effet verre. Le
-       focus clavier reste visible (outline seul, sans glow) pour
-       l'accessibilité. */
-    box-shadow: none;
+    width: 32px;
+    height: 32px;
+    font-size: 0.9rem;
+    border-radius: var(--workspace-radius);
+    border-color: var(--amber-border);
+    background: rgba(240, 169, 78, 0.08);
+    box-shadow: var(--glow-amber);
 }
 
 #workspace-controls .icon-btn:hover,
 #workspace-controls .icon-btn:active {
-    box-shadow: none;
+    background: rgba(240, 169, 78, 0.22);
+    box-shadow: var(--glow-amber-strong);
 }
 
 #workspace-controls .icon-btn:focus-visible {
-    box-shadow: none;
-    outline: 2px solid var(--neon-cyan);
+    outline: 2px solid var(--amber-neon);
     outline-offset: 2px;
+    box-shadow: var(--glow-amber-strong);
 }
+
+/* ── Grille de cartes — flexbox, pas CSS Grid ────────────────────────
+   Le passage à flex-wrap (depuis un CSS Grid auto-fit) sert le glisser-
+   déposer : réordonner en flex, c'est déplacer le noeud DOM et laisser
+   le navigateur reflow — pas de recalcul de grid-column/grid-row à gérer
+   à la main pour chaque taille. */
 
 #workspace-grid {
     flex: 1 1 auto;
     overflow-y: auto;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-    gap: 16px;
-    padding: 20px;
-    align-content: start;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 14px;
+    padding: 18px;
 }
 
 .workspace-card {
-    background: var(--panel-bg);
-    border: 1px solid rgba(0, 212, 255, 0.25);
-    border-radius: 14px;
-    padding: 16px 18px;
+    background: var(--amber-panel-bg);
+    border: 1px solid var(--amber-border);
+    border-radius: var(--workspace-radius);
+    padding: 14px 16px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
     min-height: 0;
-    /* Verre seulement, pas de glow — voir la note sur #workspace-header. */
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--workspace-blur);
+    -webkit-backdrop-filter: var(--workspace-blur);
+    box-shadow: var(--glow-amber);
+    transition: box-shadow 0.15s ease, opacity 0.15s ease;
+    /* Taille par défaut (M) — .card-size-* ci-dessous la remplace. Les 4
+       tailles sont indépendantes par carte (pas liées entre elles),
+       comme demandé. */
+    flex: 0 0 340px;
+    max-width: 340px;
 }
 
-.workspace-card h2 {
+.workspace-card.card-size-S { flex-basis: 260px; max-width: 260px; }
+.workspace-card.card-size-M { flex-basis: 340px; max-width: 340px; }
+.workspace-card.card-size-L { flex-basis: 460px; max-width: 460px; }
+.workspace-card.card-size-XL { flex-basis: 100%; max-width: 100%; }
+
+.workspace-card.card-size-S .workspace-list { max-height: 220px; }
+.workspace-card.card-size-M .workspace-list { max-height: 340px; }
+.workspace-card.card-size-L .workspace-list { max-height: 420px; }
+.workspace-card.card-size-XL .workspace-list { max-height: 520px; }
+
+/* Retour visuel de glisser-déposer — statique (opacité + glow renforcé),
+   aucune animation continue, cohérent avec "jamais clignotant". */
+.workspace-card.dragging {
+    opacity: 0.55;
+    box-shadow: var(--glow-amber-strong);
+    z-index: 5;
+}
+
+.workspace-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.workspace-card-header h2 {
+    flex: 1 1 auto;
     margin: 0;
-    font-size: 0.85rem;
+    font-size: 0.82rem;
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+    color: var(--amber-neon);
+}
+
+/* Poignée de glisser — cible tactile explicite (touch-action: none),
+   pour que le pointeur pilote le drag plutôt que le scroll de la page
+   sur mobile. Pointer Events (pas HTML5 Drag&Drop, mal supporté au
+   toucher) : voir static/js/workspace.js. */
+.workspace-drag-handle {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--workspace-radius);
     color: var(--text-dim);
+    font-size: 1.05rem;
+    line-height: 1;
+    cursor: grab;
+    touch-action: none;
+}
+
+.workspace-drag-handle:hover,
+.workspace-drag-handle:focus-visible {
+    color: var(--amber-neon);
+    border-color: var(--amber-border);
+}
+
+.workspace-drag-handle:focus-visible {
+    outline: 2px solid var(--amber-neon);
+    outline-offset: 1px;
+}
+
+.workspace-card.dragging .workspace-drag-handle {
+    cursor: grabbing;
+}
+
+.workspace-size-controls {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 2px;
+}
+
+.workspace-size-btn {
+    width: 24px;
+    height: 22px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--amber-border);
+    border-radius: 3px;
+    color: var(--text-dim);
+    font-family: var(--workspace-mono);
+    font-size: 0.62rem;
+    cursor: pointer;
+}
+
+.workspace-size-btn:hover {
+    color: var(--amber-neon);
+    background: rgba(240, 169, 78, 0.12);
+}
+
+.workspace-size-btn:focus-visible {
+    outline: 2px solid var(--amber-neon);
+    outline-offset: 1px;
+}
+
+/* Contraste vérifié (pas supposé) : texte quasi noir sur ambre plein =
+   9.43:1, largement au-dessus du minimum WCAG AA (4.5:1) — voir
+   ROADMAP.md §5.77. */
+.workspace-size-btn.active {
+    background: var(--amber-neon);
+    border-color: var(--amber-neon);
+    color: #1a0f00;
+    font-weight: 700;
 }
 
 .workspace-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    max-height: 46vh;
+    gap: 6px;
     overflow-y: auto;
 }
 
 .workspace-item {
-    padding: 10px 12px;
-    border-radius: 10px;
-    background: rgba(0, 212, 255, 0.05);
-    border: 1px solid rgba(0, 212, 255, 0.15);
-    font-size: 0.88rem;
+    padding: 8px 10px;
+    border-radius: 4px;
+    background: rgba(240, 169, 78, 0.05);
+    border: 1px solid rgba(240, 169, 78, 0.18);
+    font-size: 0.84rem;
     line-height: 1.4;
 }
 
@@ -128,7 +282,7 @@
 
 .workspace-item-meta {
     margin-top: 2px;
-    font-size: 0.76rem;
+    font-size: 0.72rem;
     color: var(--text-dim);
 }
 
@@ -153,11 +307,22 @@
 
 @media (max-width: 480px) {
     #workspace-header h1 {
-        font-size: 0.95rem;
+        font-size: 0.92rem;
     }
 
     #workspace-grid {
-        grid-template-columns: 1fr;
-        padding: 12px;
+        padding: 10px;
+    }
+
+    /* Toutes les tailles se replient en pleine largeur sur mobile — la
+       hauteur de liste (voir .card-size-* plus haut) continue de varier
+       selon la taille choisie, seule la largeur se contraint. */
+    .workspace-card,
+    .workspace-card.card-size-S,
+    .workspace-card.card-size-M,
+    .workspace-card.card-size-L,
+    .workspace-card.card-size-XL {
+        flex-basis: 100%;
+        max-width: 100%;
     }
 }

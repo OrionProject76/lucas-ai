@@ -1,18 +1,28 @@
 # modules/workspace_manager.py — Workspace Luca's (IDEAS.md #102, E-1)
 #
 # Rend visible ce que Luca's fait déjà : rapports produits, demandes en
-# attente, actions gouvernées exécutées, objectifs en cours. Lecture seule
-# stricte — aucune fonction ici n'écrit quoi que ce soit, conformément au
-# brief (cowork_workspace/BRIEF_WORKSPACE_E1.md) : "rendre visible", pas
-# agir depuis cette page.
+# attente, actions gouvernées exécutées, objectifs en cours. Les fonctions
+# de lecture (list_*/summary) restent strictement lecture seule, conforme
+# au brief d'origine (cowork_workspace/BRIEF_WORKSPACE_E1.md) : "rendre
+# visible", pas agir depuis cette page.
 #
 # Aucune donnée fabriquée (RT-2, IDEAS.md #97) : les objectifs (mémoire
 # prospective) n'ont pas de champ "avancement" dans le schéma
 # (memory/memory_manager.py) — on affiche leur contenu texte brut, jamais
 # un pourcentage inventé.
+#
+# get_layout()/save_layout() (ajout 09/08/2026, demande de Cyril après
+# comparatif sur maquette) font exception à la lecture seule : la
+# disposition des cartes (ordre + taille) EST un état que Cyril choisit et
+# qui doit survivre entre appareils/sessions — persisté côté serveur
+# (table app_state existante, memory/memory_manager.py) plutôt qu'en
+# localStorage navigateur, qui ne suivrait ni le passage PC/mobile ni un
+# navigateur réinstallé. Rien d'autre dans ce module n'écrit quoi que ce
+# soit.
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -108,3 +118,75 @@ def summary() -> dict:
         "recent_actions": list_recent_actions(),
         "objectives": list_objectives(),
     }
+
+
+# ── Disposition des cartes (glisser-déposer + tailles, 09/08/2026) ─────
+#
+# Les 4 cartes existantes sont fixes (aucune nouvelle section) — seuls
+# leur ORDRE et leur TAILLE sont modifiables et persistés. Un identifiant
+# de carte hors de cette liste, ou une taille hors S/M/L/XL, est refusé
+# — jamais accepté silencieusement (le client pourrait sinon persister
+# un état que le frontend ne sait plus rendre).
+
+CARD_IDS = ("reports", "requests", "actions", "objectives")
+CARD_SIZES = ("S", "M", "L", "XL")
+_LAYOUT_STATE_KEY = "workspace_layout"
+
+
+def _default_layout() -> dict:
+    return {"order": list(CARD_IDS), "sizes": dict.fromkeys(CARD_IDS, "M")}
+
+
+class InvalidLayout(ValueError):
+    """Disposition refusée : cartes inconnues/manquantes, taille hors S/M/L/XL."""
+
+
+def get_layout() -> dict:
+    """
+    Disposition actuelle (ordre + taille des 4 cartes), ou la disposition
+    par défaut si Cyril n'a encore rien personnalisé — jamais une erreur
+    ni une page vide pour un premier chargement.
+    """
+    memory = memory_manager.MemoryManager(db_path=memory_manager.DB_PATH)
+    try:
+        raw = memory.get_state(_LAYOUT_STATE_KEY)
+    finally:
+        memory.close()
+    if raw is None:
+        return _default_layout()
+    try:
+        layout = json.loads(raw)
+    except (TypeError, ValueError):
+        # Valeur corrompue/manuelle en base : retomber sur le défaut
+        # plutôt que de planter la page — une disposition, contrairement
+        # aux données financières, n'a rien d'assez sensible pour justifier
+        # de faire échouer le chargement.
+        return _default_layout()
+    return layout
+
+
+def save_layout(order: list, sizes: dict) -> None:
+    """
+    Valide puis enregistre la disposition. Lève InvalidLayout si `order`
+    n'est pas exactement une permutation des 4 cartes connues, ou si une
+    taille n'est pas dans CARD_SIZES — jamais un enregistrement partiel.
+    """
+    if sorted(order) != sorted(CARD_IDS):
+        raise InvalidLayout(
+            f"order doit contenir exactement {sorted(CARD_IDS)}, reçu {order!r}"
+        )
+    if set(sizes.keys()) != set(CARD_IDS):
+        raise InvalidLayout(
+            f"sizes doit couvrir exactement {sorted(CARD_IDS)}, reçu {sorted(sizes.keys())!r}"
+        )
+    for card_id, size in sizes.items():
+        if size not in CARD_SIZES:
+            raise InvalidLayout(
+                f"taille inconnue pour {card_id!r} : {size!r} (attendu {CARD_SIZES})"
+            )
+
+    memory = memory_manager.MemoryManager(db_path=memory_manager.DB_PATH)
+    try:
+        memory.set_state(_LAYOUT_STATE_KEY, json.dumps({"order": order, "sizes": sizes}))
+    finally:
+        memory.close()

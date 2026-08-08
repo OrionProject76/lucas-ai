@@ -38,6 +38,9 @@ from memory.memory_manager import save_event_from_any_thread
 from modules.semantic_desktop import SemanticDesktop
 from modules.stt_engine import STTEngine, STTUnavailable
 from modules.voice_manager import VoiceManager
+from modules.workspace_manager import InvalidLayout
+from modules.workspace_manager import get_layout as workspace_get_layout
+from modules.workspace_manager import save_layout as workspace_save_layout
 from modules.workspace_manager import summary as workspace_summary
 from security.status import get_status as get_security_status
 
@@ -138,6 +141,11 @@ app.add_middleware(
 
 class ChatRequest(BaseModel):
     message: str
+
+
+class WorkspaceLayoutRequest(BaseModel):
+    order: list[str]
+    sizes: dict[str, str]
 
 
 # ── Jeton partagé (prérequis pour le pont mobile, ROADMAP.md §2) ───────
@@ -378,6 +386,34 @@ def finance_summary():
 def workspace_summary_route():
     """Instantané complet du Workspace Luca's (E-1) — lecture seule."""
     return workspace_summary()
+
+
+# ── Disposition du Workspace (glisser-déposer + tailles, 09/08/2026) ───
+#
+# Seule écriture de cette section : la disposition des 4 cartes (ordre +
+# taille), choisie par Cyril, persistée côté serveur pour survivre entre
+# appareils/sessions (voir modules/workspace_manager.py, en-tête). Même
+# garde de jeton que le reste du Workspace.
+
+
+@app.get("/workspace/layout", dependencies=[Depends(verify_token)])
+def workspace_layout_route():
+    """Disposition actuelle (ordre + taille des cartes), ou le défaut si rien n'a encore été choisi."""
+    return workspace_get_layout()
+
+
+@app.put("/workspace/layout", dependencies=[Depends(verify_token)])
+def workspace_save_layout_route(req: WorkspaceLayoutRequest):
+    """
+    Enregistre la disposition choisie par Cyril. 400 sur une disposition
+    invalide (carte inconnue/manquante, taille hors S/M/L/XL) — jamais un
+    enregistrement partiel ou silencieusement ignoré.
+    """
+    try:
+        workspace_save_layout(req.order, req.sizes)
+    except InvalidLayout as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "ok"}
 
 
 # ── WebSocket : canal unique Luca's ↔ Godot ─────────────────────

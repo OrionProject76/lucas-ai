@@ -23,24 +23,64 @@
             </div>
         </header>
 
+        <!-- data-card-id doit correspondre exactement à modules/workspace_manager.py::CARD_IDS
+             (reports/requests/actions/objectives) — c'est ce que workspace.js lit/écrit
+             pour la disposition persistée côté serveur. L'ordre ici n'est que le
+             DÉFAUT initial avant que workspace.js n'applique la disposition réelle. -->
         <main id="workspace-grid">
-            <section class="workspace-card" id="card-reports">
-                <h2>Rapports produits</h2>
+            <section class="workspace-card card-size-M" id="card-reports" data-card-id="reports">
+                <div class="workspace-card-header">
+                    <button type="button" class="workspace-drag-handle" title="Déplacer" aria-label="Déplacer la carte Rapports produits">⠿</button>
+                    <h2>Rapports produits</h2>
+                    <div class="workspace-size-controls" role="group" aria-label="Taille de la carte Rapports produits">
+                        <button type="button" class="workspace-size-btn" data-size="S">S</button>
+                        <button type="button" class="workspace-size-btn" data-size="M">M</button>
+                        <button type="button" class="workspace-size-btn" data-size="L">L</button>
+                        <button type="button" class="workspace-size-btn" data-size="XL">XL</button>
+                    </div>
+                </div>
                 <div class="workspace-list" id="reports-list"></div>
             </section>
 
-            <section class="workspace-card" id="card-requests">
-                <h2>Demandes en attente</h2>
+            <section class="workspace-card card-size-M" id="card-requests" data-card-id="requests">
+                <div class="workspace-card-header">
+                    <button type="button" class="workspace-drag-handle" title="Déplacer" aria-label="Déplacer la carte Demandes en attente">⠿</button>
+                    <h2>Demandes en attente</h2>
+                    <div class="workspace-size-controls" role="group" aria-label="Taille de la carte Demandes en attente">
+                        <button type="button" class="workspace-size-btn" data-size="S">S</button>
+                        <button type="button" class="workspace-size-btn" data-size="M">M</button>
+                        <button type="button" class="workspace-size-btn" data-size="L">L</button>
+                        <button type="button" class="workspace-size-btn" data-size="XL">XL</button>
+                    </div>
+                </div>
                 <div class="workspace-list" id="requests-list"></div>
             </section>
 
-            <section class="workspace-card" id="card-actions">
-                <h2>Actions récentes</h2>
+            <section class="workspace-card card-size-M" id="card-actions" data-card-id="actions">
+                <div class="workspace-card-header">
+                    <button type="button" class="workspace-drag-handle" title="Déplacer" aria-label="Déplacer la carte Actions récentes">⠿</button>
+                    <h2>Actions récentes</h2>
+                    <div class="workspace-size-controls" role="group" aria-label="Taille de la carte Actions récentes">
+                        <button type="button" class="workspace-size-btn" data-size="S">S</button>
+                        <button type="button" class="workspace-size-btn" data-size="M">M</button>
+                        <button type="button" class="workspace-size-btn" data-size="L">L</button>
+                        <button type="button" class="workspace-size-btn" data-size="XL">XL</button>
+                    </div>
+                </div>
                 <div class="workspace-list" id="actions-list"></div>
             </section>
 
-            <section class="workspace-card" id="card-objectives">
-                <h2>Objectifs en cours</h2>
+            <section class="workspace-card card-size-M" id="card-objectives" data-card-id="objectives">
+                <div class="workspace-card-header">
+                    <button type="button" class="workspace-drag-handle" title="Déplacer" aria-label="Déplacer la carte Objectifs en cours">⠿</button>
+                    <h2>Objectifs en cours</h2>
+                    <div class="workspace-size-controls" role="group" aria-label="Taille de la carte Objectifs en cours">
+                        <button type="button" class="workspace-size-btn" data-size="S">S</button>
+                        <button type="button" class="workspace-size-btn" data-size="M">M</button>
+                        <button type="button" class="workspace-size-btn" data-size="L">L</button>
+                        <button type="button" class="workspace-size-btn" data-size="XL">XL</button>
+                    </div>
+                </div>
                 <div class="workspace-list" id="objectives-list"></div>
             </section>
         </main>

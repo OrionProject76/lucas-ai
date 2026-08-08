@@ -1562,23 +1562,29 @@ Au service de l'objectif retraite.
 
 - **E-1 — Espace de travail / poste de commandement.** ✅ **Implémenté le
   08/08/2026** (brief dédié `cowork_workspace/BRIEF_WORKSPACE_E1.md`, voir
-  `ROADMAP.md` §5.73) : `modules/workspace_manager.py` +
-  `GET /workspace/summary` + `static/workspace.html`. Extension visuelle et
-  fonctionnelle de `cowork_workspace/` : tableau de bord affichant rapports
-  produits, demandes en attente de validation, actions récentes
-  (`action_log`), objectifs en cours (mémoire prospective) — v1 sans
+  `ROADMAP.md` §5.73), **style final + modularité livrés le 09/08/2026**
+  après comparatif sur maquette interactive (`ROADMAP.md` §5.77) :
+  `modules/workspace_manager.py` + `GET /workspace/summary` +
+  `GET`/`PUT /workspace/layout` + `static/workspace.html`. Extension
+  visuelle et fonctionnelle de `cowork_workspace/` : tableau de bord
+  affichant rapports produits, demandes en attente de validation, actions
+  récentes (`action_log`), objectifs en cours (mémoire prospective) — sans
   « avancement » chiffré, ce champ n'existe pas dans le schéma mémoire,
   jamais de donnée fabriquée (`#97` RT-2). Lit les fichiers de
   `cowork_workspace/` + les tables SQLite (mémoire, journal d'actions,
   objectifs). Interface web classique, **zéro VRAM, zéro rendu 3D**.
-  Structure **modulaire et évolutive** (sections/fenêtres réorganisables) —
-  **v1 livrée en mise en page fixe**, la réorganisation reste une évolution
-  **pilotée par Cyril** (proposition → validation), pas construite
-  maintenant, et pas d'auto-remodelage autonome de l'interface.
-  **Direction esthétique (précisée 08/08/2026)** : épuré, moderne,
-  fonctionnel, intuitif — identité visuelle propre à Luca's/Cyril, pas un
-  thème générique importé tel quel (tokens de couleur réutilisés de
-  `static/css/style.css`, pas un thème dashboard séparé).
+  **Identité visuelle « Terminal pro »** (tranchée par Cyril, remplace une
+  exploration violet néon jamais committée) : accent ambre `#f0a94e` dans
+  la continuité de l'ambre déjà présent ailleurs dans l'app (halo
+  `WATCHING` de l'avatar, badge d'activité), police monospace, coins peu
+  arrondis (6px), glass léger (`blur(7px)`, plus discret que le chat) —
+  glow **statique**, jamais clignotant, même règle que le chat
+  (`ROADMAP.md` §5.75). **Structure modulaire livrée** : cartes
+  déplaçables par glisser-déposer (Pointer Events, souris et tactile) +
+  4 tailles indépendantes par carte (S/M/L/XL) — disposition **persistée
+  côté serveur** (`app_state`, pas localStorage), survit entre
+  PC/mobile/sessions. Pas d'auto-remodelage autonome : la disposition ne
+  change que sur action explicite de Cyril.
 - **E-2 — Volet dataviz professionnel.** Graphiques et analyses de qualité
   pro (Chart.js/Plotly, rendu web léger, zéro VRAM) : portefeuille,
   projections d'investissement (B-1), dépenses (B-2), cours de marché (B-3).

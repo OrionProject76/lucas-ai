@@ -8144,6 +8144,142 @@ console. Focus clavier testé (`Tab`) : anneau visible sur l'icône ciblée.
 Workspace revérifié aux deux largeurs : verre visible, glow absent des
 icônes d'en-tête, conforme à la demande de sobriété.
 
+## 5.77 Style final du Workspace — "Terminal pro" + cartes modulaires persistées, 09/08/2026
+
+**Tranché par Cyril après comparatif sur maquette interactive**, en deux
+temps dans la même session : d'abord une piste violet néon (jamais
+committée, remplacée avant tout test réel — voir le paragraphe dédié
+plus bas), puis la décision finale, « Terminal pro » : ambre discret,
+police monospace, coins peu arrondis, glass léger — **plus** un système
+de cartes modulaires (glisser-déposer + 4 tailles), persisté côté
+serveur. Portée strictement limitée à E-1 : aucune des sections vues sur
+la maquette de démo (aperçu financier, rappels administratifs, véhicule
+— previews de E-2/B-4/D-3, pas encore construits) n'a été ajoutée — les
+4 sections réelles restent inchangées, seuls le style et la disposition
+changent.
+
+### Exploration violette — décidée puis remplacée avant tout commit
+
+Le message précédent de Cyril demandait un violet néon pour le
+Workspace (réutilisant le halo `THINKING` de l'avatar). Implémenté,
+vérifié en conditions réelles (desktop + 412px), contraste calculé — puis
+un second message a précisé le style final réellement voulu (« Terminal
+pro », ambre). Comme rien n'avait encore été committé, l'exploration
+violette a été **annulée** (`git checkout`, pas un commit suivi d'un
+revert) : aucune trace dans l'historique, cohérent avec la discipline du
+projet de ne jamais documenter comme « livré » ce qui a été remplacé
+avant toute vérification finale par l'utilisateur.
+
+### Palette ambre — dans la continuité de l'existant, pas une couleur totalement nouvelle
+
+`#f0a94e`, tranché par Cyril. Pas une reprise exacte comme le cyan du
+chat (`ROADMAP.md` §5.75) ou le violet écarté, mais dans la même famille
+que l'ambre déjà présent ailleurs dans l'app (halo `WATCHING` de
+l'avatar, badge d'activité, pastille d'alerte sécurité — tous proches de
+`#ff9600`) : cohérent avec le vocabulaire « mise en avant » déjà établi.
+
+### Contraste vérifié avant d'écrire le CSS final
+
+| Élément | Contraste texte/fond | Minimum WCAG AA |
+|---|---|---|
+| `--amber-panel-bg` (cartes, en-tête) | 17.72:1 | 4.5:1 |
+| Bouton de taille actif (texte quasi noir sur ambre plein) | 9.43:1 | 4.5:1 |
+
+Même méthode que §5.75/§5.76 (formule de luminance relative WCAG),
+calculée avant l'écriture du CSS, pas après coup.
+
+### Glow statique, jamais clignotant
+
+Aucun `@keyframes` ajouté dans `workspace.css` — même règle que le chat
+(§5.75) et l'exploration violette (§5.76). Seul `#mic-btn.recording`
+(rouge, sans rapport, dans `style.css`) anime encore un glow dans tout
+le CSS du projet, et seul l'avatar (hors périmètre) varie dynamiquement.
+
+### Cartes modulaires — glisser-déposer (Pointer Events) + 4 tailles, persistées côté serveur
+
+- **Backend** (`modules/workspace_manager.py`) : `get_layout()`/
+  `save_layout()` réutilisent la table `app_state` déjà existante
+  (`memory/memory_manager.py::set_state`/`get_state`) plutôt qu'une
+  nouvelle table SQLite — un JSON `{"order": [...], "sizes": {...}}`
+  sous une seule clé. Validation stricte : `order` doit être exactement
+  une permutation des 4 cartes connues, chaque taille doit être dans
+  `S`/`M`/`L`/`XL` — `InvalidLayout` sinon, jamais un enregistrement
+  partiel silencieux.
+- **API** : `GET`/`PUT /workspace/layout`, même garde de jeton que le
+  reste du Workspace. `PUT` invalide → 400 avec le détail de la
+  validation, pas 500.
+- **Frontend** (`static/js/workspace.js`) : glisser-déposer en **Pointer
+  Events**, pas l'API HTML5 Drag & Drop (support tactile peu fiable) —
+  un seul modèle pour souris/tactile/stylet, testé sur les deux
+  plateformes. Réordonnancement en direct pendant le glisser (le noeud
+  DOM de la carte suit le pointeur via `insertBefore`, distance
+  euclidienne au centre de chaque carte voisine — correct en une colonne
+  comme en plusieurs). Équivalent clavier minimal sur la poignée de
+  glisser (flèches) pour rester opérable sans souris/tactile — pas un
+  patron ARIA drag-and-drop complet, mais réellement utilisable.
+  Sauvegarde débouncée (250 ms) après chaque changement (glisser ou
+  taille).
+
+### 🔴 Bug réel trouvé et corrigé en testant — clic fantôme en fin de glisser
+
+Un premier test réel (glisser une carte, puis relire la disposition
+persistée) a montré une taille changée sur une carte que je n'avais pas
+touchée. Diagnostiqué, pas supposé : le réordonnancement en direct
+pendant le glisser déplace continuellement le contenu sous le
+pointeur — au moment du relâchement, l'élément qui se trouve **sous le
+point de dépôt** peut être différent de celui visé au départ (typique :
+un bouton de taille S/M/L/XL d'une carte voisine, qui a glissé sous le
+pointeur pendant le mouvement). Un clic de navigateur qui suit
+naturellement un `pointerup`/`mouseup` déclenche alors ce bouton — un
+faux changement de taille, jamais demandé.
+
+Reproduit de façon déterministe (`dispatchEvent` de la séquence
+`pointerdown`/`pointermove`/`pointerup` + `click` synthétique au point de
+dépôt, sans dépendre de coordonnées écran devinées) : confirmé que
+`document.elementFromPoint()` au point de dépôt retournait bien un
+`.workspace-size-btn` d'une carte voisine, et que sans correctif, sa
+taille changeait réellement. **Corrigé** : un indicateur `justDragged`,
+posé à la fin de tout glisser, intercepte et annule (capture phase) le
+tout premier `click` qui suit — sans empêcher un clic normal (non
+précédé d'un glisser) d'atteindre son bouton. Revérifié après correctif,
+avec exactement le même scénario reproduit : plus aucun changement de
+taille non désiré, le réordonnancement reste correct.
+
+⚠️ Pas seulement un artefact de test : un doigt qui se lève après un
+glisser tactile réel peut retomber sur un élément recomposé sous lui de
+la même manière — le correctif protège un vrai usage, pas seulement le
+harnais de vérification.
+
+### ⚠️ Piège de §5.74, retombé dedans une deuxième fois — routes API, pas fichiers statiques
+
+Contrairement à §5.76 (CSS seul, aucun bump nécessaire), cette passe
+modifie `api/server.py` (nouvelles routes `/workspace/layout`) — un
+changement Python, jamais rechargé par la tâche planifiée
+`LucasAPIServer` (pas de `--reload`, voir §5.74). Premier test réel
+après avoir écrit les routes : `GET /workspace/layout` répondait `404
+Not Found` sur le serveur live, alors que les tests automatisés
+passaient (ils instancient l'app FastAPI directement, sans passer par le
+process réel). Diagnostiqué et corrigé avec la même procédure que §5.74 :
+arbre parent→enfant retracé (`cmd.exe` → `venv\Scripts\python.exe` →
+interpréteur réel) avant `taskkill /F /T` sur la racine exacte de cet
+arbre, puis relance via la tâche planifiée — nouveau PID confirmé via
+`Get-NetTCPConnection`, route vérifiée active ensuite. Aucune régression
+de la leçon elle-même : c'est la distinction « fichier statique vs route
+Python » qui n'avait pas été assez explicitée après §5.74, pas la
+procédure de redémarrage qui a été oubliée.
+
+### Vérifié en conditions réelles, capture à l'appui
+
+Suite complète : 1544 passed (1533 + 11 nouveaux tests de disposition),
+`ruff check .` propre. Testé sur le serveur live redémarré, aux deux
+largeurs (desktop 1568px, mobile réelle 412px via `<iframe>`) : glisser
+une carte confirmé (réordonnancement visible immédiatement), changer sa
+taille confirmé (S/M/L/XL, glow actif sur le bouton sélectionné),
+**rechargement complet de la page** confirmé conserver la disposition —
+à la fois via l'interface et via une requête `curl` indépendante du
+navigateur (preuve que la persistance est bien côté serveur, pas
+localStorage). Aucune erreur console aux deux formats.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

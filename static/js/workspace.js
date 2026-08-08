@@ -6,8 +6,24 @@
 // (pas extrait en commun) plutôt qu'une dépendance croisée avec app.js,
 // pour qu'un lien /app/workspace.html?token=... fonctionne seul, sans
 // être passé d'abord par index.html.
+//
+// Glisser-déposer + tailles (09/08/2026) : Pointer Events plutôt que
+// l'API HTML5 Drag & Drop — cette dernière n'a pas de support tactile
+// fiable, alors que Pointer Events unifie souris/tactile/stylet dans un
+// seul modèle, testé sur mobile ET PC (voir ROADMAP.md §5.77).
 
 (function () {
+    const CARD_IDS = ["reports", "requests", "actions", "objectives"];
+    const CARD_SIZES = ["S", "M", "L", "XL"];
+
+    function gridEl() {
+        return document.getElementById("workspace-grid");
+    }
+
+    function cardEl(cardId) {
+        return document.getElementById(`card-${cardId}`);
+    }
+
     function saveTokenFromUrl() {
         const params = new URLSearchParams(location.search);
         const token = params.get("token");
@@ -155,9 +171,201 @@
         }
     }
 
+    // ── Disposition (glisser-déposer + tailles) ─────────────────────────
+
+    function applyCardSize(cardId, size) {
+        const card = cardEl(cardId);
+        if (!card) return;
+        for (const s of CARD_SIZES) card.classList.remove(`card-size-${s}`);
+        card.classList.add(`card-size-${size}`);
+        for (const btn of card.querySelectorAll(".workspace-size-btn")) {
+            btn.classList.toggle("active", btn.dataset.size === size);
+        }
+    }
+
+    function applyLayout(layout) {
+        const grid = gridEl();
+        // appendChild sur un noeud déjà présent dans le document le
+        // DÉPLACE (ne le duplique pas) — suffisant pour appliquer
+        // n'importe quel ordre en une seule passe.
+        for (const cardId of layout.order || []) {
+            const card = cardEl(cardId);
+            if (card) grid.appendChild(card);
+        }
+        for (const cardId of CARD_IDS) {
+            applyCardSize(cardId, (layout.sizes && layout.sizes[cardId]) || "M");
+        }
+    }
+
+    function currentLayout() {
+        const grid = gridEl();
+        const order = Array.from(grid.querySelectorAll(".workspace-card")).map(
+            (card) => card.dataset.cardId
+        );
+        const sizes = {};
+        for (const cardId of CARD_IDS) {
+            const card = cardEl(cardId);
+            sizes[cardId] = CARD_SIZES.find((s) => card.classList.contains(`card-size-${s}`)) || "M";
+        }
+        return { order, sizes };
+    }
+
+    let saveLayoutTimer = null;
+    function saveLayoutDebounced() {
+        // Un glisser peut survoler plusieurs cartes avant de se stabiliser
+        // — n'enregistrer que l'état final, pas chaque étape intermédiaire.
+        clearTimeout(saveLayoutTimer);
+        saveLayoutTimer = setTimeout(() => {
+            fetch("/workspace/layout", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json", ...authHeaders() },
+                body: JSON.stringify(currentLayout()),
+            }).catch(() => {
+                // Une disposition non enregistrée n'est pas critique : Cyril
+                // la revoit à l'écran et peut la redéplacer, jamais une
+                // erreur bloquante pour le reste de la page.
+            });
+        }, 250);
+    }
+
+    async function loadLayout() {
+        try {
+            const response = await fetch("/workspace/layout", { headers: authHeaders() });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            applyLayout(await response.json());
+        } catch (error) {
+            // Pas de disposition chargeable (jeton, réseau) : reste sur
+            // l'ordre/tailles par défaut déjà présents dans le HTML.
+        }
+    }
+
+    function initSizeControls() {
+        for (const btn of document.querySelectorAll(".workspace-size-btn")) {
+            btn.addEventListener("click", () => {
+                const card = btn.closest(".workspace-card");
+                applyCardSize(card.dataset.cardId, btn.dataset.size);
+                saveLayoutDebounced();
+            });
+        }
+    }
+
+    // Une carte qui vient d'être glissée peut se retrouver, sous le
+    // point de dépôt, à la place d'un AUTRE élément interactif (bouton de
+    // taille d'une carte voisine) — la réorganisation en direct pendant
+    // le drag déplace continuellement le contenu sous le doigt/curseur.
+    // Un clic fantôme sur cet élément juste après un pointerup serait une
+    // vraie régression (déclenché en conditions réelles, pas seulement en
+    // test automatisé — même mécanisme qu'un tap qui "traverse" un
+    // élément recomposé sous lui sur mobile). Un seul indicateur, purgé
+    // par le tout premier clic qui suit un glisser, capture-phase pour
+    // intercepter avant tout gestionnaire de clic spécifique (bouton de
+    // taille, poignée...).
+    let justDragged = false;
+    document.addEventListener(
+        "click",
+        (event) => {
+            if (!justDragged) return;
+            justDragged = false;
+            event.preventDefault();
+            event.stopPropagation();
+        },
+        true
+    );
+
+    function initDragAndDrop() {
+        const grid = gridEl();
+        let dragCard = null;
+
+        function cardCenter(card) {
+            const rect = card.getBoundingClientRect();
+            return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        }
+
+        // Distance euclidienne au centre de chaque autre carte, pas
+        // seulement "au-dessus/en-dessous" — correct aussi bien en une
+        // colonne (mobile, voir le media query de workspace.css) qu'en
+        // plusieurs colonnes (desktop, flex-wrap).
+        function closestSibling(clientX, clientY) {
+            let closest = null;
+            let closestDist = Infinity;
+            for (const card of grid.querySelectorAll(".workspace-card")) {
+                if (card === dragCard) continue;
+                const center = cardCenter(card);
+                const dist = (clientX - center.x) ** 2 + (clientY - center.y) ** 2;
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closest = card;
+                }
+            }
+            return closest;
+        }
+
+        function onPointerMove(event) {
+            if (!dragCard) return;
+            event.preventDefault();
+            const target = closestSibling(event.clientX, event.clientY);
+            if (!target) return;
+            const children = Array.from(grid.children);
+            if (children.indexOf(dragCard) < children.indexOf(target)) {
+                grid.insertBefore(dragCard, target.nextSibling);
+            } else {
+                grid.insertBefore(dragCard, target);
+            }
+        }
+
+        function endDrag() {
+            if (!dragCard) return;
+            dragCard.classList.remove("dragging");
+            dragCard = null;
+            justDragged = true;
+            window.removeEventListener("pointermove", onPointerMove);
+            window.removeEventListener("pointerup", endDrag);
+            window.removeEventListener("pointercancel", endDrag);
+            saveLayoutDebounced();
+        }
+
+        for (const handle of document.querySelectorAll(".workspace-drag-handle")) {
+            handle.addEventListener("pointerdown", (event) => {
+                event.preventDefault();
+                dragCard = handle.closest(".workspace-card");
+                dragCard.classList.add("dragging");
+                window.addEventListener("pointermove", onPointerMove);
+                window.addEventListener("pointerup", endDrag);
+                window.addEventListener("pointercancel", endDrag);
+            });
+
+            // Équivalent clavier minimal (accessibilité) : flèches pour
+            // déplacer la carte dans l'ordre, sans glisser-déposer complet
+            // façon ARIA — suffisant pour rester opérable au clavier.
+            handle.addEventListener("keydown", (event) => {
+                if (!["ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight"].includes(event.key)) return;
+                event.preventDefault();
+                const card = handle.closest(".workspace-card");
+                const cards = Array.from(grid.querySelectorAll(".workspace-card"));
+                const index = cards.indexOf(card);
+                const moveEarlier = event.key === "ArrowUp" || event.key === "ArrowLeft";
+                if (moveEarlier && index > 0) {
+                    grid.insertBefore(card, cards[index - 1]);
+                } else if (!moveEarlier && index < cards.length - 1) {
+                    grid.insertBefore(card, cards[index + 1].nextSibling);
+                } else {
+                    return;
+                }
+                handle.focus();
+                saveLayoutDebounced();
+            });
+        }
+    }
+
     document.addEventListener("DOMContentLoaded", () => {
         saveTokenFromUrl();
-        document.getElementById("workspace-refresh").addEventListener("click", loadSummary);
+        initSizeControls();
+        initDragAndDrop();
+        document.getElementById("workspace-refresh").addEventListener("click", () => {
+            loadLayout();
+            loadSummary();
+        });
+        loadLayout();
         loadSummary();
     });
 })();
