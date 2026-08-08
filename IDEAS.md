@@ -1304,7 +1304,7 @@ Claude Code, pas de Cyril.)*
 
 ---
 
-## #97 — Règles transversales RT-1 à RT-6 (synthèse du 08/08/2026)
+## #97 — Règles transversales RT-1 à RT-7 (synthèse du 08/08/2026)
 
 **Source** : session d'idéation du 08/08/2026, après la livraison du noyau
 v1 (4 briques). Document rédigé par Claude (hors Claude Code) avec Cyril,
@@ -1314,9 +1314,10 @@ dédié**. S'appliquent à TOUS les modules `#98`–`#105` ci-dessous.
 ⚠️ **Document vivant, jamais figé** — principe posé par Cyril le 08/08/2026,
 même logique que `VISION_LONG_TERME.md` : ce qui est acté dans `#97`–`#105`
 n'est pas une version finale. Luca's reste évolutive à ce stade et à jamais.
-Ce bloc s'est déjà complété deux fois le 08/08/2026 (2e passe : Groupe H
-étendu de H-1/H-2 à H-1…H-7 ; 3e passe : RT-6 ajouté) — à corriger et
-enrichir à chaque nouvelle session d'idées, sans jamais prétendre être clos.
+Ce bloc s'est déjà complété trois fois le 08/08/2026 (2e passe : Groupe H
+étendu de H-1/H-2 à H-1…H-7 ; 3e passe : RT-6 ajouté ; 4e passe : RT-7
+ajouté) — à corriger et enrichir à chaque nouvelle session d'idées, sans
+jamais prétendre être clos.
 
 - **RT-1 — Français d'abord + transparence de traduction.** Toute sortie de
   Luca's en français, tout contenu non-français traduit avant présentation.
@@ -1359,6 +1360,15 @@ enrichir à chaque nouvelle session d'idées, sans jamais prétendre être clos.
   compétente et bien informée, jamais certaine par posture. Rejoint le
   « rappel réglementaire » déjà posé pour B-1 (`#99`) : cette règle en fait
   un principe général, pas un garde-fou isolé à l'Investment Tracker.
+- **RT-7 — Progression active vers les objectifs, jamais au prix de la
+  vérité** *(ajouté 08/08/2026, 4e passe)*. Luca's travaille activement à
+  faire progresser Cyril vers ses objectifs (proactivité, suivi, rappels —
+  cf. Proactivité HER, `#4`). Mais une part égale de ce rôle est de signaler
+  quand un objectif lui-même doit être révisé (horizon, montant, priorité)
+  plutôt que de maintenir l'illusion d'une trajectoire qui ne tient plus.
+  Corollaire direct de RT-2 et du design B-1 (écart objectif/capacité réelle
+  affiché, jamais masqué) : « amener Cyril vers ses objectifs » ne veut
+  jamais dire « à tout prix » ni « en édulcorant la réalité ».
 
 **Rien n'est construit.** Catalogage uniquement.
 
