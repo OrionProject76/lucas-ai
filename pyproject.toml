@@ -1,0 +1,15 @@
+# pyproject.toml — configuration ruff explicite
+#
+# Aucun pyproject.toml n'existait avant le 08/08/2026 : ruff tournait sur
+# ses défauts internes (~394 règles dans ruff 0.16.1, dont B006 déjà actif
+# de fait — vérifié via `ruff check . --show-settings` avant d'écrire ce
+# fichier, pas supposé). Ce fichier rend B006 explicite et durable, pour
+# ne plus dépendre d'un défaut qui pourrait changer à une future mise à
+# jour de ruff.
+#
+# `extend-select`, pas `select` : ajoute B006 à la sélection existante
+# sans la remplacer — un `select` nu aurait réduit le linting à cette
+# seule règle.
+
+[tool.ruff.lint]
+extend-select = ["B006"]  # flake8-bugbear : argument par défaut mutable

@@ -7893,6 +7893,29 @@ cliquée par lui ; le budget CPU de l'avatar dépasse la cible mesurée de
 en conditions réelles qui attend Cyril devant l'écran, pas un défaut de
 conception.
 
+## 5.72 Revue a posteriori Briques 2/1 + règle ruff B006, 08/08/2026
+
+**Revue demandée par Cyril** sur 4 points précis des Briques 2/1
+(committées sous mode Auto, sans approbation diff par diff) : `move_file`
+vérifie-t-il `allowed_directories` sur source ET destination, le pont Qt
+fonctionne-t-il avec une vraie `QMessageBox` (pas mockée), `is_sensitive()`
+passe-t-il vraiment avant toute vérification de budget, le plafond
+déclenche-t-il vraiment la bascule à 100 % en conditions réalistes (pas
+seulement le test à 0,01€). **Rien d'anormal trouvé, aucun code modifié.**
+Détail complet, y compris un piège trouvé dans mon propre script de
+vérification (pas dans le code réel — une vraie `QMessageBox.exec()` ouvre
+sa propre boucle d'événements imbriquée, incompatible avec une boucle de
+pompage manuelle) : `cowork_workspace/reports/Verification_Briques_2_1_2026-08-08.md`.
+
+**`pyproject.toml`** (nouveau, demande séparée de Cyril) : le projet
+n'avait jamais eu de configuration ruff explicite — vérifié avant d'agir
+(`ruff check . --show-settings`), pas supposé : ruff 0.16.1 tourne par
+défaut sur ~394 règles, dont B006 (argument par défaut mutable,
+flake8-bugbear) déjà actif de fait. `extend-select = ["B006"]` ajouté
+pour le rendre explicite et durable, sans dépendre d'un défaut qui
+pourrait changer à une future mise à jour. `ruff check .` toujours propre
+après activation — aucune occurrence trouvée ailleurs dans le code.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
