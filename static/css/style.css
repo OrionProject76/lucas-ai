@@ -127,7 +127,8 @@ html, body {
     border-color: var(--border-cyan);
 }
 
-button.icon-btn {
+button.icon-btn,
+a.icon-btn {
     flex: 0 0 auto;
     width: 44px;
     height: 44px;
@@ -140,10 +141,24 @@ button.icon-btn {
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    text-decoration: none;
 }
 
-button.icon-btn:active {
+button.icon-btn:active,
+a.icon-btn:active {
     background: rgba(0, 212, 255, 0.25);
+}
+
+/* ── Lien Workspace (IDEAS.md #102, E-1) ───────────────────────────── */
+
+#workspace-link {
+    position: fixed;
+    top: calc(10px + env(safe-area-inset-top));
+    left: 150px;
+    z-index: 20;
+    width: 38px;
+    height: 38px;
+    font-size: 1rem;
 }
 
 /* Micro en cours d'enregistrement : rouge franc, pas d'ambiguïté possible

@@ -1,0 +1,138 @@
+/* static/css/workspace.css — mise en page du tableau de bord Workspace
+   (IDEAS.md #102, E-1). Aucune couleur définie ici : les tokens viennent
+   de style.css (:root), chargé avant ce fichier — une seule identité
+   visuelle Luca's, pas un thème dashboard séparé. */
+
+#workspace {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+}
+
+#workspace-header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-cyan);
+    background: var(--panel-bg);
+    backdrop-filter: blur(6px);
+}
+
+#workspace-header h1 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+
+#workspace-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#workspace-status {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    white-space: nowrap;
+}
+
+#workspace-controls .icon-btn {
+    width: 34px;
+    height: 34px;
+    font-size: 0.95rem;
+}
+
+#workspace-grid {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 16px;
+    padding: 20px;
+    align-content: start;
+}
+
+.workspace-card {
+    background: var(--panel-bg);
+    border: 1px solid rgba(0, 212, 255, 0.25);
+    border-radius: 14px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+}
+
+.workspace-card h2 {
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+
+.workspace-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 46vh;
+    overflow-y: auto;
+}
+
+.workspace-item {
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(0, 212, 255, 0.05);
+    border: 1px solid rgba(0, 212, 255, 0.15);
+    font-size: 0.88rem;
+    line-height: 1.4;
+}
+
+.workspace-item-title {
+    color: var(--text);
+    font-weight: 600;
+    word-break: break-word;
+}
+
+.workspace-item-meta {
+    margin-top: 2px;
+    font-size: 0.76rem;
+    color: var(--text-dim);
+}
+
+.workspace-item.denied {
+    border-color: rgba(255, 85, 102, 0.4);
+}
+
+.workspace-item.denied .workspace-item-title {
+    color: var(--error);
+}
+
+.workspace-empty {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    font-style: italic;
+}
+
+.workspace-error {
+    font-size: 0.85rem;
+    color: var(--error);
+}
+
+@media (max-width: 480px) {
+    #workspace-header h1 {
+        font-size: 0.95rem;
+    }
+
+    #workspace-grid {
+        grid-template-columns: 1fr;
+        padding: 12px;
+    }
+}

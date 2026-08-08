@@ -7916,6 +7916,89 @@ pour le rendre explicite et durable, sans dépendre d'un défaut qui
 pourrait changer à une future mise à jour. `ruff check .` toujours propre
 après activation — aucune occurrence trouvée ailleurs dans le code.
 
+## 5.73 Workspace Luca's — E-1 uniquement (tableau de bord PC), 08/08/2026
+
+**Brief** : `cowork_workspace/BRIEF_WORKSPACE_E1.md`, périmètre strictement
+limité à E-1 du catalogue d'idéation (`IDEAS.md` `#102`) — rendre visible
+ce que Luca's fait déjà (rapports, demandes en attente, actions, objectifs
+en cours), zéro action déclenchable depuis la page, zéro VRAM/rendu 3D.
+E-2/E-3/F-1 et le reste du catalogue explicitement hors périmètre.
+
+**Décisions d'implémentation** (mode plan utilisé, brief laissait des
+choix ouverts) :
+- **Page dédiée** `static/workspace.html` plutôt qu'un tiroir de plus dans
+  le chat mobile — consultée depuis le PC, 4 sections structurées, pas la
+  UX téléphone existante. Servie automatiquement par le mount `/app/`
+  déjà en place (`StaticFiles(html=True)`), aucune nouvelle route de
+  fichiers nécessaire.
+- **Un seul endpoint agrégé** `GET /workspace/summary` (même patron que
+  `/finance/summary`), protégé par le même jeton que `/history`/
+  `/documents`/`/finance/summary` — noms de rapports et objectifs
+  (potentiellement financiers) sont sensibles.
+- **`modules/workspace_manager.py`** (nouveau) : 4 fonctions de lecture
+  seule — `list_reports()`/`list_pending_requests()` itèrent
+  `cowork_workspace/reports/`/`requests/` (chemins fixes, pas d'entrée
+  utilisateur, donc aucun risque de traversal), `list_recent_actions()`/
+  `list_objectives()` délèguent à `MemoryManager.load_recent_actions()`/
+  `.recall(memory_type="prospective")` — avec `db_path=memory_manager.
+  DB_PATH` explicite, même piège documenté que `core/router.py` (défaut
+  de paramètre figé à la définition de `__init__`, un monkeypatch de
+  `DB_PATH` dans un test ne l'atteint pas via `MemoryManager()` nu).
+- **Aucune donnée fabriquée** : les objectifs (mémoire `prospective`)
+  n'ont pas de champ « avancement » dans le schéma — affichage du
+  contenu texte brut, jamais un pourcentage inventé. La section actions
+  est étiquetée « Actions récentes » (pas « tâches à faire ») —
+  `action_log` trace des décisions déjà exécutées ou refusées, pas une
+  todo-list.
+- **XSS évité par construction** : `static/js/workspace.js` construit
+  chaque ligne via `createElement`/`textContent`, jamais `innerHTML` sur
+  une valeur dynamique (titre de rapport, contenu d'objectif, params
+  d'action) — trouvé et corrigé en relisant mon propre premier jet, avant
+  tout test.
+
+**Tests** : `test_workspace_manager.py` (nouveau, 11 tests — tri par date,
+exclusion `README.md`/`_DONE`, extraction de titre Markdown vs repli sur
+le nom de fichier, dossiers absents → listes vides, assemblage des 4
+sections) + 2 tests dans `test_server.py` (jeton requis, relai fidèle de
+`workspace_manager.summary()`). Suite complète : 1533 passed (1520 + 13),
+`ruff check .` propre, `mypy` sur les fichiers touchés sans nouvelle
+erreur (les 10 erreurs pré-existantes viennent de modules tiers sans
+rapport — `psutil`/`win32gui`/`faster_whisper`/`pytesseract`).
+
+**Vérification en conditions réelles, pas seulement en test unitaire** :
+- Redémarrage du serveur live (`LucasAPIServer`) nécessaire — `--reload`
+  n'est **pas** utilisé par cette tâche planifiée (contrairement à `just
+  serve`), une modification de `api/server.py` ne se recharge donc jamais
+  seule. ⚠️ **Piège rencontré** : `Stop-ScheduledTask`/`Start-ScheduledTask`
+  seuls n'ont RIEN arrêté — `start_server_hidden.vbs` lance la commande via
+  `objShell.Run(..., 0, False)`, qui détache complètement le process du
+  suivi du Planificateur de tâches (la tâche redevient "Ready" en quelques
+  millisecondes, alors que le vrai serveur continue de tourner en arrière-
+  plan). Deux tentatives de redémarrage via le Planificateur seul n'ont
+  donc rien changé — `/workspace/summary` répondait encore `404 Not
+  Found` sur le process qui tenait réellement le port 8000. Diagnostiqué
+  en retraçant l'arbre parent→enfant complet (`cmd.exe` → `venv\Scripts\
+  python.exe` → interpréteur réel, exactement le patron déjà documenté
+  dans `CLAUDE.md` "venv\Scripts\python.exe... toujours un parent, jamais
+  l'interpréteur lui-même") avant de cibler `taskkill /F /T` sur la racine
+  de CET arbre précis — jamais un PID isolé deviné depuis `tasklist`, qui
+  affichait 10 process `python.exe` sans rapport (Ollama, pytest, etc.).
+  Après cet arrêt propre + `Start-ScheduledTask`, le nouveau process
+  (PID différent, confirmé via `Get-NetTCPConnection`) sert bien la
+  nouvelle route.
+- Chargement réel via les outils navigateur Chrome de cette session :
+  `/app/workspace.html?token=...` affiche les vrais rapports de
+  `cowork_workspace/reports/` (titres extraits des `# ...` Markdown),
+  "Aucune demande en attente" (les deux demandes existantes sont déjà
+  `_DONE`), les vraies actions de `action_log` (`launch_notepad —
+  executed`, dates réelles), "Aucun objectif prospectif enregistré pour
+  l'instant" (`remember()` construit en Brique 3 mais jamais encore
+  appelé pour un objectif prospectif — honnête, pas un vide caché). Bouton
+  🖥️ ajouté dans `index.html`, testé en conditions réelles (clic → arrive
+  bien sur le Workspace, jeton déjà en `localStorage` réutilisé sans
+  ressaisie). Chat existant rechargé après : connexion WebSocket, avatar,
+  aucune erreur console — pas de régression.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

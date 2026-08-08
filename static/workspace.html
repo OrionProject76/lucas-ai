@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Même garde que index.html (ROADMAP.md §5.33) : un lien d'appairage
+         porte le jeton en query string, jamais dans un Referer sortant. -->
+    <meta name="referrer" content="no-referrer" />
+    <title>Workspace — Luca's</title>
+    <link rel="icon" href="/app/icons/icon-192.png" />
+    <meta name="theme-color" content="#00050a" />
+    <link rel="stylesheet" href="/app/css/style.css" />
+    <link rel="stylesheet" href="/app/css/workspace.css" />
+</head>
+<body>
+    <div id="workspace">
+        <header id="workspace-header">
+            <h1>Workspace Luca's</h1>
+            <div id="workspace-controls">
+                <span id="workspace-status"></span>
+                <button type="button" id="workspace-refresh" class="icon-btn" title="Actualiser">↻</button>
+                <a href="/app/" class="icon-btn" title="Retour au chat">💬</a>
+            </div>
+        </header>
+
+        <main id="workspace-grid">
+            <section class="workspace-card" id="card-reports">
+                <h2>Rapports produits</h2>
+                <div class="workspace-list" id="reports-list"></div>
+            </section>
+
+            <section class="workspace-card" id="card-requests">
+                <h2>Demandes en attente</h2>
+                <div class="workspace-list" id="requests-list"></div>
+            </section>
+
+            <section class="workspace-card" id="card-actions">
+                <h2>Actions récentes</h2>
+                <div class="workspace-list" id="actions-list"></div>
+            </section>
+
+            <section class="workspace-card" id="card-objectives">
+                <h2>Objectifs en cours</h2>
+                <div class="workspace-list" id="objectives-list"></div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/app/js/workspace.js"></script>
+</body>
+</html>

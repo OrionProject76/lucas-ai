@@ -379,6 +379,33 @@ def test_finance_summary_requires_the_token(client, fake_finance_with_data, monk
     assert client.get("/finance/summary").status_code == 401
 
 
+# ── Workspace Luca's (IDEAS.md #102, E-1) ───────────────────────────────
+
+
+def test_workspace_summary_requires_the_token(client, monkeypatch) -> None:
+    """Noms de rapports et objectifs prospectifs sont sensibles (CLAUDE.md règle 3)."""
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    assert client.get("/workspace/summary").status_code == 401
+
+
+def test_workspace_summary_relays_real_data_without_transformation(client, monkeypatch) -> None:
+    """
+    La route ne fait que relayer modules.workspace_manager.summary() —
+    vérifié en mockant cette fonction plutôt que le disque/la DB, pour ne
+    tester ici QUE le câblage de la route (le contenu de summary() est
+    couvert par test_workspace_manager.py).
+    """
+    fake_summary = {
+        "reports": [{"filename": "a.md", "title": "A", "size_bytes": 10, "modified_at": "2026-08-08T00:00:00+00:00"}],
+        "pending_requests": [],
+        "recent_actions": [{"action": "open_app:calc", "source": "chat", "result": "executed", "params": None, "created_at": "2026-08-08 10:00:00"}],
+        "objectives": [{"id": 1, "memory_type": "prospective", "content": "Objectif retraite", "confidence": 1.0, "importance": 0.5}],
+    }
+    monkeypatch.setattr("api.server.workspace_summary", lambda: fake_summary)
+
+    assert client.get("/workspace/summary").json() == fake_summary
+
+
 # ── WebSocket ─────────────────────────────────────────────────────────
 
 def _next_of_type(ws, message_type: str, limit: int = 12) -> dict:

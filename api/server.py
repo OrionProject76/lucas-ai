@@ -38,6 +38,7 @@ from memory.memory_manager import save_event_from_any_thread
 from modules.semantic_desktop import SemanticDesktop
 from modules.stt_engine import STTEngine, STTUnavailable
 from modules.voice_manager import VoiceManager
+from modules.workspace_manager import summary as workspace_summary
 from security.status import get_status as get_security_status
 
 app = FastAPI(title="Luca's API", version="0.2")
@@ -362,6 +363,21 @@ def finance_summary():
         ],
         "skipped_files": skipped_files,
     }
+
+
+# ── Workspace Luca's (IDEAS.md #102, E-1) — lecture seule ──────────────
+#
+# Rend visible ce que Luca's fait déjà : rapports, demandes en attente,
+# actions gouvernées, objectifs en cours. Voir modules/workspace_manager.py
+# pour le détail de chaque source. Même garde de jeton que /history,
+# /documents, /finance/summary — noms de rapports et objectifs
+# (potentiellement financiers) sont sensibles.
+
+
+@app.get("/workspace/summary", dependencies=[Depends(verify_token)])
+def workspace_summary_route():
+    """Instantané complet du Workspace Luca's (E-1) — lecture seule."""
+    return workspace_summary()
 
 
 # ── WebSocket : canal unique Luca's ↔ Godot ─────────────────────
