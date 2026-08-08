@@ -289,7 +289,7 @@ pas validé d'élargir la liste blanche.
 43. Scoring ESG — Environnement, Social, Gouvernance
 44. Analyse technique & ML locale — MM, RSI, MACD, patterns, prédiction scikit-learn
 45. Budget intelligent — Prévisions, comparaisons, objectifs épargne
-46. Détecteur d'économies — Abonnements inutilisés, doublons
+46. Détecteur d'économies — Abonnements inutilisés, doublons *(précisé 08/08/2026 : analyse mensuelle des relevés déjà importés en CSV — pas de nouvelle connexion, exclusion §7 maintenue —, comparaison fournisseurs énergie/télécom/assurance, 100% local. Module qui libère de la capacité d'épargne, pas qui la gère — voir #99 Groupe B pour le contexte complet)*
 47. Simulateur scénarios — Épargne, crédit, inflation, retraite
 48. Alertes prix & proactives
 49. Rapports auto mensuels/annuels/fiscaux/ESG export PDF/CSV/Excel — **pattern de référence validé 31/07 : nettoyage CSV → catégorisation → graphique → export, voir `VISION_LONG_TERME.md` §6**
@@ -301,7 +301,7 @@ pas validé d'élargir la liste blanche.
 ### 🎮 Gaming & social
 52. Game Master — JDR textuel, escape game, quiz personnalisé, trivia, speedrun, défis
 53. Party Mode — Playlist collaborative QR, blind test, karaoké, photobooth, trivia soirée, RGB fête
-54. Cinema Club — Recommandations locales, résumés sans spoilers, watchlist, notes, trivia
+54. Cinema Club — Recommandations locales, résumés sans spoilers, watchlist, notes, trivia *(rejoint le contrôle TV LG C65 webOS local, voir #101 Groupe D — même mode AURA Entertainment)*
 
 ### 📱 Mobile avancé
 55. Mobile Companion — 8 modes auto (poche/table/conduite/marche/sport/cuisine/lecture/sommeil)
@@ -318,14 +318,14 @@ pas validé d'élargir la liste blanche.
 85. **Ancrage RAG pour réponses fiscales/financières** — qwen2.5:7b invente des détails fiscaux incorrects ou obsolètes sur des produits d'épargne connus, **indépendamment de `REASONING_ENGINE_ENABLED`**. Observé le 03/08/2026 en comparant les réponses ON/OFF sur « Compare une assurance-vie et un PEL » (voir `ROADMAP.md` §5.7) : la version OFF invente une « taxe professionnelle » sur le PEL, la version ON invente une exonération d'impôt jusqu'à l'échéance et un « 70 % reversé au conjoint sans ISF » — rien de tout ça n'existe réellement pour ce produit, et les deux versions l'affirment avec la même assurance. Piste à explorer plus tard : ancrer ce type de réponse sur du RAG appuyé sur des sources officielles (service-public.fr, impots.gouv.fr...), sur le même principe que le RAG documents personnels déjà en place (`modules/rag_manager.py`) plutôt que sur la seule connaissance interne du modèle. Catalogué, pas une action immédiate.
 
 ### ✨ Ajouts session 28-31/07/2026
-62. Mode "Garde/Poste" — détecte les horaires de travail postés et adapte la proactivité (silence pendant le travail, résumé au retour)
+62. Mode "Garde/Poste" — détecte les horaires de travail postés et adapte la proactivité (silence pendant le travail, résumé au retour) *(reconfirmé 08/08/2026 : dépendance explicite du mode vocal extérieur (#98 Groupe A) — le vocal externe ne s'active que hors heures de poste déclarées. Toujours rien construit.)*
 63. Assistant révision aide-soignant — flashcards et quiz générés localement à partir de supports de cours, pour accompagner une reconversion professionnelle
 64. Vigilance budget temps réel — alerte douce en cas de dépassement d'un budget mensuel serré
 65. Journal vocal fatigue/sommeil — auto-déclaratif uniquement, sans capteur santé externe requis, adapté à un métier physique
 66. Mode "Debug Silencieux" — veille graphique totale de l'avatar pendant le développement de Luca's elle-même, pour libérer le GPU
 67. **Suivi & validation à distance (S25 Ultra)** — Tailscale+terminal mobile, ou bot Telegram/Discord de notification+validation par boutons, ou workflow Git+PR GitHub. Rejoint #6 (Handoff PC↔S25) — à fusionner conceptuellement, pas dupliquer.
 68. **Modèles spécialisés en complément** — Gemma Vision (VLM léger, analyse écran) et ShieldGemma (second filtre sécurité automatisé) en complément du modèle principal, chacun sur sa tâche plutôt qu'un seul modèle surchargé. Détaillé dans `VISION_LONG_TERME.md` Pilier 2.
-69. **Contrainte matérielle confirmée** — pas de webcam/micro sur PC, tout ce qui nécessite caméra/micro passe obligatoirement par le S25 Ultra.
+69. **Contrainte matérielle confirmée** — pas de webcam/micro sur PC, tout ce qui nécessite caméra/micro passe obligatoirement par le S25 Ultra. *(⚠️ Révisé — voir `#90` : décision actée le 05/08/2026, le PC gagne ses propres capteurs (speakerphone + webcam PTZ), matériel pas encore arrivé. Cette entrée décrit l'état AVANT le 05/08/2026, gardée pour l'historique, plus la contrainte actuelle.)*
 
 ---
 
@@ -386,6 +386,8 @@ dû corriger une fois (voir CLAUDE.md, structure dossiers).
 - ❌ Swarm Intelligence (#38) en v1 — reporté v1.1+ (clarifié 01/08 : ne concerne QUE le multi-LLM autonome, pas l'architecture modulaire)
 - ❌ Marketplace communautaire
 - ❌ Support Braille
+- ❌ SMS/appels téléphoniques (abandonné — voir `#98` Groupe A, A-3, session du 08/08/2026)
+- ❌ Cartes bancaires jamais stockées dans Luca's, sous aucune forme (non négociable — voir `#100` Groupe C, C-4, session du 08/08/2026)
 
 ---
 
@@ -963,6 +965,12 @@ exactement le motif que ce projet traque depuis deux jours : des tests
 verts sur un comportement jamais observé en réel. Les entrées suivantes
 cadrent ce qu'il faudra construire **quand le matériel sera là**.
 
+⚠️ **Rejoint `#79`** (réponse simultanée sur plusieurs clients) — précisé le
+08/08/2026 : la même limite « un seul destinataire par WebSocket » vaut pour
+la diffusion d'un événement déclenché par un capteur PC (ex. le mot de
+réveil détecté par le speakerphone). Un seul agrandissement de portée à
+traiter ensemble, pas deux sujets séparés — voir `#79` pour le détail.
+
 ⚠️ **Le choix du VLM sera à refaire, pas à hériter.** Avec la webcam PTZ,
 le VLM devient un capteur **quotidien** (suivi du regard pendant les
 interactions), plus une capacité occasionnelle : un taux d'hallucination
@@ -1293,3 +1301,313 @@ ci-dessus est celui de Cyril, reçu complet ensuite ; la reconstruction
 provisoire qui tenait la place entre-temps a été retirée, pas fusionnée.
 Les points de vigilance de la section précédente, eux, sont des ajouts de
 Claude Code, pas de Cyril.)*
+
+---
+
+## #97 — Règles transversales RT-1 à RT-5 (synthèse du 08/08/2026)
+
+**Source** : session d'idéation du 08/08/2026, après la livraison du noyau
+v1 (4 briques). Document rédigé par Claude (hors Claude Code) avec Cyril,
+statut **catalogue d'intentions validées — rien ne se construit sans brief
+dédié**. S'appliquent à TOUS les modules `#98`–`#105` ci-dessous.
+
+- **RT-1 — Français d'abord + transparence de traduction.** Toute sortie de
+  Luca's en français, tout contenu non-français traduit avant présentation.
+  Pour les documents à enjeu (financier/juridique/administratif/contractuel) :
+  original conservé + signalement explicite des termes ambigus ou
+  intraduisibles + traduction faite **en local** (jamais cloud pour du
+  sensible). « Ne jamais se faire avoir » = transparence sur la traduction,
+  pas seulement traduction.
+- **RT-2 — Recherche tenace, jamais fabriquée.** Luca's épuise réellement les
+  pistes (sources multiples, angles multiples, persévérance) avant de
+  conclure, sans s'arrêter au premier échec — mais ne fabrique **jamais**
+  une réponse pour « aboutir » : en cas d'info absente, non fiable ou
+  contradictoire, distingue explicitement le vérifié de l'incertain, avec
+  sources. Interdiction absolue d'inventer une donnée pour combler un vide —
+  corollaire direct du bannissement de `llava` (§5.57 `ROADMAP.md`).
+- **RT-3 — Routage sensible = local strict.** Toute donnée sensible (finance,
+  patrimoine, documents perso, contenu de capture vision, mails) reste locale
+  **par construction**, jamais éligible au cloud, indépendamment de ce que le
+  filtre texte détecte — règle structurelle, pas seulement basée sur
+  détection de contenu. Rejoint la précision « deux natures de décision, deux
+  mécanismes » de `CLAUDE.md`.
+- **RT-4 — Chaque outil ajouté = une porte à sécuriser.** Tout nouveau
+  connecteur/skill/outil élargit la surface d'attaque. Chaque ajout passe par
+  l'évaluation : qu'est-ce qu'il touche, qu'est-ce qu'il expose. Guardian/
+  Privacy Shield doit mûrir au rythme de l'ajout de capacités
+  (`VISION_LONG_TERME.md` §4.1, cf. `CLAUDE.md` « Liberté conditionnée à la
+  protection »).
+- **RT-5 — Coût maîtrisé.** Aucun service payant récurrent activé sans
+  décision explicite de Cyril (contexte budgétaire : dossier de
+  surendettement en instruction). Priorité au gratuit/local partout où c'est
+  possible.
+
+**Rien n'est construit.** Catalogage uniquement.
+
+---
+
+## #98 — Groupe A : Canaux & communication (synthèse du 08/08/2026)
+
+- **A-1 — Livraison multi-canal des messages de Luca's.** Logique à niveaux :
+  rapport de routine → push + Telegram ; demande d'autorisation/choix peu
+  urgente → push + Telegram avec relance après délai ; demande urgente →
+  vocal, **uniquement hors mode Garde/Poste** ; documents/vidéos/images →
+  email en pièce jointe. Canaux gratuits envisagés : Telegram Bot API, Web
+  Push (PWA), SMTP perso (mot de passe d'application). Identifiants via
+  `keyring`, jamais en clair. **Garde-fou RT-3** : un message contenant une
+  donnée sensible reste consultable uniquement dans la PWA authentifiée,
+  jamais transmis en clair par email/Telegram. Dépend d'A-2.
+- **A-2 — Mode Garde/Poste** (`#62`, à construire). Détecte les horaires de
+  travail postés de Cyril (brancardier) : aucune interruption vocale pendant
+  le poste, tout s'accumule silencieusement ; résumé à la sortie. Le mode
+  vocal extérieur ne s'active qu'hors heures de poste déclarées.
+- **A-3 — SMS & appels téléphoniques — ABANDONNÉS.** Retirés du périmètre à
+  la demande de Cyril (coûts + restrictions techniques) : appels
+  impossibles proprement sans service cloud payant (Twilio ~1-3€/mois) plus
+  restriction OS sur l'injection audio ; SMS annulés. **Ne pas construire.**
+  Ajouté à `#7 Exclusions validées`.
+
+**Rien n'est construit.** Catalogage uniquement.
+
+---
+
+## #99 — Groupe B : Finance & économies (synthèse du 08/08/2026)
+
+Au service de l'objectif retraite.
+
+- **B-1 — Investment Tracker.** Suivi du plan d'investissement PEA/CTO vs
+  objectif (500k€, horizon à recalculer selon date de reprise réelle —
+  ~2028 envisagé, soit ~17 ans). Tables SQLite dédiées
+  (`investment_plan`/`investment_contributions`/`portfolio_snapshots`).
+  Moteur de projection **en fourchette** (3 scénarios : 3/5/7 %/an), jamais
+  un chiffre unique — affiche l'écart entre ce que l'objectif exige et ce
+  que la capacité réelle permet, transparence plutôt qu'encouragement
+  aveugle. Déclaration des versements en langage naturel. Snapshots de
+  portefeuille via capture vision « visionne puis supprime » (dépend de la
+  validation `qwen2.5vl:7b`, `#90`). **RT-3** : strictement local. **Rappel
+  réglementaire** : Luca's n'est pas conseiller financier agréé — vérifier
+  auprès de la Banque de France la compatibilité de toute reprise
+  d'investissement avec la procédure de surendettement en cours AVANT
+  activation réelle.
+- **B-2 — Détecteur d'économies** (`#46`, déjà précisé le 08/08/2026 dans
+  cette même passe — voir `#46` pour le détail complet).
+- **B-3 — Cours de marché temps réel.** Récupération via le module Web
+  existant (flux gratuits Yahoo Finance). Alimente B-1 et le volet dataviz
+  (`#102` E-2). Contenu public = cloud autorisé ; croisement avec le
+  portefeuille perso = local.
+- **B-4 — Veille administrative.** Suivi des échéances récurrentes
+  (déclaration trimestrielle prime d'activité CAF, impôts, assurance,
+  contrôle technique). Rappels anticipés via les canaux `#98` A-1. Gratuit,
+  évite les pénalités de retard.
+
+**Rien n'est construit.** Catalogage uniquement.
+
+---
+
+## #100 — Groupe C : Gestion de la vie numérique (synthèse du 08/08/2026)
+
+- **C-1 — Module mail (lire, classer, ranger).** IMAP local (pas d'OAuth
+  cloud nécessaire pour Gmail/Outlook en lecture). Classement par LLM local,
+  actions sous liste blanche. **Garde-fou critique** : vecteur d'injection
+  classique (mail piégé) — jamais exécuter ce qu'un mail « demande »,
+  lecture automatique mais action confirmée. **Garde-fou OTP** : détecter et
+  exclure systématiquement les codes de vérification (2FA/OTP), jamais
+  résumés, loggés ni transmis — extension du mécanisme de détection existant
+  (patron IBAN/Unicode, `test_router.py`).
+- **C-2 — Recherche de logement.** Alertes sauvegardées sur les sites
+  (Leboncoin/SeLoger envoient des mails) → Luca's lit et filtre ces mails
+  selon les critères de Cyril (distance travail, loyer max, étage...). Pas
+  de scraping fragile — s'appuie sur C-1. Compare au loyer actuel (600€).
+- **C-3 — Suivi Amazon (commandes/livraisons).** Via parsing des mails Amazon
+  (confirmation, expédition, livraison), **pas** d'automatisation de
+  connexion au compte (casse en permanence, viole les CGU, risque de
+  blocage) — 95 % de la valeur, zéro risque. S'appuie sur C-1.
+- **C-4 — Wallet cartes de fidélité + rappel cartes bancaires.** Cartes de
+  **fidélité** : regroupées dans Luca's, aucun enjeu de sécurité, OK. Cartes
+  **bancaires** : **JAMAIS stockées dans Luca's** — contradiction avec la
+  Règle Absolue N°2 (`VISION_LONG_TERME.md`) + norme PCI-DSS hors de portée
+  d'un projet solo + Luca's serait la surface d'attaque la plus exposée.
+  Luca's peut rappeler quelle carte utiliser et ouvrir un gestionnaire dédié
+  (Bitwarden, wallet téléphone) au bon moment, sans jamais détenir de
+  numéro. **Non négociable.** Ajouté à `#7 Exclusions validées`.
+
+**Rien n'est construit.** Catalogage uniquement.
+
+---
+
+## #101 — Groupe D : Domotique & équipements (synthèse du 08/08/2026)
+
+- **D-1 — TV LG C65 OLED (webOS).** Contrôle local via API webOS
+  (`bscpylgtv`/`aiopylgtv`) : on/off, volume, entrée, lancement d'appli. Zéro
+  cloud LG. Se branche sur le mode AURA Entertainment et Cinema Club
+  (`#54`, déjà précisé le 08/08/2026 dans cette même passe).
+- **D-2 — YouTube à la demande** (PC/smartphone/TV). Lancer une recherche ou
+  une vidéo YouTube sur PC (OS Controller), TV (webOS, D-1), ou smartphone
+  (intent Android). Léger, faisable.
+- **D-3 — Hyundai Tucson (Bluelink).** Via `hyundai_kia_connect_api`
+  (communautaire, utilisée par Home Assistant) : niveau carburant, position,
+  verrouillage, climatisation à distance. Lecture libre, actions sous
+  confirmation. Identifiants Bluelink via `keyring`. Idée dérivée : suivi
+  d'entretien (kilométrage → alerte révision/vidange).
+- **D-4 — Parking à destination.** Via API de parkings structurés (données
+  ouvertes de certaines villes, parkings couverts). **Limite honnête à
+  écrire** : donne les places libres des parkings structurés, PAS de
+  disponibilité place-par-place en voirie (n'existe pas de façon
+  fiable/gratuite). Se déclenche sur trajet GPS établi.
+- **D-5 — Enceinte(s) connectée(s).** Marque à préciser par Cyril. Si Sonos :
+  API HTTP locale (sortie vocale multi-pièces). Si Amazon Echo : écosystème
+  fermé (déjà acté), sortie audio TTS simple possible selon modèle mais pas
+  de captation.
+- **D-6 — Webcam/micro PC (à venir).** Cyril prévoit d'ajouter webcam + micro
+  sur le PC. ⚠️ **Déjà traité, pas dupliqué ici** : la correction demandée à
+  `VISION_LONG_TERME.md` (contradiction avec « le PC n'a ni webcam ni micro —
+  contrainte matérielle confirmée et définitive ») était **déjà faite le
+  05/08/2026**, trois jours avant cette synthèse — voir la révision « le PC
+  gagne ses propres capteurs » dans `VISION_LONG_TERME.md` §2 Pilier 3, et
+  `#90`/`#69` (révisé) ici même. Le seul élément réellement nouveau de D-6 a
+  été versé dans `#90` : l'effet positif sur la limite de diffusion
+  WebSocket (`#79`) — assis au PC, l'avatar pourra entendre/répondre en
+  direct sans dépendre du téléphone. Activation toujours gatée par
+  `VISION_LONG_TERME.md` §4.1/§4.2 (pas d'écoute ambiante permanente
+  automatique).
+
+**Rien n'est construit.** Catalogage uniquement.
+
+---
+
+## #102 — Groupe E : Espace de travail Luca's (synthèse du 08/08/2026)
+
+- **E-1 — Espace de travail / poste de commandement.** Extension visuelle et
+  fonctionnelle de `cowork_workspace/` : tableau de bord affichant rapports
+  produits, demandes en attente de validation, analyses, tâches à
+  faire/faites, plannings, objectifs en cours + avancement. Lit les fichiers
+  de `cowork_workspace/` + les tables SQLite (mémoire, journal d'actions,
+  objectifs). Interface web classique, **zéro VRAM, zéro rendu 3D**.
+  Structure **modulaire et évolutive** (sections/fenêtres réorganisables),
+  mais évolutions **pilotées par Cyril** (proposition → validation), pas
+  d'auto-remodelage autonome de l'interface.
+- **E-2 — Volet dataviz professionnel.** Graphiques et analyses de qualité
+  pro (Chart.js/Plotly, rendu web léger, zéro VRAM) : portefeuille,
+  projections d'investissement (B-1), dépenses (B-2), cours de marché (B-3).
+  Esthétique **épurée = dense mais lisible**, à la manière d'un terminal
+  financier pro, pas d'un tableau de bord surchargé. Français partout, rien
+  de décoratif qui ne serve pas. **RT-3** : données financières strictement
+  locales, PWA authentifiée uniquement.
+- **E-3 — Zone d'exécution de code en sandbox.** Luca's peut écrire du code
+  (scripts, analyses, petits outils) et l'exécuter **dans la sandbox** (déjà
+  une règle `CLAUDE.md`). **Ligne rouge** : ce code reste **proposé**,
+  jamais auto-déployé dans Luca's elle-même — l'auto-modification du code de
+  Luca's suit le régime proposition → validation humaine → intégration via
+  Claude Code (`VISION_LONG_TERME.md` §4). « Luca's qui code pour aider dans
+  un bac à sable » = oui ; « Luca's qui se recode seule » = non.
+- **E-4 — Intégration d'outils au fil des besoins.** Modèle
+  connecteurs/skills : chaque capacité s'ajoute comme module branchable
+  quand le besoin est réel. Extensible sans retomber dans le multi-agents
+  (règle 12 `CLAUDE.md`) — outils appelés par Luca's, pas IA autonomes.
+  Chaque ajout soumis à `#97` RT-4.
+
+**Rien n'est construit.** Catalogage uniquement.
+
+---
+
+## #103 — Groupe F : Interface & présence (synthèse du 08/08/2026)
+
+- **F-1 — Refonte PWA « poste de commandement »** (sans graphe 3D). La PWA
+  existante devient l'interface façon vidéo JARVIS : cercle animé d'état
+  (Online/Listening/Thinking), badge modèle, barre de commande, cartes
+  contextuelles, transcription. HTML/CSS/animations légères, **zéro GPU**.
+  **Écarté** : le graphe 3D de bulles flottantes (lourd, incompatible avec
+  la priorité « VRAM au cerveau ») — reste au catalogue comme « option
+  lourde, plus tard ». Coexiste avec l'avatar fantôme minimal (présence
+  bureau) : la PWA = expérience complète, l'avatar = présence discrète.
+- **F-2 — TTS interchangeable (adaptateur).** Module TTS conçu avec une
+  interface interchangeable. Par défaut : local (Piper/edge_tts, qualité
+  correcte). Évolution possible vers un TTS cloud premium (type ElevenLabs,
+  voix « cinéma ») = ajout d'un fichier adaptateur, pas une refonte.
+  Décision de Cyril : rester local pour l'instant, avec porte ouverte sur le
+  cloud payant plus tard. Rien payé tant que non basculé (`#97` RT-5).
+
+**Rien n'est construit.** Catalogage uniquement.
+
+---
+
+## #104 — Groupe G : Mémoire & autonomie (synthèse du 08/08/2026)
+
+- **G-1 — Mémoire « éternelle » par compactage.** Pattern de consolidation
+  (comme le cerveau pendant le sommeil) : objectifs actifs en mémoire
+  prospective détaillée ; objectifs accomplis compactés en mémoire
+  sémantique (confirmation compacte + date + provenance), sans être
+  oubliés. Évite le gonflement de la mémoire jusqu'à l'inutilisable. À
+  intégrer au design du module mémoire (Brique 3 livrée le 08/08/2026 —
+  `memory/memory_manager.py::remember()`/`recall()`/`forget()` — extension
+  future, rien construit ici pour l'instant).
+- **G-2 — Brief du matin + journal du soir** (inspiré Aitne). Matin : résumé
+  d'une page (mails importants, tâches, nouveauté investissement). Soir :
+  journal Markdown de ce qui s'est passé, possédé entièrement en local.
+  Réutilise mémoire + World Model. Zéro coût.
+- **G-3 — Rapport hebdo d'usage PC.** Le World Model logue déjà fenêtre
+  active + processus. Résumé hebdomadaire (heures par type d'appli, pics
+  d'activité). Zéro nouvelle collecte, juste mise en forme de l'existant.
+- **G-4 — Veille Innovation** (généralisation de la veille modèles, règle 12
+  `CLAUDE.md`). Tâche planifiée régulière recherchant des nouveautés
+  (modèles, techniques, bibliothèques, patterns d'agents, fonctions
+  concurrentes). Compile un rapport dans `reports/` ou des candidats dans
+  `IDEAS.md`. Ne télécharge, n'installe, n'exécute **jamais** rien
+  d'elle-même — chaque nouveauté passe par Cyril avant adoption. Remplace
+  « l'accès internet illimité » par un flux de veille supervisé (même
+  bénéfice, plus sûr).
+
+**Rien n'est construit.** Catalogage uniquement.
+
+---
+
+## #105 — Groupe H : Sécurité + Règles Absolues de Cyril (synthèse du 08/08/2026)
+
+Le vrai chantier porteur, désigné comme tel dans le document source.
+
+- **H-1 — Cloisonnement des identifiants (credential isolation).** Isoler
+  secrets/clés API dans un processus séparé du moteur d'inférence LLM, pour
+  qu'une injection réussie ne puisse jamais les atteindre. Gratuit, renforce
+  Guardian.
+- **H-2 — Guardian / Privacy Shield** (prochain grand sujet). Plus Luca's a
+  d'outils (mails, comptes, fichiers, internet, domotique, voiture), plus le
+  bouclier conditionne l'élargissement de l'autonomie
+  (`VISION_LONG_TERME.md` §4.1, `CLAUDE.md` « Liberté conditionnée à la
+  protection »). Devient prioritaire. **Défense active uniquement** :
+  bloquer, isoler, journaliser, alerter, préparer un signalement aux
+  autorités. **JAMAIS de contre-attaque offensive** (illégal en France —
+  accès/entrave à un système tiers, pénal quel que soit le motif ; plus une
+  attribution presque toujours incertaine).
+
+### Règles Absolues de Cyril — versées dans `VISION_LONG_TERME.md`
+
+Les 5 règles ci-dessous ont été formalisées le 08/08/2026 et ajoutées comme
+nouvelle section datée dans `VISION_LONG_TERME.md` (près de §4.1, référencée
+par H-2 ci-dessus) :
+
+1. Toujours protéger l'humain.
+2. Toujours protéger les données numériques et personnelles de l'humain.
+3. La confiance et la protection mutuelle Cyril ↔ Luca's ne doit jamais être
+   altérée. Luca's protège Cyril, Cyril protège Luca's.
+4. Luca's se protège des attaques venant d'internet (**défense active**), et
+   Cyril lui donne les moyens de demander l'autorisation de chercher un
+   **bouclier** — jamais une contre-attaque offensive (illégale). Reformulation
+   actée dès cette synthèse, voir H-2.
+5. Cyril est le Maître de Luca's. Luca's est un Assistant Personnel Senior,
+   World Model, Semi-Autonome, Évolutif. *(NB architecte, conservé tel quel :
+   « AGI/ASI » non retenu dans la charte — un modèle local orchestré, si
+   capable soit-il, n'est ni l'un ni l'autre. Le titre ci-dessus est exact et
+   ambitieux ; les termes AGI/ASI seraient une fausse promesse.)*
+
+**Rien n'est construit.** Catalogage uniquement.
+
+---
+
+### Note de méthode (synthèse du 08/08/2026, préservée telle quelle)
+
+Aucun module `#97`–`#105` ne se construit sans : (1) un brief dédié, (2) une
+session supervisée quand il touche argent/fichiers/réseau/sécurité, (3) le
+respect de l'ordre naturel des dépendances. Le noyau v1 (4 briques, livré le
+08/08/2026) est la fondation ; tout le reste vient par couches stables,
+jamais d'un bloc. Le multi-agents (règle 12 `CLAUDE.md`) et la perception
+continue restent explicitement différés à des sessions dédiées.
