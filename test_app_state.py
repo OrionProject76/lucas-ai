@@ -66,7 +66,12 @@ def test_writing_twice_replaces_instead_of_duplicating(memory) -> None:
     memory.set_state("mode", "on")
     assert memory.get_state("mode") == "on"
     conn = sqlite3.connect(memory.db_path)
-    assert conn.execute("SELECT COUNT(*) FROM app_state").fetchone()[0] == 1
+    # Filtré sur la clé "mode", pas un COUNT(*) global : app_state porte
+    # aussi "schema_version" depuis la mémoire à 5 types (Brique 3,
+    # 08/08/2026), écrit une fois à chaque ouverture de MemoryManager.
+    assert conn.execute(
+        "SELECT COUNT(*) FROM app_state WHERE key = 'mode'"
+    ).fetchone()[0] == 1
     conn.close()
 
 

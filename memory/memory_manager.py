@@ -1,6 +1,7 @@
 # memory/memory_manager.py — sauvegarde et relit l'historique des conversations
 # + événements système significatifs (voir VISION_LONG_TERME.md, mémoire 3 niveaux)
 
+import shutil
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -8,6 +9,19 @@ from pathlib import Path
 from config import MAX_HISTORY_MESSAGES
 
 DB_PATH = Path(__file__).parent / "lucas_memory.db"
+
+# Bump à chaque migration de schéma qui doit déclencher une sauvegarde
+# automatique (_backup_if_migrating) — 1 = état avant la mémoire à 5
+# types (Brique 3, 08/08/2026).
+SCHEMA_VERSION = 2
+
+# Mémoire à 5 types (IDEAS.md #2) — distincte du transcript de chat
+# (`conversations`) : un fait retenu, pas un message. Listes en Python,
+# jamais un CHECK SQL — même style que router.py/automation_manager.py.
+MEMORY_TYPES = frozenset({
+    "episodic", "semantic", "procedural", "emotional", "prospective",
+})
+SOURCE_TYPES = frozenset({"conversation", "system_event", "os_controller", "manual"})
 
 
 def save_event_from_any_thread(event_type: str, details: str = "") -> bool:
@@ -26,10 +40,21 @@ def save_event_from_any_thread(event_type: str, details: str = "") -> bool:
 
     Retourne False plutôt que de propager : un événement perdu dégrade la
     trace, une exception dans un thread de fond fait tomber l'appelant.
+
+    ⚠️ `db_path=DB_PATH` explicite, jamais `MemoryManager()` bare. Trouvé
+    le 08/08/2026 (Brique 3, ROADMAP.md §5.68) : `db_path: Path = DB_PATH`
+    dans `__init__` est un défaut figé À LA DÉFINITION de la fonction
+    (même piège que celui déjà documenté dans `MemoryManager.__init__`,
+    ROADMAP.md §5.32) — un `monkeypatch.setattr(mm, "DB_PATH", ...)` dans
+    un test ne change QUE le nom de module, jamais ce défaut déjà lié.
+    `MemoryManager()` bare ignorait donc silencieusement toute isolation
+    de test et écrivait sur la VRAIE base à chaque appel. Référencer
+    `DB_PATH` ici, dans le corps de la fonction, relit la valeur du
+    module À CHAQUE APPEL — c'est ce qui rend le monkeypatch efficace.
     """
     memory = None
     try:
-        memory = MemoryManager()
+        memory = MemoryManager(db_path=DB_PATH)
         memory.save_event(event_type, details)
         return True
     except Exception:  # noqa: BLE001 — voir docstring
@@ -53,9 +78,47 @@ class MemoryManager:
         # fonction, donc réassigner DB_PATH après l'import ne change rien.
         # Voir ROADMAP.md §5.32.
         self.db_path = db_path
+        self._backup_if_migrating()
         self.conn = sqlite3.connect(db_path)
         self.cursor = self.conn.cursor()
         self._create_tables()
+        self.set_state("schema_version", str(SCHEMA_VERSION))
+
+    def _backup_if_migrating(self) -> None:
+        """
+        Copie physique de la base AVANT toute migration de schéma, si une
+        base existante n'est pas encore à la version courante — jamais
+        après. Idempotent : une base déjà à jour ne redéclenche rien au
+        démarrage suivant. Sonde sa propre connexion temporaire, avant
+        l'ouverture de self.conn, pour ne modifier aucun schéma tant que
+        la copie de secours n'existe pas.
+        """
+        if not self.db_path.exists():
+            return
+        current_version = 1
+        try:
+            probe = sqlite3.connect(self.db_path)
+            try:
+                probe_cursor = probe.cursor()
+                probe_cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='app_state'"
+                )
+                if probe_cursor.fetchone() is not None:
+                    probe_cursor.execute(
+                        "SELECT value FROM app_state WHERE key = 'schema_version'"
+                    )
+                    row = probe_cursor.fetchone()
+                    if row is not None:
+                        current_version = int(row[0])
+            finally:
+                probe.close()
+        except (sqlite3.Error, ValueError):
+            current_version = 1
+        if current_version >= SCHEMA_VERSION:
+            return
+        timestamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        backup_path = self.db_path.with_name(f"{self.db_path.name}.bak-{timestamp}")
+        shutil.copy2(self.db_path, backup_path)
 
     def _create_tables(self):
         # agent_id : hook multi-agents (IDEAS.md #38, toujours reporté v1.1+
@@ -147,6 +210,34 @@ class MemoryManager:
             self.cursor.execute(
                 f"UPDATE {table} SET last_validated = created_at WHERE last_validated IS NULL"
             )
+
+        # Mémoire à 5 types (IDEAS.md #2, Brique 3 — 08/08/2026) : table
+        # dédiée plutôt qu'une colonne memory_type sur conversations/
+        # system_events — un souvenir n'est pas un message de chat, et
+        # conversations a déjà 30+ appelants qui dépendent de sa forme
+        # actuelle. source_type/source_id remplacent un texte de
+        # provenance libre : la provenance doit rester vérifiable
+        # (retrouver la ligne source), pas juste descriptive.
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS memories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                memory_type TEXT NOT NULL,
+                content TEXT NOT NULL,
+                agent_id TEXT NOT NULL DEFAULT 'orion_main',
+                source_type TEXT NOT NULL DEFAULT 'manual',
+                source_id INTEGER,
+                confidence REAL NOT NULL DEFAULT 1.0,
+                importance REAL NOT NULL DEFAULT 0.5,
+                date TIMESTAMP,
+                last_validated TIMESTAMP,
+                expiration TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        self.cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_memories_type_expiration
+            ON memories(memory_type, expiration)
+        """)
 
         self.conn.commit()
 
@@ -351,6 +442,91 @@ class MemoryManager:
         )
         columns = ("action", "source", "result", "created_at")
         return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+
+    # ── Mémoire à 5 types (remember/recall/forget, IDEAS.md #2) ───────
+    #
+    # Distincte de save_message()/save_event() : ceux-ci tracent CE QUI
+    # S'EST DIT ou CE QUI S'EST PASSÉ (transcript, journal), remember()
+    # trace UN FAIT retenu, réutilisable par le chat et par
+    # core/os_controller.py ("Cyril range ses factures dans D:\Factures").
+    # Utilisée par le chat ET l'OS Controller à travers le même
+    # MemoryManager — pas de mécanisme parallèle.
+
+    def remember(
+        self,
+        memory_type: str,
+        content: str,
+        *,
+        source_type: str = "manual",
+        source_id: int | None = None,
+        confidence: float = 1.0,
+        importance: float = 0.5,
+        expiration: str | None = None,
+    ) -> int:
+        """Enregistre un souvenir typé. Retourne son id. Lève ValueError sur un type inconnu."""
+        if memory_type not in MEMORY_TYPES:
+            raise ValueError(
+                f"Type de mémoire inconnu : {memory_type!r} (attendu : {sorted(MEMORY_TYPES)})"
+            )
+        if source_type not in SOURCE_TYPES:
+            raise ValueError(
+                f"Type de provenance inconnu : {source_type!r} (attendu : {sorted(SOURCE_TYPES)})"
+            )
+        self.cursor.execute(
+            """
+            INSERT INTO memories
+                (memory_type, content, source_type, source_id, confidence,
+                 importance, date, last_validated, expiration)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
+            """,
+            (memory_type, content, source_type, source_id, confidence, importance, expiration),
+        )
+        self.conn.commit()
+        assert self.cursor.lastrowid is not None  # garanti juste après un INSERT réussi
+        return self.cursor.lastrowid
+
+    def recall(
+        self,
+        memory_type: str | None = None,
+        *,
+        limit: int = 10,
+        min_confidence: float = 0.0,
+        include_expired: bool = False,
+    ) -> list[dict]:
+        """Relit des souvenirs, du plus récent au plus ancien. memory_type=None -> tous les types."""
+        # Clauses fixes, jamais construites depuis une entrée utilisateur —
+        # même raisonnement que _migrate_add_column ci-dessus.
+        clauses = ["confidence >= ?"]
+        params: list = [min_confidence]
+        if memory_type is not None:
+            clauses.append("memory_type = ?")
+            params.append(memory_type)
+        if not include_expired:
+            clauses.append("(expiration IS NULL OR expiration > CURRENT_TIMESTAMP)")
+        where = " AND ".join(clauses)
+        params.append(limit)
+        self.cursor.execute(
+            f"""
+            SELECT id, memory_type, content, source_type, source_id,
+                   confidence, importance, date, last_validated, expiration, created_at
+            FROM memories
+            WHERE {where}
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            params,
+        )
+        columns = (
+            "id", "memory_type", "content", "source_type", "source_id",
+            "confidence", "importance", "date", "last_validated", "expiration", "created_at",
+        )
+        return [dict(zip(columns, row)) for row in self.cursor.fetchall()]
+
+    def forget(self, memory_id: int) -> bool:
+        """Supprime définitivement un souvenir. True si une ligne existait."""
+        self.cursor.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+        self.conn.commit()
+        return self.cursor.rowcount > 0
 
     # ── État persistant léger (clé/valeur) ────────────────────────────
     #

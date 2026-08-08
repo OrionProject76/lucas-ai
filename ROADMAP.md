@@ -7503,6 +7503,140 @@ de Cyril sur le design complet de l'escalade, une fois celui-ci défini.
 ni un changement de `config.MODEL_NAME` — `gpt-oss:20b` reste le modèle
 de production tel quel jusqu'à ce que la Phase 1 soit conçue et validée.
 
+## 5.68 Noyau minimal — Brique 3 : mémoire à 5 types (`remember`/`recall`/`forget`), 08/08/2026
+
+Première des 4 briques d'un brief de session complet (Cyril, 08/08/2026) :
+routeur hybride local/cloud, OS Controller, mémoire enrichie, avatar à
+7 états — ordre demandé Brique 3 → 2 → 1 → 4, plan détaillé validé par
+Cyril après exploration du code réel (pas du code supposé) et 4 points
+de clarification tranchés explicitement (clé cloud via `keyring`,
+confirmation Qt threadsafe, table mémoire dédiée avec provenance
+vérifiable, 7 états d'avatar).
+
+**Décision d'architecture** : nouvelle table `memories`, **pas** une
+colonne `memory_type` sur `conversations`/`system_events`. Ces deux
+tables sont le transcript brut du chat (30+ appelants, forme figée par
+toute la suite de tests) — un souvenir ("Cyril range ses factures dans
+D:\Factures") n'est pas un message. `source_type`/`source_id`
+remplacent un champ provenance en texte libre : la provenance doit
+rester vérifiable (retrouver la ligne source), jamais descriptive.
+
+`memory/memory_manager.py` : table `memories` (`memory_type`, `content`,
+`source_type`/`source_id`, confiance/importance/date/last_validated/
+expiration — mêmes colonnes que le socle #2bis du 04/08), index
+composite `(memory_type, expiration)`. `MEMORY_TYPES` (episodic/
+semantic/procedural/emotional/prospective) et `SOURCE_TYPES` en Python,
+jamais un `CHECK` SQL — même style que `router.py`/`automation_manager.py`.
+
+API ajoutée à `MemoryManager` (même fichier/classe, pas de module
+séparé — cohérent avec le reste du fichier, qui n'a jamais scindé par
+table) : `remember(memory_type, content, *, source_type, source_id,
+confidence, importance, expiration) -> int`, `recall(memory_type=None,
+*, limit, min_confidence, include_expired) -> list[dict]`,
+`forget(memory_id) -> bool`.
+
+**Backup avant migration — nouveau mécanisme, aucun n'existait avant
+ce soir.** `SCHEMA_VERSION` en constante de module, comparée à
+`app_state["schema_version"]` à l'instanciation. Base existante en
+retard → copie physique (`shutil.copy2`) vers
+`lucas_memory.db.bak-<horodatage>` **avant** toute migration,
+idempotent (ne se redéclenche pas au démarrage suivant). Testé contre
+une vraie base à l'ancien schéma (`memories` absente), pas supposé.
+
+**Régression trouvée en lançant la suite complète, pas seulement les
+nouveaux tests** : `test_app_state.py::test_writing_twice_replaces_...`
+comptait `SELECT COUNT(*) FROM app_state` en attendant 1 — supposait
+implicitement qu'aucune autre clé que celle du test n'existait jamais
+dans `app_state`. Le nouvel écrit systématique de `schema_version` à
+chaque ouverture casse cette hypothèse. Corrigé en filtrant sur
+`WHERE key = 'mode'` : le test vérifie la clause `ON CONFLICT` pour
+cette clé précise, pas le contenu total de la table — l'intention
+réelle du test, pas la formulation la plus étroite possible.
+
+**Suite complète rejouée après le correctif : 1467 passed, 0 failed**
+(29 tests dédiés dans `test_memory_manager.py`, dont round-trip
+fermeture/réouverture avec métadonnées complètes — couvre V6).
+`ruff check` propre, `mypy` propre (un `int | None` sur
+`cursor.lastrowid` après `INSERT`, corrigé par une assertion explicite
+plutôt qu'un `# type: ignore`).
+
+**Ce qui n'est pas fait dans cette étape** : aucune intégration
+automatique de `remember()`/`recall()` dans `core/lucas_core.py` — le
+brief ne spécifie aucun déclencheur précis, l'API est prête et testée
+mais pas branchée sur un comportement implicite non demandé.
+
+### 🔴 Incident réel découvert en cours de route — la vraie base de Cyril recevait des écritures de test
+
+En lançant la suite complète (pas seulement les nouveaux tests), un
+fichier `memory/lucas_memory.db.bak-20260808-153905` est apparu à côté
+de la vraie base — preuve que le nouveau mécanisme de backup
+(`_backup_if_migrating`) s'était déclenché sur `memory/lucas_memory.db`
+elle-même, pas sur une base de test.
+
+**Écarté d'abord, à tort** : le serveur live (`uvicorn api.server:app`,
+PID 35480, démarré la veille 07/08 15:18) a été soupçonné en premier —
+mais un process Python déjà démarré a son code figé en mémoire ; sans
+`--reload` (confirmé absent de sa ligne de commande), il ne pouvait pas
+exécuter le code écrit aujourd'hui. Vérifié avant de conclure, pas
+supposé.
+
+**Cause réelle, en deux couches** :
+
+1. **Trois fichiers de tests UI construisaient un vrai `MainWindow()`
+   sans isoler `LucasCore`** — `test_main_window_paths.py` (créé le
+   06/08/2026, 14 tests via la fixture `window` + 1 test isolé), et deux
+   tests pré-existants dans `test_avatar.py` et `test_ui_workers.py`.
+   Exactement le piège déjà documenté et corrigé UNE FOIS dans
+   `test_ui_workers.py::app_window` le 04/08/2026 — retombé dedans trois
+   fois de plus, faute d'avoir repris ce patron partout. Resté invisible
+   jusqu'ici parce qu'ouvrir une `MemoryManager()` sur un schéma déjà à
+   jour était un no-op silencieux ; le nouveau mécanisme de backup de
+   cette brique a rendu le problème visible pour la première fois.
+
+2. **Plus profond : `save_event_from_any_thread()` ignorait tout
+   monkeypatch de `DB_PATH`.** `MemoryManager.__init__(self, db_path:
+   Path = DB_PATH)` fige ce défaut À LA DÉFINITION de la fonction (même
+   piège que celui déjà documenté au 05/08/2026, §5.32, pour l'incident
+   des ~56 messages perdus) — `MemoryManager()` appelé nu, comme le
+   faisait cette fonction, ignore donc silencieusement tout
+   `monkeypatch.setattr(module, "DB_PATH", ...)` fait par un test. Le
+   TTSWorker de `ui/main_window.py` reçoit cette fonction en callback :
+   chaque lecture vocale déclenchée par un test écrivait donc un vrai
+   événement (`event_type="test"`, trouvé en base par empreinte de forme,
+   pas en affichant le contenu réel) sur la vraie base, quelle que soit
+   l'isolation posée côté `MainWindow`/`LucasCore`. Ce test existait déjà
+   avant cette session (`test_thread_safe_logger_reports_a_close_failure
+   _but_still_returns_true`) et écrivait sur la vraie base depuis sa
+   création, sans que son propre monkeypatch ne le protège jamais
+   réellement.
+
+**Corrigé** : `save_event_from_any_thread()` passe désormais
+`db_path=DB_PATH` explicitement (lu dans le CORPS de la fonction, donc à
+chaque appel — pas comme défaut de paramètre figé une fois pour toutes).
+Les 6 sites de construction UI non isolés isolent maintenant `LucasCore`
+**et** `memory_manager.DB_PATH` ensemble — l'un sans l'autre ne suffit
+pas, les deux couches devaient être fermées.
+
+**Vérifié par comptage de lignes avant/après (jamais par contenu)** :
+suite complète rejouée deux fois de suite après le correctif,
+`system_events` stable à 632 les deux fois (aucune écriture résiduelle) ;
+`conversations`, `action_log`, `app_state`, `memories` inchangés tout du
+long. Aucune perte de données constatée sur la vraie base.
+
+**Serveur live arrêté** (`taskkill /F /T /PID 31972`, à la demande
+explicite de Cyril) pour la suite de la session — pas la cause réelle de
+l'incident, mais Cyril a préféré ne pas le laisser tourner pendant que
+Briques 2/1 touchent des chemins plus sensibles (actions système,
+routage cloud). À relancer manuellement (`venv\Scripts\python.exe -m
+uvicorn api.server:app --host 0.0.0.0 --port 8000 --ssl-certfile
+data/cert.pem --ssl-keyfile data/key.pem`) quand Cyril le souhaite — pas
+relancé automatiquement, même principe que pour Lucas3D.exe.
+
+`.gitignore` : `*.db.bak-*` ajouté, pour qu'une sauvegarde automatique
+future ne finisse jamais versionnée par erreur.
+
+Prochaine étape : Brique 2 (OS Controller).
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

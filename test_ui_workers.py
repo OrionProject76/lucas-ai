@@ -107,7 +107,7 @@ def test_vision_status_message_is_used_for_screen_questions() -> None:
     assert "regarde ton écran" in source
 
 
-def test_status_variants_keep_the_base_style() -> None:
+def test_status_variants_keep_the_base_style(monkeypatch, tmp_path) -> None:
     """
     Le style passait par objectName = « status status_connecting », qui ne
     correspond à AUCUNE règle : Qt ne connaît pas les listes de classes
@@ -116,7 +116,25 @@ def test_status_variants_keep_the_base_style() -> None:
     """
     from PySide6.QtWidgets import QApplication
 
+    from core.lucas_core import LucasCore
+    from memory import memory_manager as mm
+    from memory.memory_manager import MemoryManager
+    from ui import main_window
     from ui.main_window import MainWindow
+
+    # ⚠️ Même isolation que app_window ci-dessous — sans elle, MainWindow()
+    # construit un vrai LucasCore() sur le VRAI memory/lucas_memory.db de
+    # Cyril (trouvé le 08/08/2026, voir la docstring de app_window et
+    # ROADMAP.md §5.68). DB_PATH est isolé en plus de LucasCore : la
+    # fonction libre save_event_from_any_thread (TTSWorker) l'utilise
+    # directement, indépendamment de self.memory.
+    monkeypatch.setattr(mm, "DB_PATH", tmp_path / "test_memory.db")
+
+    class _IsolatedLucasCore(LucasCore):
+        def __init__(self):
+            self.memory = MemoryManager(db_path=tmp_path / "test_memory.db")
+
+    monkeypatch.setattr(main_window, "LucasCore", _IsolatedLucasCore)
 
     app = QApplication.instance() or QApplication([])
     window = MainWindow()
@@ -248,8 +266,18 @@ def app_window(monkeypatch, tmp_path):
     from PySide6.QtWidgets import QApplication
 
     from core.lucas_core import LucasCore
+    from memory import memory_manager as mm
     from memory.memory_manager import MemoryManager
     from ui import main_window
+
+    # ⚠️ Isoler LucasCore ne suffit pas : `_speak()` (ui/main_window.py)
+    # passe la fonction libre `save_event_from_any_thread` au TTSWorker,
+    # qui ouvre sa PROPRE connexion sur le DB_PATH par défaut du module —
+    # elle ignore `self.memory`. Trouvé le 08/08/2026 en isolant ce
+    # fichier pour la Brique 3 (ROADMAP.md §5.68) : la base réelle
+    # continuait de recevoir des system_events malgré l'isolation de
+    # LucasCore ci-dessous.
+    monkeypatch.setattr(mm, "DB_PATH", tmp_path / "test_memory.db")
 
     class _IsolatedLucasCore(LucasCore):
         def __init__(self):

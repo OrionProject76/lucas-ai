@@ -45,6 +45,7 @@ export_presets.cfg
 # Les bases SQLite contiennent les conversations et événements de Cyril :
 # le code du module est versionné, jamais son contenu.
 *.db
+*.db.bak-*
 *.sqlite3
 data/chromadb/
 modules/data/

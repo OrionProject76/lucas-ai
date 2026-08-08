@@ -283,5 +283,167 @@ def test_load_recent_actions_is_empty_on_a_fresh_database(memory) -> None:
     assert memory.load_recent_actions() == []
 
 
+# ── Mémoire à 5 types (remember/recall/forget, IDEAS.md #2, Brique 3) ───
+#
+# Distincte de save_message()/save_event() : ceux-ci tracent le transcript
+# de chat / le journal système, remember() trace un FAIT retenu,
+# réutilisable par le chat ET core/os_controller.py.
+
+def test_remember_recall_round_trip_persists_metadata(tmp_path) -> None:
+    """
+    Couvre le critère V6 du brief : fermer/rouvrir sur le même fichier ne
+    doit rien perdre, ni le contenu ni les métadonnées de confiance/
+    provenance.
+    """
+    db_path = tmp_path / "memories.db"
+    first = MemoryManager(db_path=db_path)
+    try:
+        memory_id = first.remember(
+            "semantic",
+            "Cyril range ses factures dans D:\\Factures",
+            source_type="manual",
+            confidence=0.9,
+            importance=0.7,
+        )
+    finally:
+        first.close()
+
+    second = MemoryManager(db_path=db_path)
+    try:
+        souvenirs = second.recall("semantic")
+        assert len(souvenirs) == 1
+        souvenir = souvenirs[0]
+        assert souvenir["id"] == memory_id
+        assert souvenir["content"] == "Cyril range ses factures dans D:\\Factures"
+        assert souvenir["source_type"] == "manual"
+        assert souvenir["confidence"] == 0.9
+        assert souvenir["importance"] == 0.7
+        assert souvenir["date"] is not None
+        assert souvenir["last_validated"] is not None
+    finally:
+        second.close()
+
+
+def test_forget_removes_the_memory(memory) -> None:
+    memory_id = memory.remember("procedural", "toujours confirmer avant de fermer Chrome")
+
+    removed = memory.forget(memory_id)
+
+    assert removed is True
+    assert memory.recall("procedural") == []
+
+
+def test_forget_returns_false_for_an_unknown_id(memory) -> None:
+    assert memory.forget(9999) is False
+
+
+def test_recall_filters_by_memory_type(memory) -> None:
+    memory.remember("episodic", "a")
+    memory.remember("semantic", "b")
+
+    assert [m["content"] for m in memory.recall("semantic")] == ["b"]
+    assert len(memory.recall()) == 2  # memory_type=None -> tous les types
+
+
+def test_recall_respects_min_confidence(memory) -> None:
+    memory.remember("semantic", "peu fiable", confidence=0.2)
+    memory.remember("semantic", "fiable", confidence=0.9)
+
+    souvenirs = memory.recall("semantic", min_confidence=0.5)
+
+    assert [m["content"] for m in souvenirs] == ["fiable"]
+
+
+def test_recall_excludes_expired_by_default(memory) -> None:
+    memory.remember("prospective", "expiré", expiration="2020-01-01T00:00:00")
+    memory.remember("prospective", "toujours valide", expiration="2099-01-01T00:00:00")
+
+    assert [m["content"] for m in memory.recall("prospective")] == ["toujours valide"]
+    assert len(memory.recall("prospective", include_expired=True)) == 2
+
+
+def test_recall_returns_most_recent_first_and_respects_limit(memory) -> None:
+    for i in range(3):
+        memory.remember("semantic", f"fait {i}")
+
+    souvenirs = memory.recall("semantic", limit=2)
+
+    assert [m["content"] for m in souvenirs] == ["fait 2", "fait 1"]
+
+
+def test_invalid_memory_type_is_rejected(memory) -> None:
+    with pytest.raises(ValueError):
+        memory.remember("inconnu", "contenu")
+
+
+def test_invalid_source_type_is_rejected(memory) -> None:
+    with pytest.raises(ValueError):
+        memory.remember("episodic", "contenu", source_type="inconnu")
+
+
+def test_source_id_is_nullable_for_manual_entries(memory) -> None:
+    memory.remember("emotional", "contenu", source_type="manual")
+
+    assert memory.recall("emotional")[0]["source_id"] is None
+
+
+def test_source_id_can_reference_a_conversation(memory) -> None:
+    """
+    La provenance doit rester vérifiable (retrouver la ligne source), pas
+    une chaîne descriptive libre — précision explicite de Cyril avant ce
+    plan.
+    """
+    memory.remember(
+        "episodic", "Cyril a demandé d'ouvrir Chrome",
+        source_type="conversation", source_id=42,
+    )
+
+    assert memory.recall("episodic")[0]["source_id"] == 42
+
+
+# ── Sauvegarde avant migration de schéma (SCHEMA_VERSION) ───────────────
+
+def test_migration_backs_up_existing_db_and_is_additive(tmp_path) -> None:
+    """
+    Une base créée avant la mémoire à 5 types n'a pas de `memories` ni de
+    `schema_version` à jour dans app_state — l'ouverture doit sauvegarder
+    le fichier avant de migrer, et laisser conversations/system_events
+    intactes.
+    """
+    db_path = tmp_path / "pre_memories.db"
+    old = MemoryManager(db_path=db_path)
+    old.save_message("user", "avant la brique memoire")
+    # Redescend artificiellement à la version 1 : simule une base créée
+    # avant l'introduction de schema_version elle-même.
+    old.cursor.execute("DELETE FROM app_state WHERE key = 'schema_version'")
+    old.cursor.execute("DROP TABLE memories")
+    old.conn.commit()
+    old.close()
+
+    reopened = MemoryManager(db_path=db_path)
+    try:
+        backups = list(tmp_path.glob("pre_memories.db.bak-*"))
+        assert len(backups) == 1
+        assert reopened.load_history() == [("user", "avant la brique memoire")]
+        tables = {
+            row[0]
+            for row in reopened.cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        assert "memories" in tables
+    finally:
+        reopened.close()
+
+
+def test_migration_backup_is_a_no_op_on_an_already_migrated_database(tmp_path) -> None:
+    db_path = tmp_path / "already_at_v2.db"
+    MemoryManager(db_path=db_path).close()
+
+    MemoryManager(db_path=db_path).close()
+
+    assert list(tmp_path.glob("already_at_v2.db.bak-*")) == []
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

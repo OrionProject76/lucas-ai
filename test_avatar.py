@@ -77,12 +77,31 @@ def test_listening_is_triggered_by_typing() -> None:
     assert '"LISTENING"' in source
 
 
-def test_clearing_the_input_returns_to_idle(app) -> None:
+def test_clearing_the_input_returns_to_idle(app, monkeypatch, tmp_path) -> None:
     """
     Effacer sa saisie laissait l'avatar en LISTENING indéfiniment, y
     compris après avoir renoncé à écrire.
     """
+    from core.lucas_core import LucasCore
+    from memory import memory_manager as mm
+    from memory.memory_manager import MemoryManager
+    from ui import main_window
     from ui.main_window import MainWindow
+
+    # ⚠️ Sans ceci, MainWindow() construit un vrai LucasCore() ->
+    # MemoryManager() sur le VRAI memory/lucas_memory.db de Cyril — même
+    # piège que celui documenté dans test_ui_workers.py::app_window
+    # (04/08/2026) et retombé dedans ici, trouvé le 08/08/2026 en
+    # construisant la mémoire à 5 types (ROADMAP.md §5.68). DB_PATH est
+    # isolé en plus de LucasCore : save_event_from_any_thread (TTSWorker)
+    # l'utilise directement, indépendamment de self.memory.
+    monkeypatch.setattr(mm, "DB_PATH", tmp_path / "test_memory.db")
+
+    class _IsolatedLucasCore(LucasCore):
+        def __init__(self):
+            self.memory = MemoryManager(db_path=tmp_path / "test_memory.db")
+
+    monkeypatch.setattr(main_window, "LucasCore", _IsolatedLucasCore)
 
     window = MainWindow()
     # `avatar` est Optional depuis le 06/08/2026 (l'import d'AvatarWidget
@@ -97,12 +116,26 @@ def test_clearing_the_input_returns_to_idle(app) -> None:
     window.close()
 
 
-def test_typing_does_not_disturb_a_running_generation(app, monkeypatch) -> None:
+def test_typing_does_not_disturb_a_running_generation(app, monkeypatch, tmp_path) -> None:
     """
     Effacer son texte pendant que Luca's réfléchit la ferait paraître au
     repos alors qu'elle travaille.
     """
+    from core.lucas_core import LucasCore
+    from memory import memory_manager as mm
+    from memory.memory_manager import MemoryManager
+    from ui import main_window
     from ui.main_window import MainWindow
+
+    # ⚠️ Même isolation que test_clearing_the_input_returns_to_idle
+    # ci-dessus — voir sa docstring pour le contexte complet.
+    monkeypatch.setattr(mm, "DB_PATH", tmp_path / "test_memory.db")
+
+    class _IsolatedLucasCore(LucasCore):
+        def __init__(self):
+            self.memory = MemoryManager(db_path=tmp_path / "test_memory.db")
+
+    monkeypatch.setattr(main_window, "LucasCore", _IsolatedLucasCore)
 
     window = MainWindow()
     window._set_avatar_state(THINKING)

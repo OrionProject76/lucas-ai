@@ -38,8 +38,34 @@ def app():
 
 
 @pytest.fixture
-def window(app):
+def window(app, monkeypatch, tmp_path):
+    from core.lucas_core import LucasCore
+    from memory import memory_manager as mm
+    from memory.memory_manager import MemoryManager
+    from ui import main_window
     from ui.main_window import MainWindow
+
+    # ⚠️ Sans ceci, MainWindow() construit un vrai LucasCore() ->
+    # MemoryManager() sur le VRAI memory/lucas_memory.db de Cyril — exact
+    # même piège que celui déjà documenté et corrigé dans
+    # test_ui_workers.py::app_window (04/08/2026), retombé dedans ici
+    # faute d'avoir repris ce patron en écrivant ce fichier le 06/08/2026.
+    # Trouvé le 08/08/2026 en construisant la mémoire à 5 types (Brique 3,
+    # ROADMAP.md §5.68) : la migration additive de MemoryManager.__init__
+    # a rendu visible, pour la première fois, que ces 14 tests écrivaient
+    # réellement sur la base de Cyril à chaque lancement de la suite.
+    #
+    # ⚠️ Isoler LucasCore ne suffit pas à lui seul : `_speak()` passe la
+    # fonction libre `save_event_from_any_thread` au TTSWorker, qui ouvre
+    # sa PROPRE connexion sur le DB_PATH par défaut du module — indépendante
+    # de self.memory. Les deux isolations sont nécessaires ensemble.
+    monkeypatch.setattr(mm, "DB_PATH", tmp_path / "test_memory.db")
+
+    class _IsolatedLucasCore(LucasCore):
+        def __init__(self):
+            self.memory = MemoryManager(db_path=tmp_path / "test_memory.db")
+
+    monkeypatch.setattr(main_window, "LucasCore", _IsolatedLucasCore)
 
     fenetre = MainWindow()
     # ⚠️ `show()` + un tour de boucle, sinon `isVisible()` MENT.
@@ -213,11 +239,23 @@ def test_a_missing_voice_module_leaves_a_readable_message(app) -> None:
 
 # ── Fenêtre construite sans avatar ────────────────────────────────────
 
-def test_the_window_builds_without_an_avatar(app, monkeypatch) -> None:
+def test_the_window_builds_without_an_avatar(app, monkeypatch, tmp_path) -> None:
     """Le placeholder remplace l'avatar, la fenêtre reste utilisable."""
+    from core.lucas_core import LucasCore
+    from memory import memory_manager as mm
+    from memory.memory_manager import MemoryManager
     from ui import main_window as mw
 
+    # Voir la docstring de la fixture `window` ci-dessus pour le contexte
+    # complet des deux isolations nécessaires (LucasCore + DB_PATH).
+    monkeypatch.setattr(mm, "DB_PATH", tmp_path / "test_memory.db")
+
+    class _IsolatedLucasCore(LucasCore):
+        def __init__(self):
+            self.memory = MemoryManager(db_path=tmp_path / "test_memory.db")
+
     monkeypatch.setattr(mw, "HAS_AVATAR", False)
+    monkeypatch.setattr(mw, "LucasCore", _IsolatedLucasCore)
     fenetre = mw.MainWindow()
     try:
         assert fenetre.avatar is None
