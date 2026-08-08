@@ -5,12 +5,32 @@
 
 :root {
     --bg: #00050a;
-    --panel-bg: rgba(0, 20, 30, 0.55);
+    /* Alpha abaissée (0.55 -> 0.45) pour la passe glassmorphism du
+       08/08/2026 : plus transparent + backdrop-filter (voir plus bas) =
+       effet verre réel, pas juste un fond sombre uni. Contraste texte/fond
+       vérifié (pas supposé) avant ce changement : 18.4:1 avant, 18.6:1
+       après (WCAG AA exige 4.5:1) — voir ROADMAP.md §5.75 pour le calcul
+       complet (formule de luminance relative + résultats). Rendre le fond
+       plus transparent sur un fond quasi noir AUGMENTE le contraste avec
+       le texte clair, ne le baisse jamais sur cette palette. */
+    --panel-bg: rgba(0, 20, 30, 0.45);
     --border-cyan: rgba(0, 212, 255, 0.65);
+    /* Cyan néon — PAS une nouvelle couleur de marque : rgb(0,212,255) est
+       exactement la couleur des yeux de l'avatar à l'état idle
+       (avatar.js, HALO_PALETTES.idle, premier stop du dégradé). Réutilisée
+       et intensifiée via box-shadow, jamais réinventée. */
+    --neon-cyan: #00d4ff;
+    --glow-cyan: 0 0 4px rgba(0, 212, 255, 0.35), 0 0 12px rgba(0, 212, 255, 0.2);
+    --glow-cyan-strong: 0 0 8px rgba(0, 212, 255, 0.75), 0 0 20px rgba(0, 212, 255, 0.45);
+    --glass-blur: blur(14px);
     --text: #e8fbff;
     --text-dim: #6fa8b8;
-    --bubble-user: rgba(0, 40, 55, 0.9);
-    --bubble-lucas: rgba(0, 60, 75, 0.55);
+    /* Bulles : alpha abaissée pour le même effet verre (0.9 -> 0.55 /
+       0.55 -> 0.35). Même vérification de contraste que --panel-bg
+       ci-dessus : 15.1:1 -> 17.0:1 (bulle Cyril), 15.3:1 -> 17.0:1 (bulle
+       Luca's) — le contraste augmente, ne baisse jamais. */
+    --bubble-user: rgba(0, 40, 55, 0.55);
+    --bubble-lucas: rgba(0, 60, 75, 0.35);
     --error: #ff5566;
 }
 
@@ -76,20 +96,30 @@ html, body {
     font-size: 0.95rem;
     white-space: pre-wrap;
     word-break: break-word;
+    /* Glassmorphism (08/08/2026) : le texte lui-même n'a ni transparence
+       ni text-shadow — seul le fond de la bulle est flouté/translucide.
+       Le contraste texte/fond n'est donc jamais dégradé par le glow. */
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
 }
 
 .bubble.user {
     align-self: flex-end;
     background: var(--bubble-user);
-    border: 1px solid var(--border-cyan);
+    border: 1px solid var(--neon-cyan);
     border-bottom-right-radius: 3px;
+    box-shadow: var(--glow-cyan);
 }
 
 .bubble.lucas {
     align-self: flex-start;
     background: var(--bubble-lucas);
-    border: 1px solid rgba(0, 212, 255, 0.25);
+    /* Bordure/glow volontairement plus discrets que .bubble.user — même
+       hiérarchie visuelle qu'avant (0.25 -> 0.35, léger renfort néon sans
+       égaler la bulle de Cyril), pas un glow appuyé identique partout. */
+    border: 1px solid rgba(0, 212, 255, 0.35);
     border-bottom-left-radius: 3px;
+    box-shadow: 0 0 4px rgba(0, 212, 255, 0.18);
 }
 
 .bubble.error {
@@ -109,6 +139,8 @@ html, body {
     gap: 8px;
     padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
     background: var(--panel-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
     border-top: 1px solid var(--border-cyan);
 }
 
@@ -121,10 +153,15 @@ html, body {
     color: var(--text);
     font-size: 1rem;
     outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+/* Focus clavier ET souris volontairement traités pareil ici : un champ de
+   saisie doit montrer son focus dans tous les cas, contrairement aux
+   icônes ci-dessous où seul le clavier importe (voir :focus-visible). */
 #text-input:focus {
-    border-color: var(--border-cyan);
+    border-color: var(--neon-cyan);
+    box-shadow: var(--glow-cyan-strong);
 }
 
 button.icon-btn,
@@ -135,6 +172,13 @@ a.icon-btn {
     border-radius: 50%;
     border: 1px solid var(--border-cyan);
     background: rgba(0, 212, 255, 0.08);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    /* Glow neon au repos, volontairement discret (--glow-cyan) — se
+       renforce sur interaction (:hover/:active) et se distingue nettement
+       au focus clavier (:focus-visible ci-dessous). Jamais assez fort au
+       repos pour gêner la lecture de l'émoji/icône. */
+    box-shadow: var(--glow-cyan);
     color: var(--text);
     font-size: 1.2rem;
     display: flex;
@@ -142,11 +186,25 @@ a.icon-btn {
     justify-content: center;
     cursor: pointer;
     text-decoration: none;
+    transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
+button.icon-btn:hover,
+a.icon-btn:hover,
 button.icon-btn:active,
 a.icon-btn:active {
     background: rgba(0, 212, 255, 0.25);
+    box-shadow: var(--glow-cyan-strong);
+}
+
+/* Focus clavier (Tab), distinct du survol/clic souris — outline en plus
+   du box-shadow : l'outline reste visible même en mode contraste élevé
+   du système, où box-shadow seul seraient ignoré. */
+button.icon-btn:focus-visible,
+a.icon-btn:focus-visible {
+    outline: 2px solid var(--neon-cyan);
+    outline-offset: 2px;
+    box-shadow: var(--glow-cyan-strong);
 }
 
 /* ── Lien Workspace (IDEAS.md #102, E-1) ───────────────────────────── */
@@ -217,7 +275,7 @@ a.icon-btn:active {
     z-index: 25;
     max-width: 78vw;
     background: var(--panel-bg);
-    backdrop-filter: blur(6px);
+    backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-cyan);
     border-radius: 12px;
     padding: 10px 14px;
@@ -284,7 +342,7 @@ a.icon-btn:active {
     display: flex;
     flex-direction: column;
     background: var(--panel-bg);
-    backdrop-filter: blur(6px);
+    backdrop-filter: var(--glass-blur);
     border-top: 1px solid var(--border-cyan);
     border-radius: 16px 16px 0 0;
     transform: translateY(100%);
@@ -369,7 +427,7 @@ a.icon-btn:active {
     display: flex;
     flex-direction: column;
     background: var(--panel-bg);
-    backdrop-filter: blur(6px);
+    backdrop-filter: var(--glass-blur);
     border-top: 1px solid var(--border-cyan);
     border-radius: 16px 16px 0 0;
     transform: translateY(100%);
@@ -478,7 +536,7 @@ button.document-name:active {
     display: flex;
     flex-direction: column;
     background: var(--panel-bg);
-    backdrop-filter: blur(6px);
+    backdrop-filter: var(--glass-blur);
     border-top: 1px solid var(--border-cyan);
     border-radius: 16px 16px 0 0;
     transform: translateY(100%);

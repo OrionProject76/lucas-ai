@@ -35,7 +35,11 @@
 // pour forcer un install() frais"). Cause la plus probable des deux bugs
 // remontés par Cyril le 08/08/2026 (bouton Workspace mal rendu, message
 // de connexion dupliqué) — voir ROADMAP.md §5.74 pour le détail complet.
-const CACHE_NAME = "lucas-shell-v12";
+// v13 (08/08/2026) : passe glassmorphism/néon (chat/avatar, ROADMAP.md
+// §5.75) — style.css modifié à nouveau, donc re-bump obligatoire pour la
+// MÊME raison que v12, appliquée cette fois-ci dès l'écriture plutôt
+// qu'après coup.
+const CACHE_NAME = "lucas-shell-v13";
 const SHELL_FILES = [
     "/app/",
     "/app/index.html",

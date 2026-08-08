@@ -8056,6 +8056,94 @@ silencieux (aucune erreur, aucun test automatisé ne le détecte, la suite
 pytest ne couvre pas le Service Worker) et ne se révèle qu'en conditions
 réelles, sur un appareil qui a déjà visité le site.
 
+## 5.75 Rafraîchissement visuel — glassmorphism + néon cyan (chat/avatar), 08/08/2026
+
+**Demandé par Cyril** après test réel sur ses deux appareils : effet verre
+(`backdrop-filter: blur()`) sur les panneaux existants (barre d'icônes,
+bulles de message, barre de saisie), palette néon cyan avec lueur
+(`box-shadow`) sur les bordures actives/focus/bulles — réutilisant la
+couleur déjà utilisée pour les yeux de l'avatar (`static/js/avatar.js`,
+`HALO_PALETTES.idle`, `rgb(0, 212, 255)`), pas une nouvelle couleur de
+marque. Portée explicitement limitée au chat/avatar (`static/index.html`
++ `static/css/style.css`) — le futur Workspace/dataviz garde un
+traitement plus sobre (verre seul, sans glow appuyé), pour ne pas nuire
+à la lisibilité de données denses.
+
+### Contraste vérifié AVANT d'assombrir/éclaircir quoi que ce soit
+
+Contrainte explicite et non négociable du brief : le glow ne doit jamais
+dégrader la lisibilité du texte. Calcul de luminance relative WCAG
+(formule officielle, script Python exécuté puis jeté — reproductible,
+voir le corps de cette section) sur les trois combinaisons texte/fond
+touchées par la baisse de l'alpha des fonds (nécessaire pour l'effet
+verre) :
+
+| Élément | Contraste avant | Contraste après | Minimum WCAG AA |
+|---|---|---|---|
+| Bulle Cyril (`--bubble-user`, 0.9 → 0.55) | 15.07:1 | 17.01:1 | 4.5:1 |
+| Bulle Luca's (`--bubble-lucas`, 0.55 → 0.35) | 15.34:1 | 17.04:1 | 4.5:1 |
+| Barre du bas/tiroirs (`--panel-bg`, 0.55 → 0.45) | 18.39:1 | 18.55:1 | 4.5:1 |
+
+Le texte (`--text: #e8fbff`) n'a reçu ni transparence ni `text-shadow` —
+seul le fond des conteneurs est flouté/translucide, le glow (`box-shadow`)
+reste sur la bordure, jamais sur le texte lui-même. Sur un fond quasi noir
+(`--bg: #00050a`), rendre un panneau plus transparent RAPPROCHE sa couleur
+composée du noir, ce qui AUGMENTE mécaniquement le contraste avec un texte
+clair — la vérification confirme que la palette choisie ne peut pas
+accidentellement dégrader la lisibilité, elle ne l'améliore jamais par
+hasard non plus (calcul fait avant d'écrire le CSS final, pas après coup
+pour se rassurer).
+
+### Focus clavier (accessibilité)
+
+`button.icon-btn:focus-visible` / `a.icon-btn:focus-visible` reçoivent un
+`outline` (pas seulement un `box-shadow`) — l'outline reste visible même
+en mode contraste élevé du système, où un `box-shadow` seul serait ignoré.
+`#text-input:focus` (pas `:focus-visible`) : un champ de saisie doit
+montrer son focus quel que soit le moyen d'y arriver (clic ou clavier),
+contrairement aux icônes où seule la navigation clavier justifie l'anneau
+renforcé.
+
+### Nouveaux tokens (`:root`, `static/css/style.css`)
+
+`--neon-cyan: #00d4ff` (identique aux yeux de l'avatar), `--glow-cyan`
+(discret, repos), `--glow-cyan-strong` (hover/active/focus-visible),
+`--glass-blur: blur(14px)` (remplace les `blur(6px)` déjà en place sur
+les tiroirs/popover de sécurité, pour une intensité cohérente partout).
+
+### Workspace (E-1) — traitement sobre, verre seulement
+
+`static/css/workspace.css` : `#workspace-header` et `.workspace-card`
+reçoivent `var(--glass-blur)`, **sans** glow. `#workspace-controls
+.icon-btn` annule explicitement le glow hérité de la règle partagée
+`.icon-btn` (`box-shadow: none`), garde un `outline` simple au focus
+clavier — accessibilité préservée, esthétique différenciée du chat.
+
+### ⚠️ Piège du Service Worker, retombé dedans puis corrigé avant de tester
+
+`style.css` fait partie de l'app shell précaché (`static/sw.js`,
+`SHELL_FILES`) — la modifier SANS bumper `CACHE_NAME` aurait reproduit
+exactement le bug de §5.74, cette fois avec MON PROPRE navigateur de test
+qui avait déjà `lucas-shell-v12` enregistré depuis la vérification
+précédente. Bumpé `v12` → `v13` **avant** de tester cette fois, pas
+après — leçon de §5.74 appliquée dès l'écriture plutôt que découverte à
+nouveau en conditions réelles.
+
+### Vérifié en conditions réelles, capture à l'appui
+
+Testé sur le même navigateur qui avait déjà `v12` en cache : confirmé
+via `navigator.serviceWorker.getRegistrations()`/`caches.keys()` que la
+bascule vers `v13` s'est faite automatiquement, sans action manuelle.
+Rendu vérifié à largeur desktop (1568px) ET à une largeur CSS réellement
+mobile (412px, via un `<iframe>` — le redimensionnement de fenêtre ne
+change pas le viewport effectif dans cet environnement, voir §5.74) : aux
+deux formats, glow visible mais discret au repos sur les icônes, glow net
+sur la bulle de bienvenue, un seul message « Luca's est connectée. »
+(confirme aussi que le correctif de §5.74 tient toujours), aucune erreur
+console. Focus clavier testé (`Tab`) : anneau visible sur l'icône ciblée.
+Workspace revérifié aux deux largeurs : verre visible, glow absent des
+icônes d'en-tête, conforme à la demande de sobriété.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

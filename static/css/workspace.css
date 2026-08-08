@@ -20,7 +20,13 @@
     padding: 16px 20px;
     border-bottom: 1px solid var(--border-cyan);
     background: var(--panel-bg);
-    backdrop-filter: blur(6px);
+    /* Workspace/dataviz future (E-1/E-2, précisé 08/08/2026) : verre
+       seulement (backdrop-filter), jamais le glow néon appuyé du
+       chat/avatar — des données denses (rapports, futurs graphiques)
+       doivent rester lisibles sans lutter contre une lueur. Voir
+       l'annulation explicite du glow hérité de .icon-btn plus bas. */
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
 }
 
 #workspace-header h1 {
@@ -46,6 +52,22 @@
     width: 34px;
     height: 34px;
     font-size: 0.95rem;
+    /* Annule le glow néon hérité de .icon-btn (style.css) — sobriété
+       demandée pour le Workspace, garde uniquement l'effet verre. Le
+       focus clavier reste visible (outline seul, sans glow) pour
+       l'accessibilité. */
+    box-shadow: none;
+}
+
+#workspace-controls .icon-btn:hover,
+#workspace-controls .icon-btn:active {
+    box-shadow: none;
+}
+
+#workspace-controls .icon-btn:focus-visible {
+    box-shadow: none;
+    outline: 2px solid var(--neon-cyan);
+    outline-offset: 2px;
 }
 
 #workspace-grid {
@@ -67,6 +89,9 @@
     flex-direction: column;
     gap: 10px;
     min-height: 0;
+    /* Verre seulement, pas de glow — voir la note sur #workspace-header. */
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
 }
 
 .workspace-card h2 {
