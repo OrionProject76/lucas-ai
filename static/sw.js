@@ -27,7 +27,15 @@
 // barge-in désactivé le temps d'être calibré (il coupait Luca's au milieu
 // de ses phrases), autoGainControl explicite pour le micro (audio.js).
 // Voir ROADMAP.md §5.31.
-const CACHE_NAME = "lucas-shell-v11";
+// v12 (08/08/2026) : bump OUBLIÉ lors de l'ajout du bouton Workspace
+// (index.html + style.css modifiés le même jour, Brique Workspace E-1,
+// ROADMAP.md §5.73) — sans lui, un client avec le Service Worker déjà
+// installé garde indéfiniment l'ancien index.html/style.css en cache
+// (mécanisme documenté juste au-dessus : "le nom change à chaque fois
+// pour forcer un install() frais"). Cause la plus probable des deux bugs
+// remontés par Cyril le 08/08/2026 (bouton Workspace mal rendu, message
+// de connexion dupliqué) — voir ROADMAP.md §5.74 pour le détail complet.
+const CACHE_NAME = "lucas-shell-v12";
 const SHELL_FILES = [
     "/app/",
     "/app/index.html",

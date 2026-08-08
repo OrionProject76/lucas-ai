@@ -7999,6 +7999,63 @@ rapport — `psutil`/`win32gui`/`faster_whisper`/`pytesseract`).
   ressaisie). Chat existant rechargé après : connexion WebSocket, avatar,
   aucune erreur console — pas de régression.
 
+## 5.74 Correctif Workspace — cache Service Worker jamais bumpé, deux bugs remontés par Cyril, 08/08/2026
+
+**Signalés par Cyril, test réel sur ses deux appareils** : (1) bouton
+Workspace 🖥️ minuscule et mal positionné en haut à gauche sur mobile
+(Chrome Android, PWA), absent purement et simplement sur PC (Chrome,
+`/app/`) ; (2) le message « Luca's est connectée. » s'affichait deux fois
+à la suite au chargement sur mobile.
+
+**Cause identifiée** : `static/sw.js` cache l'app shell (`index.html`,
+`style.css`, tous les `.js` du chat) sous un nom de version
+(`CACHE_NAME`) qui ne change **que si le fichier `sw.js` lui-même
+change** — un navigateur ne réinstalle jamais un Service Worker dont le
+contenu est identique, même si les fichiers qu'il référence ont changé
+sur le serveur. §5.73 (bouton Workspace) a modifié `index.html` et
+`style.css` **sans bumper `CACHE_NAME`** — erreur d'oubli d'une règle que
+ce même fichier documente pourtant explicitement en commentaire depuis
+la v6 (« le nom change à chaque fois pour forcer un install() frais »).
+Conséquence : tout appareil ayant déjà visité `/app/` avant §5.73 (les
+deux appareils réels de Cyril, contrairement à mes tabs de test qui
+partaient d'un profil Chrome sans Service Worker préexistant, d'où
+l'absence du bug lors de ma propre vérification en fin de §5.73) a
+continué de servir l'ANCIEN `index.html`/`style.css` en cache — sans le
+bouton Workspace sur certains, avec une version antérieure et
+possiblement bogué de `app.js`/`websocket.js` sur d'autres, expliquant
+la double connexion. Les deux symptômes, bien que d'apparence différente,
+partagent la même cause racine.
+
+**Correctif** : `CACHE_NAME` bumpé `lucas-shell-v11` → `v12`. Le
+mécanisme d'`activate` (déjà en place, inchangé) supprime automatiquement
+l'ancien cache et réinstalle tout l'app shell depuis le réseau au
+prochain chargement — aucune action manuelle requise côté Cyril.
+
+**Vérifié en conditions réelles** (pas seulement relu) : re-testé avec un
+profil Chrome qui avait déjà enregistré le Service Worker v11 pendant la
+vérification de §5.73 — confirmé que la simple présence du nouveau
+`sw.js` sur le serveur suffit à déclencher automatiquement la mise à
+jour (`activeScripts`/`cacheNames` interrogés via
+`navigator.serviceWorker.getRegistrations()`/`caches.keys()` : bascule
+observée sur `lucas-shell-v12` sans action manuelle). Rendu vérifié à une
+largeur CSS réellement mobile (412px, via un `<iframe>` injecté — les
+outils de redimensionnement de fenêtre de cette session ne changent pas
+la largeur effective du viewport ici, contournement nécessaire pour un
+test fidèle) : les 4 icônes (bouclier/dossier/argent/Workspace) s'alignent
+correctement, même taille, un seul message « Luca's est connectée. »,
+clic sur l'icône Workspace → `workspace.html` s'ouvre et s'affiche
+correctement à cette largeur. Revérifié aussi à largeur desktop (1280px
+et 1568px) : un seul message, bouton présent et bien positionné, aucune
+erreur console.
+
+⚠️ **Leçon à retenir pour toute session future qui touche
+`index.html`/`style.css`/un `.js` de l'app shell** : bumper
+`CACHE_NAME` dans `static/sw.js` fait partie intégrante de la
+modification, pas une étape optionnelle après coup — l'oubli est
+silencieux (aucune erreur, aucun test automatisé ne le détecte, la suite
+pytest ne couvre pas le Service Worker) et ne se révèle qu'en conditions
+réelles, sur un appareil qui a déjà visité le site.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
