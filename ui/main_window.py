@@ -472,11 +472,13 @@ class MainWindow(QWidget):
         # que l'avatar virait à l'ambre. L'ambre du témoin de capture est
         # repris ici pour que les deux indicateurs disent la même chose.
         states = {
-            "IDLE":      ("● En ligne",       "#00D4FF"),
-            "LISTENING": ("● Écoute...",      "#00E676"),
-            "THINKING":  ("● Réfléchit...",   "#FFB300"),
-            "SPEAKING":  ("● Parle...",       "#E040FB"),
-            "WATCHING":  ("● Regarde l'écran", "#FFAA00"),
+            "IDLE":          ("● En ligne",             "#00D4FF"),
+            "LISTENING":     ("● Écoute...",             "#00E676"),
+            "THINKING":      ("● Réfléchit...",          "#FFB300"),
+            "THINKING_DEEP": ("● Réfléchit plus...",     "#C814FF"),
+            "SPEAKING":      ("● Parle...",              "#E040FB"),
+            "WATCHING":      ("● Regarde l'écran",       "#FFAA00"),
+            "OBSERVING":     ("● Observe l'écran",       "#C88C50"),
         }
         text, color = states.get(state, ("● En ligne", "#00D4FF"))
         self.avatar_status.setText(text)

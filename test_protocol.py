@@ -175,6 +175,24 @@ def test_states_match_the_pyside_avatar() -> None:
     assert set(protocol.PRESENCE_STATES) == {s.lower() for s in PYSIDE_STATES}
 
 
+def test_new_presence_states_round_trip() -> None:
+    """
+    THINKING_DEEP/OBSERVING (Brique 4, 08/08/2026) doivent traverser
+    avatar_state() tels quels, pas retomber sur "idle" — sinon l'ajout
+    côté ui/avatar_widget.py n'aurait aucun effet côté protocole.
+    """
+    assert protocol.avatar_state(protocol.STATE_THINKING_DEEP)["state"] == "thinking_deep"
+    assert protocol.avatar_state(protocol.STATE_OBSERVING)["state"] == "observing"
+
+
+def test_unrecognized_state_still_falls_back_for_godot_compat() -> None:
+    """
+    Non-régression explicite : ajouter des états ne doit jamais retirer le
+    filet de sécurité déjà en place pour un état que Godot ne connaît pas.
+    """
+    assert protocol.avatar_state("un_etat_du_futur")["state"] == "idle"
+
+
 @pytest.mark.skipif(not GODOT_CLIENT.is_file(), reason="client Godot absent")
 def test_every_emitted_type_is_handled_by_godot() -> None:
     """

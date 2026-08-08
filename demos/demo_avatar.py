@@ -1,9 +1,13 @@
 # demos/demo_avatar.py — juger l'avatar à l'œil
 #
-# Les tests prouvent que les cinq modes diffèrent, que la respiration
+# Les tests prouvent que les sept modes diffèrent, que la respiration
 # avance et que les fondus se terminent. Ils ne disent pas si c'est beau,
 # si le rythme est bon, si le témoin ambre est assez franc. Seul Cyril
 # peut en juger — cette démo est là pour ça.
+#
+# Passé de 5 à 7 modes le 08/08/2026 (Brique 4) — cette démo n'a rien eu
+# à changer pour les afficher : la grille de boutons itère déjà sur
+# PRESENCE_STATES dynamiquement.
 #
 # Aucune dépendance : ni Ollama, ni Piper, ni base de données. Elle
 # n'affiche que l'avatar.
@@ -50,8 +54,8 @@ class AvatarDemo(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Luca's — les 5 modes de présence")
-        self.setFixedSize(340, 480)
+        self.setWindowTitle("Luca's — les 7 modes de présence")
+        self.setFixedSize(340, 520)
         self.setStyleSheet("background-color: #0A0A0F; color: #E8EAED;")
 
         layout = QVBoxLayout()

@@ -7825,6 +7825,74 @@ question complexe pour valider V1 en conditions réelles.
 Prochaine étape : Brique 4 (avatar QPainter, 7 états) — dernière brique,
 indépendante des trois précédentes.
 
+## 5.71 Noyau minimal — Brique 4 : avatar QPainter, 7 états, 08/08/2026
+
+Quatrième et dernière brique du brief du 08/08/2026 (§5.68). Indépendante
+des trois précédentes — aucune dépendance croisée, sauf le déclenchement
+de `THINKING_DEEP` par la Brique 1 (escalade cloud).
+
+**`ui/avatar_widget.py`** : `PRESENCE_STATES` passe de 5 à 7 —
+`THINKING_DEEP` (escalade cloud) et `OBSERVING` (présence soutenue,
+distincte de `WATCHING` qui reste une capture ponctuelle : balayage actif
++ point témoin clignotant, absents d'`OBSERVING` par construction — pas
+un oubli, la différence sémantique tranchée par Cyril avant ce plan).
+`IDLE` reste le repos implicite, hors des « 6 états » nommés du brief.
+Palettes/labels/couleur de témoin ajoutés pour les deux nouveaux états
+(`OBSERVING_COLOR`, ambre plus sourd que `WATCHING_COLOR` — une présence
+soutenue ne doit pas cligner comme une alerte).
+
+**Clignement non périodique** : `blink_timer_obj.start(3000)` fixe
+remplacé par un réarmement à intervalle aléatoire (2-6 s) à chaque
+déclenchement, dans `trigger_blink()` elle-même — testé réellement
+(`test_blink_interval_varies_between_triggers`, pas seulement lu dans le
+code).
+
+**`api/protocol.py`** : `PRESENCE_STATES` étendu en miroir
+(`STATE_THINKING_DEEP`, `STATE_OBSERVING`) — alignement avec
+`ui/avatar_widget.py` vérifié par un test dédié
+(`test_states_match_the_pyside_avatar`, déjà existant, a immédiatement
+détecté le désalignement avant correction). Filet de sécurité Godot
+(retombe sur `idle` pour un état inconnu) confirmé intact par un test de
+non-régression explicite.
+
+**🔴 Deux régressions trouvées en lançant la suite complète, corrigées
+avant commit** : `ui/main_window.py::_set_avatar_state()` n'avait pas de
+libellé de statut pour `OBSERVING` (`test_every_state_has_a_status_label`
+— test générique déjà existant, a suffi à l'attraper) ; `test_avatar.py`
+affirmait encore 5 états en dur. Les deux corrigées, pas contournées.
+
+**`demos/demo_avatar.py`** : n'a rien eu à changer pour afficher les 7
+états — la grille de boutons itère déjà dynamiquement sur
+`PRESENCE_STATES`. Confirme que le choix de conception initial (générique
+plutôt que 5 boutons codés en dur) a payé.
+
+**⚠️ Budget CPU (< 2 % en idle) mesuré RÉEL, pas supposé — et il ne
+tient pas.** `demos/demo_avatar_cpu.py` (nouveau, `psutil.cpu_percent()`
+sur 15 s réelles, avatar seul en IDLE) : **2,6-2,8 %**, au-dessus du
+budget annoncé au brief. Mesure faite sous `QT_QPA_PLATFORM=offscreen`
+(pas un vrai bureau — approximation, comme documenté dans le script) ;
+un rendu desktop réel pourrait différer dans un sens ou l'autre, non
+vérifié. Signalé tel quel plutôt que corrigé sous pression de terminer
+la session : optimiser le rendu (fréquence, respiration permanente,
+particules) est un chantier distinct, pas une correction triviale, et
+n'était pas dans le périmètre demandé par le brief au-delà de la mesure
+elle-même.
+
+**26 tests dédiés** (`test_avatar.py` : +19 incluant les tests
+OBSERVING/THINKING_DEEP et le clignement, `test_protocol.py` : +2,
+renommage de `test_there_are_exactly_five_presence_states`), suite
+complète à 1520/1520, `ruff`/`mypy` propres. Base réelle de Cyril
+vérifiée intacte après coup.
+
+**Les 4 briques du noyau minimal sont closes.** Récapitulatif des points
+laissés ouverts pour Cyril : V1 (routeur cloud) non vérifiée en
+conditions réelles faute de clé Anthropic disponible ; V5 (confirmation
+destructive OS Controller) — la boîte de dialogue réelle n'a pas été
+cliquée par lui ; le budget CPU de l'avatar dépasse la cible mesurée de
+0,6-0,8 point. Aucune des trois n'est un blocage — chacune est un test
+en conditions réelles qui attend Cyril devant l'écran, pas un défaut de
+conception.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

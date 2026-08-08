@@ -26,20 +26,27 @@ from typing import Any
 # le protocole si un jour plusieurs agents émettent sur ce canal.
 DEFAULT_SOURCE_AGENT = "main"
 
-# Les cinq modes de présence, en minuscules pour le transport JSON.
-# Doivent rester alignés sur ui/avatar_widget.PRESENCE_STATES.
+# Les sept modes de présence, en minuscules pour le transport JSON.
+# Doivent rester alignés sur ui/avatar_widget.PRESENCE_STATES — passé de
+# 5 à 7 le 08/08/2026 (Brique 4 du noyau minimal) : THINKING_DEEP
+# (escalade cloud, Brique 1) et OBSERVING (présence soutenue, distincte
+# de WATCHING qui reste une capture ponctuelle).
 STATE_IDLE = "idle"
 STATE_THINKING = "thinking"
+STATE_THINKING_DEEP = "thinking_deep"
 STATE_SPEAKING = "speaking"
 STATE_WATCHING = "watching"
+STATE_OBSERVING = "observing"
 STATE_LISTENING = "listening"
 
 PRESENCE_STATES = (
     STATE_IDLE,
-    STATE_THINKING,
-    STATE_SPEAKING,
-    STATE_WATCHING,
     STATE_LISTENING,
+    STATE_WATCHING,
+    STATE_OBSERVING,
+    STATE_SPEAKING,
+    STATE_THINKING,
+    STATE_THINKING_DEEP,
 )
 
 

@@ -12,22 +12,33 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-# ── Les 5 modes de présence ───────────────────────────────────────────
+# ── Les 7 modes de présence ───────────────────────────────────────────
 #
-# Ce que fait Luca's doit se lire sur son visage. Les cinq états
+# Ce que fait Luca's doit se lire sur son visage. Les sept états
 # couvrent tout ce qu'elle peut être en train de faire.
 #
 # ⚠️ À ne pas confondre avec les 8 « modes AURA » d'IDEAS.md, qui sont
 # des contextes d'activité de Cyril (Working, Gaming, Meeting…) prévus
 # en S5. Ici il s'agit de l'état de Luca's elle-même.
+#
+# Passé de 5 à 7 le 08/08/2026 (Brique 4 du noyau minimal) — deux ajouts,
+# tranchés explicitement par Cyril avant ce chantier :
+#   - THINKING_DEEP : réfléchit plus longtemps, escalade cloud (Brique 1,
+#     core/lucas_core.py::ask()) — distinct de THINKING (réflexion locale).
+#   - OBSERVING : observation SOUTENUE, par opposition à WATCHING qui
+#     reste une capture PONCTUELLE (balayage actif, point témoin
+#     clignotant). IDLE ne compte pas parmi les « 6 états » du brief —
+#     c'est le repos implicite, pas une activité.
 
-IDLE = "IDLE"            # au repos, respiration lente
-THINKING = "THINKING"    # génère une réponse
-SPEAKING = "SPEAKING"    # parle (TTS)
-WATCHING = "WATCHING"    # regarde l'écran (VLM)
-LISTENING = "LISTENING"  # attentive : Cyril s'adresse à elle
+IDLE = "IDLE"                    # au repos, respiration lente
+THINKING = "THINKING"            # génère une réponse (local)
+THINKING_DEEP = "THINKING_DEEP"  # génère une réponse (escalade cloud)
+SPEAKING = "SPEAKING"            # parle (TTS)
+WATCHING = "WATCHING"            # regarde l'écran, capture ponctuelle (VLM)
+OBSERVING = "OBSERVING"          # observe l'écran, présence soutenue
+LISTENING = "LISTENING"          # attentive : Cyril s'adresse à elle
 
-PRESENCE_STATES = (IDLE, THINKING, SPEAKING, WATCHING, LISTENING)
+PRESENCE_STATES = (IDLE, LISTENING, WATCHING, OBSERVING, SPEAKING, THINKING, THINKING_DEEP)
 
 # LISTENING ne veut pas dire « micro ouvert » : il signifie que Cyril est
 # en train de s'adresser à Luca's. Il est déclenché aujourd'hui par la
@@ -40,6 +51,13 @@ PRESENCE_STATES = (IDLE, THINKING, SPEAKING, WATCHING, LISTENING)
 # regarde l'écran de Cyril, ça doit sauter aux yeux et non se fondre
 # dans l'ambiance habituelle de l'interface.
 WATCHING_COLOR = QColor(255, 170, 0)
+# Ambre plus sourd pour OBSERVING : même famille (contour = témoin de
+# lecture d'écran), mais une présence soutenue ne doit pas cligner comme
+# une alerte — sinon les deux se confondraient.
+OBSERVING_COLOR = QColor(200, 140, 60)
+# Contour de témoin par état — WATCHING et OBSERVING seulement, les
+# autres restent cyan (border_color() ci-dessous).
+WITNESS_COLORS = {WATCHING: WATCHING_COLOR, OBSERVING: OBSERVING_COLOR}
 
 # ── Esthétique : inspiration DeepMind Project Astra ───────────────────
 #
@@ -61,8 +79,14 @@ WATCHING_COLOR = QColor(255, 170, 0)
 HALO_PALETTES = {
     IDLE: [(0.0, 0, 212, 255, 70), (0.55, 90, 120, 240, 30), (1.0, 124, 58, 237, 0)],
     THINKING: [(0.0, 160, 90, 255, 140), (0.5, 124, 58, 237, 70), (1.0, 70, 20, 160, 0)],
+    # Plus intense que THINKING (140/90/40 vs 160/124/70) : la profondeur
+    # de couleur signale l'escalade cloud, pas seulement le libellé.
+    THINKING_DEEP: [(0.0, 140, 20, 255, 170), (0.5, 90, 10, 200, 90), (1.0, 40, 5, 120, 0)],
     SPEAKING: [(0.0, 0, 230, 255, 110), (0.5, 60, 160, 255, 60), (1.0, 124, 58, 237, 0)],
     WATCHING: [(0.0, 255, 200, 60, 170), (0.45, 255, 150, 0, 90), (1.0, 200, 90, 0, 0)],
+    # Ambre plus sourd et moins opaque que WATCHING : une présence
+    # soutenue, pas un signal ponctuel.
+    OBSERVING: [(0.0, 220, 160, 80, 140), (0.45, 200, 120, 40, 70), (1.0, 150, 70, 10, 0)],
     LISTENING: [(0.0, 0, 255, 220, 130), (0.5, 0, 200, 255, 60), (1.0, 0, 120, 200, 0)],
 }
 
@@ -81,8 +105,10 @@ TRANSITION_FRAMES = 5
 STATE_LABELS = {
     IDLE: "prête",
     THINKING: "réfléchit",
+    THINKING_DEEP: "réfléchit plus",
     SPEAKING: "parle",
     WATCHING: "regarde",
+    OBSERVING: "observe",
     LISTENING: "écoute",
 }
 
@@ -121,15 +147,17 @@ class AvatarWidget(QWidget):
         self.previous_state = IDLE
         self.transition = 1.0
 
-        # Timer animation globale (60fps)
+        # Timer animation globale (20fps réel — voir intervalle ci-dessous)
         self.anim_timer = QTimer(self)
         self.anim_timer.timeout.connect(self.update_animation)
         self.anim_timer.start(50)  # 20fps
 
-        # Timer clignement aléatoire
+        # Timer clignement — intervalle non périodique, voir trigger_blink().
+        # Premier armement à une valeur tirée elle aussi : sans ça, seul le
+        # tout premier clignement suivrait l'ancien rythme fixe.
         self.blink_timer_obj = QTimer(self)
         self.blink_timer_obj.timeout.connect(self.trigger_blink)
-        self.blink_timer_obj.start(3000)
+        self.blink_timer_obj.start(random.randint(2000, 6000))
 
         self.setMouseTracking(True)
 
@@ -155,10 +183,17 @@ class AvatarWidget(QWidget):
         self.update()
 
     def trigger_blink(self):
+        """
+        Clignement — jamais périodique (Brique 4, 08/08/2026). Un clignement
+        au rythme parfaitement régulier (l'ancien `start(3000)` fixe) se lit
+        comme un tic mécanique ; un intervalle tiré à chaque déclenchement
+        (2-6 s) casse la régularité sans jamais s'arrêter de cligner.
+        """
         if self.state == IDLE:
             self.eye_blink = True
             self.blink_timer = 3
             QTimer.singleShot(150, self.end_blink)
+        self.blink_timer_obj.start(random.randint(2000, 6000))
 
     def end_blink(self):
         self.eye_blink = False
@@ -199,11 +234,11 @@ class AvatarWidget(QWidget):
     def border_color(self) -> QColor:
         """Contour du visage, fondu entre l'ancien et le nouveau mode."""
         cyan = QColor(0, 212, 255)
-        target = WATCHING_COLOR if self.state == WATCHING else cyan
+        target = WITNESS_COLORS.get(self.state, cyan)
         if self.transition >= 1.0:
             return QColor(target.red(), target.green(), target.blue(), 150)
 
-        source = WATCHING_COLOR if self.previous_state == WATCHING else cyan
+        source = WITNESS_COLORS.get(self.previous_state, cyan)
         t = self._ease(self.transition)
         return QColor(
             int(source.red() + (target.red() - source.red()) * t),
@@ -255,6 +290,24 @@ class AvatarWidget(QWidget):
                 p['y'] -= p['speed']
                 p['life'] -= 0.05
             self.particles = [p for p in self.particles if p['life'] > 0]
+        elif self.state == THINKING_DEEP:
+            # Même mécanique que THINKING, plus soutenue : glow plus haut,
+            # particules plus denses et qui durent plus longtemps — la
+            # réflexion visible dure plus longtemps qu'un aller-retour
+            # local (escalade cloud, core/lucas_core.py::ask()).
+            self.glow_intensity = 0.8 + 0.2 * random.random()
+            if random.random() > 0.5:
+                self.particles.append({
+                    'x': 70 + random.randint(-40, 40),
+                    'y': 70 + random.randint(-20, 20),
+                    'size': random.randint(2, 6),
+                    'life': 1.0,
+                    'speed': random.uniform(0.5, 2.2)
+                })
+            for p in self.particles:
+                p['y'] -= p['speed']
+                p['life'] -= 0.04
+            self.particles = [p for p in self.particles if p['life'] > 0]
         elif self.state == SPEAKING:
             self.mouth_open = 0.3 + 0.4 * abs(random.random() - 0.5) * 2
             self.glow_intensity = 0.6
@@ -271,6 +324,12 @@ class AvatarWidget(QWidget):
             # Le regard balaie au lieu de fixer : une pupille immobile
             # donne un air absent, pas curieux.
             self.gaze_phase = (self.gaze_phase + 0.09) % (2 * math.pi)
+        elif self.state == OBSERVING:
+            # Présence soutenue, PAS un signal ponctuel : contrairement à
+            # WATCHING, ni balayage actif (scan_offset) ni point témoin
+            # clignotant (watch_pulse) — seul le regard dérive, lentement.
+            self.glow_intensity = 0.65
+            self.gaze_phase = (self.gaze_phase + 0.03) % (2 * math.pi)
 
         self.update()
 
@@ -323,7 +382,7 @@ class AvatarWidget(QWidget):
 
         # Yeux
         if not self.eye_blink:
-            if self.state == WATCHING:
+            if self.state in (WATCHING, OBSERVING):
                 # Le regard balaie l'écran au lieu de suivre la souris.
                 # Un regard fixe donnait un air absent ; ce parcours
                 # lent, plus large que haut, se lit comme de la curiosité.
@@ -393,8 +452,8 @@ class AvatarWidget(QWidget):
             half = max(0.0, (radius**2 - (scan_y - 70.0) ** 2)) ** 0.5
             painter.drawLine(int(70 - half), int(scan_y), int(70 + half), int(scan_y))
 
-        # Particules (état THINKING)
-        if self.state == THINKING:
+        # Particules (états THINKING / THINKING_DEEP)
+        if self.state in (THINKING, THINKING_DEEP):
             for p in self.particles:
                 alpha = int(p['life'] * 255)
                 painter.setBrush(QBrush(QColor(0, 212, 255, alpha)))
@@ -426,7 +485,10 @@ if __name__ == "__main__":
 
     btn_layout = QHBoxLayout()
 
-    for state in ["IDLE", "LISTENING", "THINKING", "SPEAKING"]:
+    for state in [
+        "IDLE", "LISTENING", "WATCHING", "OBSERVING",
+        "SPEAKING", "THINKING", "THINKING_DEEP",
+    ]:
         btn = QPushButton(state)
         btn.setStyleSheet("""
             QPushButton {

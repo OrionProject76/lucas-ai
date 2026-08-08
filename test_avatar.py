@@ -21,9 +21,11 @@ from PySide6.QtWidgets import QApplication
 
 from ui.avatar_widget import (
     IDLE,
+    OBSERVING,
     PRESENCE_STATES,
     SPEAKING,
     THINKING,
+    THINKING_DEEP,
     WATCHING,
     AvatarWidget,
 )
@@ -58,8 +60,13 @@ def avatar(app):
 # ── Les cinq modes ────────────────────────────────────────────────────
 
 
-def test_there_are_exactly_five_presence_states() -> None:
-    assert len(PRESENCE_STATES) == 5
+def test_there_are_exactly_seven_presence_states() -> None:
+    """
+    Passé de 5 à 7 le 08/08/2026 (Brique 4) : THINKING_DEEP (escalade
+    cloud) et OBSERVING (présence soutenue, distincte de WATCHING) —
+    tranché explicitement par Cyril avant ce chantier.
+    """
+    assert len(PRESENCE_STATES) == 7
 
 
 def test_listening_is_triggered_by_typing() -> None:
@@ -227,6 +234,72 @@ def test_end_blink_reopens_the_eyes(avatar) -> None:
     avatar.trigger_blink()
     avatar.end_blink()
     assert avatar.eye_blink is False
+
+
+def test_blink_interval_varies_between_triggers(avatar) -> None:
+    """
+    Brique 4, 08/08/2026 : un clignement au rythme parfaitement régulier
+    se lit comme un tic mécanique. `trigger_blink()` doit réarmer le timer
+    à un intervalle différent à chaque déclenchement — vérifié en
+    déclenchant plusieurs fois de suite et en s'assurant que les
+    intervalles observés ne sont pas tous identiques.
+    """
+    avatar.set_state(IDLE)
+    intervalles = set()
+    for _ in range(10):
+        avatar.trigger_blink()
+        intervalles.add(avatar.blink_timer_obj.interval())
+
+    assert len(intervalles) > 1, "les intervalles ne devraient pas être tous identiques"
+    assert all(2000 <= i <= 6000 for i in intervalles)
+
+
+# ── OBSERVING / THINKING_DEEP (Brique 4, 08/08/2026) ─────────────────────
+#
+# OBSERVING est une présence SOUTENUE, distincte de WATCHING qui reste une
+# capture PONCTUELLE (balayage actif, point témoin clignotant). THINKING_DEEP
+# couvre l'escalade cloud (Brique 1) — même mécanique que THINKING, plus
+# soutenue.
+
+def test_observing_has_no_scan_line(avatar) -> None:
+    """Contrairement à WATCHING, OBSERVING n'a pas de ligne de balayage."""
+    avatar.set_state(OBSERVING)
+    avant = avatar.scan_offset
+    avatar.update_animation()
+    assert avatar.scan_offset == avant
+
+
+def test_observing_gaze_drifts_slower_than_watching(avatar) -> None:
+    avatar.set_state(WATCHING)
+    avatar.gaze_phase = 0.0
+    avatar.update_animation()
+    watching_delta = avatar.gaze_phase
+
+    avatar.set_state(OBSERVING)
+    avatar.gaze_phase = 0.0
+    avatar.update_animation()
+    observing_delta = avatar.gaze_phase
+
+    assert 0 < observing_delta < watching_delta
+
+
+def test_observing_uses_its_own_witness_colour() -> None:
+    from ui.avatar_widget import OBSERVING_COLOR, WATCHING_COLOR
+
+    assert OBSERVING_COLOR != WATCHING_COLOR
+
+
+def test_thinking_deep_spawns_particles(avatar) -> None:
+    avatar.set_state(THINKING_DEEP)
+    for _ in range(20):
+        avatar.update_animation()
+    assert len(avatar.particles) > 0, "THINKING_DEEP doit produire des particules, comme THINKING"
+
+
+def test_thinking_deep_renders_without_error(avatar) -> None:
+    avatar.set_state(THINKING_DEEP)
+    avatar.update_animation()
+    avatar.repaint()  # ne doit pas lever
 
 
 def test_paint_renders_closed_eyes_without_error(avatar) -> None:
