@@ -1311,6 +1311,13 @@ v1 (4 briques). Document rédigé par Claude (hors Claude Code) avec Cyril,
 statut **catalogue d'intentions validées — rien ne se construit sans brief
 dédié**. S'appliquent à TOUS les modules `#98`–`#105` ci-dessous.
 
+⚠️ **Document vivant, jamais figé** — principe posé par Cyril le 08/08/2026,
+même logique que `VISION_LONG_TERME.md` : ce qui est acté dans `#97`–`#105`
+n'est pas une version finale. Luca's reste évolutive à ce stade et à jamais.
+Ce bloc s'est déjà complété une première fois le 08/08/2026 (Groupe H étendu
+de H-1/H-2 à H-1…H-7, 2e passe de la même session) — à corriger et enrichir à
+chaque nouvelle session d'idées, sans jamais prétendre être clos.
+
 - **RT-1 — Français d'abord + transparence de traduction.** Toute sortie de
   Luca's en français, tout contenu non-français traduit avant présentation.
   Pour les documents à enjeu (financier/juridique/administratif/contractuel) :
@@ -1578,6 +1585,36 @@ Le vrai chantier porteur, désigné comme tel dans le document source.
   autorités. **JAMAIS de contre-attaque offensive** (illégal en France —
   accès/entrave à un système tiers, pénal quel que soit le motif ; plus une
   attribution presque toujours incertaine).
+- **H-3 — Pattern « dual LLM »** *(ajouté 08/08/2026, 2e passe — recherche
+  sécurité)*. Un modèle privilégié (accès outils/actions) ne doit jamais
+  voir directement du contenu non fiable brut (mail, page web). Un second
+  modèle « en quarantaine », sans accès aux outils, traite ce contenu et
+  n'en extrait qu'un résumé structuré transmis au modèle privilégié —
+  neutralise l'injection à la racine plutôt que de la filtrer après coup.
+  **À intégrer dès la conception du module mail** (`#100` C-1), pas ajouté
+  après coup.
+- **H-4 — Surveillance comportementale de Luca's elle-même** *(ajouté
+  08/08/2026, 2e passe)*. Une injection réussie peut aller jusqu'à
+  l'exécution de code sur la machine (cas documenté : un seul prompt piégé a
+  suffi à lancer une commande système sur un agent mal isolé, sans pièce
+  jointe ni faille classique). Guardian doit donc aussi surveiller le
+  comportement du processus Luca's lui-même — lancement de commandes
+  inhabituel, écriture dans des dossiers système/démarrage — pas seulement
+  filtrer ce qui entre.
+- **H-5 — Journal d'audit inviolable** *(ajouté 08/08/2026, 2e passe)*.
+  Étendre le journal SQLite existant (`action_log`, Brique 2 du noyau v1) en
+  registre à écriture seule (append-only) avec horodatage chaîné, pour
+  qu'une attaque réussie ne puisse pas effacer ses propres traces.
+- **H-6 — Calibrage contre la sur-défense** *(ajouté 08/08/2026, 2e passe)*.
+  Un Guardian trop agressif bloque des demandes légitimes et devient gênant
+  à l'usage quotidien. Objectif : le bon niveau de friction, pas le maximum
+  de blocage. À calibrer avec de vrais usages, pas en théorie.
+- **H-7 — Provenance contrôlée pour le RAG personnel** *(ajouté 08/08/2026,
+  2e passe)*. Des documents conçus spécifiquement pour manipuler peuvent
+  influencer fortement les réponses d'un système RAG mal protégé. Le RAG de
+  Luca's (documents perso, Memory Palace) doit rester nourri uniquement de
+  sources que Cyril contrôle explicitement — jamais d'ingestion automatique
+  de contenu glané en ligne sans validation.
 
 ### Règles Absolues de Cyril — versées dans `VISION_LONG_TERME.md`
 
