@@ -1,0 +1,149 @@
+{
+  "_comment": "Source de verite UNIQUE de l'apparence du bureau 3D Luca's. Edite ce fichier, recharge l'apercu : rien d'autre a toucher. Format volontairement neutre (JSON) pour etre lu aussi bien par l'apercu HTML que par Godot 4 (JSON.parse_string) et Python (json.load). Ne jamais recopier ces valeurs ailleurs dans le code.",
+  "version": 1,
+  "default": "studio",
+
+  "_tokens": {
+    "colors.bg_deep": "Fond le plus profond de la scene",
+    "colors.bg_mid": "Halo central du fond, derriere l'avatar",
+    "colors.accent": "Couleur d'accent : chiffres cles, jauges, bordure active",
+    "colors.ink": "Texte principal",
+    "colors.muted": "Texte secondaire, libelles",
+    "colors.panel_fill": "Remplissage des panneaux (rgba : l'alpha fait la transparence)",
+    "colors.panel_border": "Bordure des panneaux",
+    "panel.radius_px": "Arrondi des angles. 4 = strict, 16 = doux",
+    "panel.blur_px": "Flou d'arriere-plan derriere le panneau. 0 = opaque, mat",
+    "panel.shadow_strength": "0 a 1. Portee et densite de l'ombre",
+    "panel.glow_strength": "0 a 1. Halo lumineux. 0 = aucun effet neon",
+    "space.depth_scale": "0 a 1.5. Multiplie l'eloignement des panneaux. Le levier le plus visible",
+    "space.spread_deg": "Angle d'ouverture des panneaux lateraux vers le centre",
+    "space.float_amplitude_px": "Amplitude du flottement. 0 = panneaux parfaitement immobiles",
+    "type.uppercase_titles": "true = TITRES EN CAPITALES, false = Titres normaux",
+    "grid.visible": "Grille de sol en perspective",
+    "avatar.visible": "Sphere lumineuse centrale de Luca's"
+  },
+
+  "themes": {
+
+    "holo": {
+      "name": "Holographique",
+      "description": "Le style d'origine. Verre teinte, neon cyan, profondeur maximale, avatar au centre. Spectaculaire, immersif, assume.",
+      "colors": {
+        "bg_deep": "#04060c",
+        "bg_mid": "#0d1b33",
+        "accent": "#22d3ee",
+        "ink": "#e8f4f8",
+        "muted": "#7c8ea6",
+        "panel_fill": "rgba(18,32,54,0.55)",
+        "panel_border": "rgba(120,200,230,0.18)",
+        "ok": "#34d399",
+        "warn": "#fbbf24",
+        "danger": "#f87171"
+      },
+      "panel": {
+        "radius_px": 14,
+        "border_width_px": 1,
+        "blur_px": 18,
+        "shadow_strength": 1.0,
+        "glow_strength": 1.0
+      },
+      "space": {
+        "depth_scale": 1.0,
+        "spread_deg": 34,
+        "float_amplitude_px": 9,
+        "float_period_s": 7
+      },
+      "type": {
+        "family": "\"Segoe UI\", system-ui, sans-serif",
+        "title_size_px": 12,
+        "body_size_px": 12.5,
+        "title_weight": 600,
+        "letter_spacing_px": 0.4,
+        "uppercase_titles": true
+      },
+      "grid": { "visible": true, "opacity": 0.85, "cell_px": 74 },
+      "avatar": { "visible": true, "size_px": 170, "glow_px": 90 }
+    },
+
+    "studio": {
+      "name": "Studio",
+      "description": "Epure et professionnel, sombre. Gris ardoise, accent bleu acier discret, aucun halo, angles nets. La profondeur reste mais devient sobre : on lit avant d'admirer.",
+      "colors": {
+        "bg_deep": "#0e1116",
+        "bg_mid": "#161b22",
+        "accent": "#5b8def",
+        "ink": "#e6e9ee",
+        "muted": "#8b949e",
+        "panel_fill": "rgba(29,34,42,0.92)",
+        "panel_border": "rgba(255,255,255,0.09)",
+        "ok": "#3fb950",
+        "warn": "#d29922",
+        "danger": "#f85149"
+      },
+      "panel": {
+        "radius_px": 8,
+        "border_width_px": 1,
+        "blur_px": 6,
+        "shadow_strength": 0.45,
+        "glow_strength": 0.0
+      },
+      "space": {
+        "depth_scale": 0.55,
+        "spread_deg": 18,
+        "float_amplitude_px": 0,
+        "float_period_s": 7
+      },
+      "type": {
+        "family": "\"Segoe UI\", system-ui, sans-serif",
+        "title_size_px": 12.5,
+        "body_size_px": 13,
+        "title_weight": 600,
+        "letter_spacing_px": 0,
+        "uppercase_titles": false
+      },
+      "grid": { "visible": false, "opacity": 0, "cell_px": 74 },
+      "avatar": { "visible": true, "size_px": 96, "glow_px": 26 }
+    },
+
+    "atelier": {
+      "name": "Atelier",
+      "description": "Meme sobriete que Studio, mais en clair. Pour travailler en plein jour, volets ouverts, sans se bruler les yeux.",
+      "colors": {
+        "bg_deep": "#eef1f5",
+        "bg_mid": "#ffffff",
+        "accent": "#2563eb",
+        "ink": "#1a2230",
+        "muted": "#66768c",
+        "panel_fill": "rgba(255,255,255,0.94)",
+        "panel_border": "rgba(20,35,60,0.13)",
+        "ok": "#16a34a",
+        "warn": "#c2820a",
+        "danger": "#dc2626"
+      },
+      "panel": {
+        "radius_px": 10,
+        "border_width_px": 1,
+        "blur_px": 4,
+        "shadow_strength": 0.30,
+        "glow_strength": 0.0
+      },
+      "space": {
+        "depth_scale": 0.5,
+        "spread_deg": 16,
+        "float_amplitude_px": 0,
+        "float_period_s": 7
+      },
+      "type": {
+        "family": "\"Segoe UI\", system-ui, sans-serif",
+        "title_size_px": 12.5,
+        "body_size_px": 13,
+        "title_weight": 600,
+        "letter_spacing_px": 0,
+        "uppercase_titles": false
+      },
+      "grid": { "visible": false, "opacity": 0, "cell_px": 74 },
+      "avatar": { "visible": true, "size_px": 96, "glow_px": 18 }
+    }
+
+  }
+}

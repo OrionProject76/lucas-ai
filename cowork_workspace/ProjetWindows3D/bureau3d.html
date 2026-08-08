@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bureau 3D Luca's — aperçu des thèmes</title>
+<style>
+  /* ------------------------------------------------------------------
+     AUCUNE couleur, AUCUN rayon, AUCUNE profondeur n'est écrit ici en
+     dur. Tout vient de themes.json, injecté en variables CSS au chargement.
+     Modifier l'apparence = modifier themes.json, jamais ce fichier.
+     ------------------------------------------------------------------ */
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(1300px 850px at 50% -8%,var(--bg-mid) 0%,var(--bg-deep) 62%);
+    color:var(--ink);
+    font-family:var(--font);
+    font-size:var(--body-size);
+    overflow:hidden;
+    transition:background .5s,color .5s;
+  }
+
+  header{
+    position:relative;z-index:50;display:flex;align-items:center;gap:16px;
+    padding:13px 22px;border-bottom:1px solid var(--panel-border);
+    background:color-mix(in srgb,var(--bg-deep) 78%,transparent);
+    backdrop-filter:blur(14px);
+  }
+  h1{font-size:14px;font-weight:600;letter-spacing:.4px;white-space:nowrap}
+  h1 span{color:var(--accent)}
+  .themes{display:flex;gap:8px;margin-left:auto}
+  .tbtn{
+    padding:8px 17px;border-radius:calc(var(--radius) - 2px);cursor:pointer;
+    border:1px solid var(--panel-border);background:transparent;
+    color:var(--muted);font-family:inherit;font-size:12.5px;font-weight:500;
+    transition:.25s;white-space:nowrap;
+  }
+  .tbtn:hover{color:var(--ink);border-color:var(--accent)}
+  .tbtn.on{
+    color:var(--bg-deep);background:var(--accent);border-color:var(--accent);
+    box-shadow:0 0 calc(20px * var(--glow)) var(--accent-a45);
+  }
+
+  main{display:flex;height:calc(100vh - 57px)}
+
+  /* ---------------- scène ---------------- */
+  .stage{flex:1;position:relative;overflow:hidden;perspective:1500px;perspective-origin:50% 45%}
+  .world{position:absolute;inset:0;transform-style:preserve-3d;
+         transition:transform .35s cubic-bezier(.2,.8,.3,1)}
+
+  .floor{
+    position:absolute;left:-40%;right:-40%;bottom:-28%;height:75%;
+    background:
+      linear-gradient(transparent 0%,var(--accent-a12) 100%),
+      repeating-linear-gradient(90deg,var(--panel-border) 0 1px,transparent 1px var(--cell)),
+      repeating-linear-gradient(0deg,var(--panel-border) 0 1px,transparent 1px var(--cell));
+    transform:rotateX(72deg) translateZ(-220px);
+    transition:opacity .5s;
+  }
+
+  .avatar{
+    position:absolute;left:50%;top:46%;
+    width:var(--avatar-size);height:var(--avatar-size);
+    margin-left:calc(var(--avatar-size) / -2);
+    margin-top:calc(var(--avatar-size) / -2);
+    border-radius:50%;
+    background:radial-gradient(circle at 38% 32%,var(--accent-a85),var(--accent-a25) 62%,transparent 72%);
+    box-shadow:0 0 var(--avatar-glow) calc(var(--avatar-glow) / 3.4) var(--accent-a30);
+    animation:pulse 4.5s ease-in-out infinite;
+    transition:width .45s,height .45s,box-shadow .45s;
+  }
+  @keyframes pulse{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.06);opacity:1}}
+
+  .slot{position:absolute;transform-style:preserve-3d;
+        transition:transform .45s cubic-bezier(.2,.8,.3,1)}
+  .panel{
+    border-radius:var(--radius);overflow:hidden;
+    border:var(--border-w) solid var(--panel-border);
+    background:var(--panel-fill);
+    backdrop-filter:blur(var(--blur)) saturate(130%);
+    animation:float var(--float-period) ease-in-out infinite;
+    transition:border-radius .45s,background .45s,box-shadow .45s,backdrop-filter .45s;
+  }
+  @keyframes float{0%,100%{transform:translateY(0)}
+                   50%{transform:translateY(calc(var(--float) * -1))}}
+
+  .bar{
+    display:flex;align-items:center;gap:9px;padding:10px 13px;
+    font-size:var(--title-size);font-weight:var(--title-weight);
+    letter-spacing:var(--tracking);
+    text-transform:var(--title-case);
+    border-bottom:1px solid var(--panel-border);
+    color:var(--ink);
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);
+       box-shadow:0 0 calc(10px * var(--glow)) var(--accent)}
+  .body{padding:12px 14px;color:var(--muted)}
+  .row{display:flex;justify-content:space-between;padding:5px 0;
+       border-bottom:1px solid var(--panel-border)}
+  .row:last-child{border:0}
+  .row b{color:var(--accent);font-weight:600}
+  .row .ok{color:var(--ok);font-weight:600}
+  .gauge{height:5px;border-radius:3px;background:var(--panel-border);margin:6px 0 11px;overflow:hidden}
+  .gauge i{display:block;height:100%;background:var(--accent);
+           box-shadow:0 0 calc(12px * var(--glow)) var(--accent-a45)}
+  .msg{margin:6px 0;padding:8px 11px;border-radius:calc(var(--radius) - 4px);
+       background:var(--accent-a12);border-left:2px solid var(--accent);color:var(--ink)}
+  .msg.me{background:var(--panel-border);border-left-color:var(--muted);margin-left:26px}
+
+  /* ---------------- panneau d'inspection ---------------- */
+  aside{
+    width:326px;flex:0 0 326px;padding:20px;overflow-y:auto;
+    border-left:1px solid var(--panel-border);
+    background:color-mix(in srgb,var(--bg-deep) 80%,transparent);
+    backdrop-filter:blur(16px);
+  }
+  aside h2{font-size:16px;margin-bottom:5px}
+  aside .desc{color:var(--muted);font-size:12.5px;line-height:1.55;margin-bottom:18px}
+  .grp{margin-bottom:17px}
+  .grp>h3{font-size:10.5px;letter-spacing:1.1px;text-transform:uppercase;
+          color:var(--muted);margin-bottom:8px}
+  .tok{display:flex;align-items:center;gap:9px;font-size:12px;padding:3.5px 0}
+  .tok .n{color:var(--muted);flex:1}
+  .tok .v{font-family:Consolas,monospace;font-size:11.5px;color:var(--ink)}
+  .sw{width:15px;height:15px;border-radius:4px;border:1px solid var(--panel-border);flex:0 0 15px}
+  .file{
+    font-size:12px;line-height:1.6;color:var(--muted);
+    padding:11px 12px;border-radius:var(--radius);
+    border:1px solid var(--panel-border);background:var(--accent-a12);
+  }
+  .file code{font-family:Consolas,monospace;color:var(--accent);font-size:11.5px}
+
+  /* ---------------- contrôles ---------------- */
+  .controls{
+    position:absolute;left:22px;bottom:22px;z-index:40;
+    display:flex;align-items:center;gap:15px;padding:11px 17px;
+    border-radius:var(--radius);border:1px solid var(--panel-border);
+    background:var(--panel-fill);backdrop-filter:blur(16px);font-size:12.5px;
+  }
+  .controls label{color:var(--muted);letter-spacing:.3px}
+  input[type=range]{width:180px;accent-color:var(--accent);cursor:pointer}
+  .val{color:var(--accent);width:42px;font-family:Consolas,monospace;font-size:12px}
+  .hint{position:absolute;right:20px;bottom:26px;z-index:40;
+        font-size:11.5px;color:var(--muted)}
+
+  /* ---------------- erreur file:// ---------------- */
+  #err{
+    position:fixed;inset:0;z-index:99;display:none;
+    place-items:center;background:#04060c;color:#e8f4f8;
+    font-family:"Segoe UI",system-ui,sans-serif;padding:40px;
+  }
+  #err.on{display:grid}
+  #err .box{max-width:620px;line-height:1.65}
+  #err h2{color:#22d3ee;font-size:20px;margin-bottom:14px}
+  #err p{margin-bottom:14px;color:#a9bfd0;font-size:14px}
+  #err pre{
+    background:#0d1520;border:1px solid rgba(120,200,230,.2);border-radius:10px;
+    padding:14px 16px;font-family:Consolas,monospace;font-size:13px;color:#22d3ee;
+    overflow-x:auto;
+  }
+</style>
+</head>
+<body>
+
+<div id="err"><div class="box">
+  <h2>themes.json n'a pas pu être lu</h2>
+  <p>La page a été ouverte en <code>file://</code>. Le navigateur interdit à une page locale
+     de lire un fichier voisin — c'est une protection, pas un bug.</p>
+  <p>Double-clique sur <b>apercu.bat</b> dans ce dossier : il démarre un petit serveur
+     local (127.0.0.1 uniquement, rien n'est exposé sur le réseau) et ouvre cette page
+     correctement. Ou, à la main&nbsp;:</p>
+  <pre>cd C:\OrionAI\cowork_workspace\ProjetWindows3D
+python -m http.server 8777 --bind 127.0.0.1</pre>
+  <p>Puis <code>http://127.0.0.1:8777/bureau3d.html</code></p>
+</div></div>
+
+<header>
+  <h1>Bureau 3D <span>Luca's</span></h1>
+  <div class="themes" id="themes"></div>
+</header>
+
+<main>
+  <div class="stage" id="stage">
+    <div class="world" id="world">
+      <div class="floor" id="floor"></div>
+      <div class="avatar" id="avatar"></div>
+
+      <div class="slot" data-depth=".8" data-spread="1" style="left:5%;top:17%;width:292px">
+        <div class="panel">
+          <div class="bar"><i class="dot"></i>Conversation</div>
+          <div class="body">
+            <div class="msg">Bonsoir Cyril. Le daemon tourne depuis 6 h, aucun incident.</div>
+            <div class="msg me">Montre-moi la charge GPU</div>
+            <div class="msg">12,5 Go occupés sur 16. Marge de 1 Go — je ne charge pas le VLM.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="slot" data-depth=".4" data-spread=".42" style="left:31%;top:60%;width:252px">
+        <div class="panel">
+          <div class="bar"><i class="dot"></i>Système</div>
+          <div class="body">
+            <div class="row"><span>CPU 9800X3D</span><b>18 %</b></div>
+            <div class="gauge"><i style="width:18%"></i></div>
+            <div class="row"><span>RAM</span><b>21,4 Go</b></div>
+            <div class="gauge"><i style="width:34%"></i></div>
+            <div class="row"><span>VRAM RTX 5080</span><b>12,5 / 16 Go</b></div>
+            <div class="gauge"><i style="width:78%"></i></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="slot" data-depth=".8" data-spread="-1" style="right:5%;top:17%;width:278px">
+        <div class="panel">
+          <div class="bar"><i class="dot"></i>Sécurité · niveau 1</div>
+          <div class="body">
+            <div class="row"><span>Guardian</span><span class="ok">actif</span></div>
+            <div class="row"><span>Privacy Shield</span><span class="ok">actif</span></div>
+            <div class="row"><span>Ransomware watch</span><b>0 alerte</b></div>
+            <div class="row"><span>Persistance</span><b>0 alerte</b></div>
+            <div class="row"><span>Dernier scan</span><b>il y a 4 min</b></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="slot" data-depth=".4" data-spread="-.42" style="right:30%;top:62%;width:242px">
+        <div class="panel">
+          <div class="bar"><i class="dot"></i>Workspace</div>
+          <div class="body">
+            <div class="row"><span>Rapports</span><b>3</b></div>
+            <div class="row"><span>Demandes</span><b>1</b></div>
+            <div class="row"><span>Actions</span><b>7</b></div>
+            <div class="row"><span>Objectifs</span><b>2 en cours</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <label>Profondeur</label>
+      <input type="range" id="depth" min="0" max="150" value="100">
+      <span class="val" id="depthval">100 %</span>
+    </div>
+    <div class="hint">La souris déplace la caméra · la profondeur multiplie <code>space.depth_scale</code></div>
+  </div>
+
+  <aside id="aside"></aside>
+</main>
+
+<script>
+let DATA = null, current = null, userDepth = 1, mx = 0, my = 0;
+
+/* ---- outils couleur : hex/rgb -> rgba(...) avec alpha choisi ---- */
+function alpha(color, a){
+  color = (color || '').trim();
+  if(color.startsWith('#')){
+    let h = color.slice(1);
+    if(h.length === 3) h = h.split('').map(c => c + c).join('');
+    const n = parseInt(h, 16);
+    return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+  }
+  const m = color.match(/rgba?\(([^)]+)\)/);
+  if(m){ const p = m[1].split(',').map(s => s.trim()); return `rgba(${p[0]},${p[1]},${p[2]},${a})`; }
+  return color;
+}
+
+function applyTheme(key){
+  const t = DATA.themes[key];
+  if(!t) return;
+  current = key;
+  const r = document.documentElement.style;
+  const c = t.colors, p = t.panel, s = t.space, ty = t.type, g = t.grid, av = t.avatar;
+
+  r.setProperty('--bg-deep', c.bg_deep);
+  r.setProperty('--bg-mid', c.bg_mid);
+  r.setProperty('--accent', c.accent);
+  r.setProperty('--ink', c.ink);
+  r.setProperty('--muted', c.muted);
+  r.setProperty('--panel-fill', c.panel_fill);
+  r.setProperty('--panel-border', c.panel_border);
+  r.setProperty('--ok', c.ok);
+  r.setProperty('--accent-a85', alpha(c.accent, .85));
+  r.setProperty('--accent-a45', alpha(c.accent, .45));
+  r.setProperty('--accent-a30', alpha(c.accent, .30));
+  r.setProperty('--accent-a25', alpha(c.accent, .25));
+  r.setProperty('--accent-a12', alpha(c.accent, .12));
+
+  r.setProperty('--radius', p.radius_px + 'px');
+  r.setProperty('--border-w', p.border_width_px + 'px');
+  r.setProperty('--blur', p.blur_px + 'px');
+  r.setProperty('--glow', p.glow_strength);
+
+  r.setProperty('--float', s.float_amplitude_px + 'px');
+  r.setProperty('--float-period', s.float_period_s + 's');
+
+  r.setProperty('--font', ty.family);
+  r.setProperty('--body-size', ty.body_size_px + 'px');
+  r.setProperty('--title-size', ty.title_size_px + 'px');
+  r.setProperty('--title-weight', ty.title_weight);
+  r.setProperty('--tracking', ty.letter_spacing_px + 'px');
+  r.setProperty('--title-case', ty.uppercase_titles ? 'uppercase' : 'none');
+
+  r.setProperty('--cell', g.cell_px + 'px');
+  r.setProperty('--avatar-size', av.size_px + 'px');
+  r.setProperty('--avatar-glow', av.glow_px + 'px');
+
+  document.getElementById('floor').style.opacity = g.visible ? g.opacity : 0;
+  document.getElementById('avatar').style.display = av.visible ? 'block' : 'none';
+
+  document.querySelectorAll('.tbtn').forEach(b =>
+    b.classList.toggle('on', b.dataset.k === key));
+
+  layout(); inspector();
+}
+
+function layout(){
+  const t = DATA.themes[current];
+  const d = t.space.depth_scale * userDepth;
+  document.querySelectorAll('.slot').forEach(el=>{
+    const z  = (+el.dataset.depth  || 0) * 300 * d;
+    const ry = (+el.dataset.spread || 0) * t.space.spread_deg * d;
+    el.style.transform = `translateZ(${z}px) rotateY(${ry}deg)`;
+    const sh = t.panel.shadow_strength, gl = t.panel.glow_strength;
+    el.querySelector('.panel').style.boxShadow =
+      `0 ${16 + 30 * sh * d}px ${34 + 46 * sh * d}px rgba(0,0,0,${.30 + .38 * sh}),` +
+      `0 0 ${40 * gl * d}px ${alpha(t.colors.accent, .20 * gl)}`;
+  });
+  document.getElementById('world').style.transform =
+    `rotateX(${my * -7 * d}deg) rotateY(${mx * 11 * d}deg) translateZ(${-80 * d}px)`;
+}
+
+function inspector(){
+  const t = DATA.themes[current];
+  const sw = v => `<i class="sw" style="background:${v}"></i>`;
+  const line = (n, v, s) => `<div class="tok">${s || ''}<span class="n">${n}</span><span class="v">${v}</span></div>`;
+  document.getElementById('aside').innerHTML = `
+    <h2>${t.name}</h2>
+    <div class="desc">${t.description}</div>
+
+    <div class="grp"><h3>Couleurs</h3>
+      ${line('accent', t.colors.accent, sw(t.colors.accent))}
+      ${line('fond', t.colors.bg_deep, sw(t.colors.bg_deep))}
+      ${line('texte', t.colors.ink, sw(t.colors.ink))}
+      ${line('panneau', 'alpha ' + (t.colors.panel_fill.match(/[\d.]+\)$/) || ['—'])[0].replace(')', ''), sw(t.colors.panel_fill))}
+    </div>
+
+    <div class="grp"><h3>Panneaux</h3>
+      ${line('arrondi', t.panel.radius_px + ' px')}
+      ${line('flou', t.panel.blur_px + ' px')}
+      ${line('ombre', t.panel.shadow_strength)}
+      ${line('halo', t.panel.glow_strength || '0 — aucun')}
+    </div>
+
+    <div class="grp"><h3>Espace</h3>
+      ${line('profondeur', t.space.depth_scale)}
+      ${line('ouverture', t.space.spread_deg + '°')}
+      ${line('flottement', t.space.float_amplitude_px ? t.space.float_amplitude_px + ' px' : '0 — figé')}
+      ${line('grille', t.grid.visible ? 'visible' : 'masquée')}
+    </div>
+
+    <div class="file">
+      Ces valeurs viennent toutes de <code>themes.json</code>.<br>
+      Édite-le, recharge la page (F5) : la scène suit.<br>
+      Un thème ajouté dans le fichier apparaît tout seul en haut à droite.
+    </div>`;
+}
+
+/* ---- contrôles ---- */
+document.getElementById('depth').oninput = e=>{
+  userDepth = e.target.value / 100;
+  document.getElementById('depthval').textContent = e.target.value + ' %';
+  layout();
+};
+document.getElementById('stage').onmousemove = e=>{
+  const r = e.currentTarget.getBoundingClientRect();
+  mx = (e.clientX - r.left) / r.width  - .5;
+  my = (e.clientY - r.top ) / r.height - .5;
+  layout();
+};
+
+/* ---- chargement ---- */
+fetch('themes.json')
+  .then(r => { if(!r.ok) throw 0; return r.json(); })
+  .then(j => {
+    DATA = j;
+    document.getElementById('themes').innerHTML =
+      Object.entries(j.themes)
+        .map(([k, t]) => `<button class="tbtn" data-k="${k}">${t.name}</button>`).join('');
+    document.querySelectorAll('.tbtn').forEach(b => b.onclick = () => applyTheme(b.dataset.k));
+    applyTheme(j.default in j.themes ? j.default : Object.keys(j.themes)[0]);
+  })
+  .catch(() => document.getElementById('err').classList.add('on'));
+</script>
+</body>
+</html>
