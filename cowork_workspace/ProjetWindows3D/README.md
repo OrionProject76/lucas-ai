@@ -62,6 +62,55 @@ Chaque token est décrit en clair dans le bloc `_tokens` du fichier lui-même.
 
 ---
 
+## L'écran de destination — contraintes mesurées le 09/08/2026
+
+Relevé sur la machine, pas supposé :
+
+| | |
+|---|---|
+| Dalle | LG **OLED**, 3840 × 2160, 120 Hz, VRR 40–120 Hz |
+| Couleur | HDR Dolby Vision, 10 bits/canal, gamut P3, 1387 nits en pic |
+| Mise à l'échelle Windows | **300 %** → il ne reste que **1280 × 720 points logiques** |
+
+### Ce que le 300 % implique
+
+C'est la contrainte dominante, bien avant la 4K. La surface de composition
+disponible est celle d'un petit écran : après la barre de titre, il reste
+environ 600 points de hauteur. C'est ce qui provoquait le chevauchement des
+panneaux — un manque de place réel, pas seulement un défaut de calcul.
+
+À noter, pour éviter un contresens : passer Godot en « 4K natif » **n'apporte
+aucune place supplémentaire**. Windows dessine déjà en pixels physiques réels
+(`devicePixelRatio = 3`), la netteté est acquise. Le scaling ne fixe que la
+*taille apparente*. Le seul vrai réglage est donc `ui_scale`, à trouver à la
+distance de vision réelle — c'est à ça que sert le curseur **Lisibilité** de
+l'aperçu, dont la valeur se recopie ensuite dans le thème.
+
+### Ce que l'OLED impose
+
+Une interface fixe affichée des heures **marque la dalle de façon
+permanente**. Ce n'est pas un risque théorique pour un bureau permanent.
+Le bloc `oled` de `themes.json` porte les trois règles, et elles valent
+autant pour Godot que pour l'aperçu :
+
+- **Pixel shift** — toute la scène se décale de 4 px logiques (12 physiques)
+  toutes les 90 s, en cycle de 4 positions. Invisible à l'œil, suffisant pour
+  qu'aucun bord de panneau ne stationne sur un pixel. *Déjà actif dans
+  l'aperçu.*
+- **Jamais de blanc pur en aplat statique** — un fond clair plein écran, c'est
+  la dalle à pleine puissance en continu. Le thème **Atelier** porte pour cette
+  raison un avertissement affiché dans l'inspecteur : il reste utilisable, mais
+  par sessions courtes.
+- **Éviter les zones lumineuses immobiles** — barres de titre pleines, bordures
+  vives, halos fixes marquent en premier. Préférer l'accent sur du texte et des
+  traits fins plutôt que sur des aplats.
+
+En HDR, enfin, un accent saturé sort **beaucoup** plus lumineux que sur un
+écran classique : le cyan du thème Holographique est à surveiller en usage
+nocturne.
+
+---
+
 ## Le contrat avec Godot
 
 `themes.json` est délibérément du JSON neutre, sans rien de propre au web, pour
@@ -92,11 +141,17 @@ divergent — c'est exactement ce que ce fichier existe pour empêcher.
 | Vérifié | Les 3 thèmes se chargent et s'appliquent réellement dans le navigateur |
 | Pas encore fait | Tout Godot. Aucun fichier de `Lucas3D/` modifié |
 
-### La prochaine décision à prendre
+### Les décisions qui restent
 
-**L'ancrage**, avant d'écrire la moindre ligne de GDScript : overlay plein écran
-permanent, ou mode dédié qu'on active à la demande ?
+1. **Régler `ui_scale`** — le seul test qui ne peut pas se faire au clavier :
+   lancer l'aperçu, s'installer à la distance habituelle, bouger le curseur
+   *Lisibilité* jusqu'à lire sans effort, reporter la valeur dans le thème.
 
-Ce n'est pas un détail de confort. Un overlay Godot plein écran toujours au
-premier plan capture les clics sur tout le bureau — l'incident du 02/08/2026
-(`ROADMAP.md` §3, section Godot). Le problème se conçoit avant, pas après.
+2. **L'ancrage**, avant la moindre ligne de GDScript : overlay plein écran
+   permanent, ou mode dédié activé à la demande ? Ce n'est pas un détail de
+   confort — un overlay Godot plein écran toujours au premier plan capture les
+   clics sur tout le bureau (incident du 02/08/2026, `ROADMAP.md` §3, section
+   Godot). Et sur OLED, « permanent » a un coût que « à la demande » n'a pas.
+
+3. **Godot à 120 fps** — le moteur plafonne à 60 par défaut ; l'écran fait 120
+   avec VRR. À régler au moment de la mise en place de la scène.

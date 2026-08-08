@@ -3,6 +3,17 @@
   "version": 1,
   "default": "terminal",
 
+  "_oled_comment": "Ecran de Cyril confirme OLED le 09/08/2026 (LG, 3840x2160, 120 Hz, HDR Dolby Vision, 1387 nits, Windows a 300 % -> 1280x720 points logiques). Sur dalle OLED, une interface FIXE affichee des heures marque la dalle de facon permanente. Ces reglages sont une contrainte de conception, pas une preference : ils valent pour l'apercu ET pour la future scene Godot.",
+  "oled": {
+    "pixel_shift_px": 4,
+    "pixel_shift_period_s": 90,
+    "_pixel_shift": "Deplacement lent et periodique de TOUTE la scene. 4 px logiques = 12 px physiques a 300 %, invisible a l'oeil, suffisant pour qu'aucun bord de panneau ne reste sur le meme pixel. C'est la protection standard des TV, appliquee ici a l'interface elle-meme.",
+    "max_static_luminance": 0.75,
+    "_max_static_luminance": "Ne jamais afficher de blanc pur (#ffffff) en aplat statique. Un fond clair plein ecran sur OLED, c'est la dalle a pleine puissance en permanence : usure acceleree, chauffe, consommation.",
+    "avoid_static_bright_areas": true,
+    "_avoid": "Les zones lumineuses immobiles (barres de titre, bordures vives, halos fixes) sont ce qui marque en premier. Preferer des accents sur du texte et des traits fins plutot que des aplats."
+  },
+
   "_tokens": {
     "colors.bg_deep": "Fond le plus profond de la scene",
     "colors.bg_mid": "Halo central du fond, derriere l'avatar",
@@ -148,6 +159,7 @@
     "atelier": {
       "name": "Atelier",
       "description": "Meme sobriete que Studio, mais en clair. Pour travailler en plein jour, volets ouverts, sans se bruler les yeux.",
+      "oled_warning": "Deconseille en usage prolonge sur ta dalle OLED : un fond clair plein ecran maintient la dalle pres de sa luminosite maximale en permanence -- usure acceleree et chauffe. A reserver aux sessions courtes de plein jour, ou a basculer vers Studio des que la lumiere baisse.",
       "colors": {
         "bg_deep": "#eef1f5",
         "bg_mid": "#ffffff",

@@ -130,6 +130,10 @@
   .file{font-size:11.5px;line-height:1.6;color:var(--muted);padding:10px 11px;
         border-radius:var(--radius);border:1px solid var(--panel-border);background:var(--accent-a12)}
   .file code{font-family:Consolas,monospace;color:var(--accent);font-size:11px}
+  .alert{font-size:11.5px;line-height:1.55;padding:10px 11px;margin-bottom:15px;
+         border-radius:var(--radius);border:1px solid rgba(251,191,36,.45);
+         background:rgba(251,191,36,.10);color:var(--ink)}
+  .alert b{color:#fbbf24}
 
   /* ---------------- controles ----------------
      Leur hauteur reelle est mesuree par place() : la rangee basse de
@@ -380,7 +384,33 @@ function layout(pass){
   }
 
   document.getElementById('world').style.transform =
+    `translate(${shiftX}px,${shiftY}px) ` +
     `rotateX(${my * -6 * d}deg) rotateY(${mx * 9 * d}deg) translateZ(${-70 * d}px)`;
+}
+
+/* =====================================================================
+   PROTECTION OLED -- pixel shift
+   L'ecran de Cyril est une dalle OLED. Une interface fixe affichee des
+   heures y laisse une trace permanente. Toute la scene se deplace donc
+   lentement selon un cycle de 4 positions : aucun bord de panneau ne
+   reste sur le meme pixel. 4 px logiques = 12 px physiques a 300 %,
+   invisible a l'oeil.
+   Ce n'est pas un effet decoratif : c'est ce qui rend un bureau 3D
+   permanent viable sur OLED. La scene Godot devra faire de meme.
+   ===================================================================== */
+let shiftX = 0, shiftY = 0, shiftStep = 0, shiftTimer = null;
+
+function startPixelShift(){
+  if(shiftTimer) clearInterval(shiftTimer);
+  const o = DATA.oled;
+  if(!o || !o.pixel_shift_px) return;
+  const a = o.pixel_shift_px;
+  const cycle = [[0,0],[a,0],[a,a],[0,a]];
+  shiftTimer = setInterval(() => {
+    shiftStep = (shiftStep + 1) % cycle.length;
+    [shiftX, shiftY] = cycle[shiftStep];
+    layout();
+  }, Math.max(5, o.pixel_shift_period_s || 90) * 1000);
 }
 
 function applyTheme(key){
@@ -458,10 +488,26 @@ function inspector(){
       ${line('flottement', t.space.float_amplitude_px ? t.space.float_amplitude_px + ' px' : '0 — figé')}
       ${line('grille', t.grid.visible ? 'visible' : 'masquée')}
     </div>
+    ${t.oled_warning ? `<div class="alert"><b>Dalle OLED</b><br>${t.oled_warning}</div>` : ''}
+
+    <div class="grp"><h3>Réglage de lisibilité</h3>
+      <div class="tok"><span class="n">curseur</span><span class="v">${Math.round(uiScale*100)} %</span></div>
+      <div class="tok"><span class="n">texte rendu</span><span class="v">${(t.type.body_size_px*uiScale).toFixed(1)} pt</span></div>
+      ${autoFit < .999 ? `<div class="tok"><span class="n">réduit auto</span><span class="v">×${autoFit.toFixed(2)}</span></div>` : ''}
+      <div class="file" style="margin-top:8px">
+        Recule dans ton fauteuil et règle le curseur jusqu'à lire sans effort.
+        Quand c'est bon, inscris la valeur dans <code>themes.json</code> :<br>
+        <code>"ui_scale": ${(uiScale).toFixed(2)}</code>
+      </div>
+    </div>
+
     <div class="file">
       Toutes ces valeurs viennent de <code>themes.json</code>.<br>
       Édite-le, recharge (F5) : la scène suit.<br>
-      Un thème ajouté au fichier apparaît tout seul en haut à droite.
+      Un thème ajouté au fichier apparaît tout seul en haut à droite.<br>
+      <span style="color:var(--ok)">■</span> protection OLED active —
+      la scène se décale de ${DATA.oled ? DATA.oled.pixel_shift_px : 0} px
+      toutes les ${DATA.oled ? DATA.oled.pixel_shift_period_s : 0} s.
     </div>`;
 }
 
@@ -492,6 +538,7 @@ fetch('themes.json')
         .map(([k, t]) => `<button class="tbtn" data-k="${k}">${t.name}</button>`).join('');
     document.querySelectorAll('.tbtn').forEach(b => b.onclick = () => applyTheme(b.dataset.k));
     applyTheme(j.default in j.themes ? j.default : Object.keys(j.themes)[0]);
+    startPixelShift();
   })
   .catch(() => document.getElementById('err').classList.add('on'));
 </script>
