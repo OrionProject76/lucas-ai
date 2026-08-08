@@ -1,7 +1,7 @@
 {
   "_comment": "Source de verite UNIQUE de l'apparence du bureau 3D Luca's. Edite ce fichier, recharge l'apercu : rien d'autre a toucher. Format volontairement neutre (JSON) pour etre lu aussi bien par l'apercu HTML que par Godot 4 (JSON.parse_string) et Python (json.load). Ne jamais recopier ces valeurs ailleurs dans le code.",
   "version": 1,
-  "default": "studio",
+  "default": "terminal",
 
   "_tokens": {
     "colors.bg_deep": "Fond le plus profond de la scene",
@@ -24,6 +24,46 @@
   },
 
   "themes": {
+
+    "terminal": {
+      "name": "Terminal pro",
+      "description": "Transposition en 3D du style tranche par Cyril le 09/08/2026 pour le Workspace PWA. Valeurs reprises A L'IDENTIQUE de static/css/workspace.css et style.css -- ambre #f0a94e, glass leger 7px, coins 6px, monospace -- pour que le bureau 3D et la PWA parlent la meme langue au lieu d'inventer une troisieme identite visuelle.",
+      "colors": {
+        "bg_deep": "#00050a",
+        "bg_mid": "#14100a",
+        "accent": "#f0a94e",
+        "ink": "#e8fbff",
+        "muted": "#6fa8b8",
+        "panel_fill": "rgba(45,30,10,0.45)",
+        "panel_border": "rgba(240,169,78,0.5)",
+        "ok": "#3fb950",
+        "warn": "#f0a94e",
+        "danger": "#ff5566"
+      },
+      "panel": {
+        "radius_px": 6,
+        "border_width_px": 1,
+        "blur_px": 7,
+        "shadow_strength": 0.4,
+        "glow_strength": 0.45
+      },
+      "space": {
+        "depth_scale": 0.55,
+        "spread_deg": 18,
+        "float_amplitude_px": 0,
+        "float_period_s": 7
+      },
+      "type": {
+        "family": "\"SFMono-Regular\", Consolas, \"Liberation Mono\", Menlo, monospace",
+        "title_size_px": 12,
+        "body_size_px": 12.5,
+        "title_weight": 600,
+        "letter_spacing_px": 0.3,
+        "uppercase_titles": false
+      },
+      "grid": { "visible": false, "opacity": 0, "cell_px": 74 },
+      "avatar": { "visible": true, "size_px": 96, "glow_px": 26 }
+    },
 
     "holo": {
       "name": "Holographique",
