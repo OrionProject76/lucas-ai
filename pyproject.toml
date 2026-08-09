@@ -13,3 +13,30 @@
 
 [tool.ruff.lint]
 extend-select = ["B006"]  # flake8-bugbear : argument par défaut mutable
+
+# mypy ne doit jamais analyser le venv lui-meme -- sans cet exclude, un
+# script vendu par pywin32 (venv/Scripts/pywin32_testall.py) remonte comme
+# une erreur du projet alors qu'il n'en fait pas partie.
+[tool.mypy]
+exclude = ["^venv/"]
+
+# Aucun de ces modules n'a de paquet de stubs sur PyPI -- `pip install`
+# ne peut rien de plus pour eux (contrairement a psutil, pyperclip,
+# pywin32, PyAutoGUI, couverts par des paquets `types-*`). whisper et
+# pytesseract sont en plus des backends de repli optionnels (try/except
+# ImportError dans stt_engine.py/ocr_engine.py), jamais installes par
+# defaut -- requirements.txt installe faster-whisper et rapidocr-onnxruntime
+# a la place. Cible sur ces noms precis, jamais un `ignore_missing_imports`
+# global, pour ne pas masquer une vraie erreur de typage sur un paquet qui
+# aurait, lui, des stubs disponibles.
+[[tool.mypy.overrides]]
+module = [
+    "GPUtil",
+    "fitz",
+    "faster_whisper",
+    "whisper",
+    "rapidocr_onnxruntime",
+    "pytesseract",
+    "pycaw.pycaw",
+]
+ignore_missing_imports = true

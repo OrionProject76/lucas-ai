@@ -94,3 +94,12 @@ pytest>=9.0.0            # Tests unitaires
 pytest-cov>=7.1.0        # Coverage (just test)
 ruff>=0.16.0             # Lint + format (just lint)
 mypy>=2.3.0              # Type checking (just mypy)
+# Stubs mypy -- sans eux, `just mypy` remonte des erreurs qui ne sont pas
+# des bugs mais un venv incomplet (retrouve le 09/08/2026, 32 fausses
+# alertes). GPUtil/fitz/faster_whisper/whisper/rapidocr_onnxruntime/
+# pytesseract/pycaw n'ont aucun paquet de stubs sur PyPI -- ignores via
+# pyproject.toml [[tool.mypy.overrides]] a la place.
+types-psutil>=7.2.2
+types-pyperclip>=1.11.0
+types-pywin32>=312.0.0
+types-PyAutoGUI>=0.9.3
