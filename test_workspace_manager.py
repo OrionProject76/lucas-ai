@@ -160,11 +160,14 @@ def test_summary_assembles_all_four_sections(monkeypatch, tmp_path) -> None:
         memory.close()
 
     result = workspace_manager.summary()
-    assert set(result.keys()) == {"reports", "pending_requests", "recent_actions", "objectives"}
+    assert set(result.keys()) == {
+        "reports", "pending_requests", "recent_actions", "objectives", "sandbox_runs",
+    }
     assert len(result["reports"]) == 1
     assert len(result["pending_requests"]) == 1
     assert len(result["recent_actions"]) == 1
     assert len(result["objectives"]) == 1
+    assert result["sandbox_runs"] == []  # rien proposé dans ce test
 
 
 # ── Disposition des cartes (glisser-déposer + tailles, 09/08/2026) ─────
@@ -174,15 +177,21 @@ def test_get_layout_returns_default_when_nothing_saved(monkeypatch, tmp_path) ->
     monkeypatch.setattr(memory_manager, "DB_PATH", tmp_path / "test_layout_default.db")
     layout = workspace_manager.get_layout()
     assert layout == {
-        "order": ["reports", "requests", "actions", "objectives"],
-        "sizes": {"reports": "M", "requests": "M", "actions": "M", "objectives": "M"},
+        "order": ["reports", "requests", "actions", "objectives", "sandbox"],
+        "sizes": {
+            "reports": "M", "requests": "M", "actions": "M",
+            "objectives": "M", "sandbox": "M",
+        },
     }
 
 
 def test_save_layout_then_get_layout_round_trips(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(memory_manager, "DB_PATH", tmp_path / "test_layout_roundtrip.db")
-    new_order = ["objectives", "actions", "requests", "reports"]
-    new_sizes = {"reports": "S", "requests": "L", "actions": "XL", "objectives": "M"}
+    new_order = ["objectives", "actions", "requests", "reports", "sandbox"]
+    new_sizes = {
+        "reports": "S", "requests": "L", "actions": "XL",
+        "objectives": "M", "sandbox": "L",
+    }
 
     workspace_manager.save_layout(new_order, new_sizes)
 
@@ -193,8 +202,11 @@ def test_save_layout_rejects_unknown_card_id(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(memory_manager, "DB_PATH", tmp_path / "test_layout_unknown.db")
     with pytest.raises(workspace_manager.InvalidLayout):
         workspace_manager.save_layout(
-            ["reports", "requests", "actions", "un_intrus"],
-            {"reports": "M", "requests": "M", "actions": "M", "objectives": "M"},
+            ["reports", "requests", "actions", "objectives", "un_intrus"],
+            {
+                "reports": "M", "requests": "M", "actions": "M",
+                "objectives": "M", "sandbox": "M",
+            },
         )
 
 
@@ -202,8 +214,11 @@ def test_save_layout_rejects_missing_card(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(memory_manager, "DB_PATH", tmp_path / "test_layout_missing.db")
     with pytest.raises(workspace_manager.InvalidLayout):
         workspace_manager.save_layout(
-            ["reports", "requests", "actions"],  # objectives manquant
-            {"reports": "M", "requests": "M", "actions": "M", "objectives": "M"},
+            ["reports", "requests", "actions", "sandbox"],  # objectives manquant
+            {
+                "reports": "M", "requests": "M", "actions": "M",
+                "objectives": "M", "sandbox": "M",
+            },
         )
 
 
@@ -211,8 +226,11 @@ def test_save_layout_rejects_invalid_size(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(memory_manager, "DB_PATH", tmp_path / "test_layout_bad_size.db")
     with pytest.raises(workspace_manager.InvalidLayout):
         workspace_manager.save_layout(
-            ["reports", "requests", "actions", "objectives"],
-            {"reports": "ENORME", "requests": "M", "actions": "M", "objectives": "M"},
+            ["reports", "requests", "actions", "objectives", "sandbox"],
+            {
+                "reports": "ENORME", "requests": "M", "actions": "M",
+                "objectives": "M", "sandbox": "M",
+            },
         )
 
 
@@ -228,6 +246,9 @@ def test_get_layout_falls_back_to_default_on_corrupted_state(monkeypatch, tmp_pa
         memory.close()
 
     assert workspace_manager.get_layout() == {
-        "order": ["reports", "requests", "actions", "objectives"],
-        "sizes": {"reports": "M", "requests": "M", "actions": "M", "objectives": "M"},
+        "order": ["reports", "requests", "actions", "objectives", "sandbox"],
+        "sizes": {
+            "reports": "M", "requests": "M", "actions": "M",
+            "objectives": "M", "sandbox": "M",
+        },
     }

@@ -467,6 +467,116 @@ def test_workspace_layout_put_rejects_an_invalid_layout(client, monkeypatch) -> 
     assert "carte inconnue" in response.json()["detail"]
 
 
+# ── Zone sandbox du Workspace (E-3, 09/08/2026) ─────────────────────────
+#
+# Même discipline que le reste de cette section : on ne teste ici QUE le
+# câblage de la route (jeton, relais, 400 propre) en mockant
+# modules.sandbox_manager — le comportement réel (isolation, timeout,
+# statuts) est couvert par test_sandbox_manager.py.
+
+
+def test_workspace_sandbox_submit_requires_the_token(client, monkeypatch) -> None:
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    response = client.post("/workspace/sandbox/submit", json={"code": "print(1)"})
+    assert response.status_code == 401
+
+
+def test_workspace_sandbox_submit_relays_the_created_run(client, monkeypatch) -> None:
+    calls: dict = {}
+    fake_run = {"id": 1, "code": "print(1)", "status": "pending"}
+
+    def fake_submit(code):
+        calls["code"] = code
+        return fake_run
+
+    monkeypatch.setattr("api.server.sandbox_submit", fake_submit)
+
+    response = client.post("/workspace/sandbox/submit", json={"code": "print(1)"})
+
+    assert response.status_code == 200
+    assert response.json() == fake_run
+    assert calls["code"] == "print(1)"
+
+
+def test_workspace_sandbox_submit_rejects_empty_code_with_400(client, monkeypatch) -> None:
+    from modules.sandbox_manager import SandboxError
+
+    def fake_submit(code):
+        raise SandboxError("Le code proposé est vide.")
+
+    monkeypatch.setattr("api.server.sandbox_submit", fake_submit)
+
+    response = client.post("/workspace/sandbox/submit", json={"code": "   "})
+
+    assert response.status_code == 400
+    assert "vide" in response.json()["detail"]
+
+
+def test_workspace_sandbox_execute_requires_the_token(client, monkeypatch) -> None:
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    assert client.post("/workspace/sandbox/1/execute").status_code == 401
+
+
+def test_workspace_sandbox_execute_relays_the_result(client, monkeypatch) -> None:
+    calls: dict = {}
+    fake_result = {"id": 1, "status": "executed", "stdout": "1\n", "exit_code": 0}
+
+    def fake_execute(run_id):
+        calls["run_id"] = run_id
+        return fake_result
+
+    monkeypatch.setattr("api.server.sandbox_execute", fake_execute)
+
+    response = client.post("/workspace/sandbox/1/execute")
+
+    assert response.status_code == 200
+    assert response.json() == fake_result
+    assert calls["run_id"] == 1
+
+
+def test_workspace_sandbox_execute_rejects_an_already_decided_run_with_400(client, monkeypatch) -> None:
+    from modules.sandbox_manager import SandboxError
+
+    def fake_execute(run_id):
+        raise SandboxError("Proposition déjà tranchée (statut actuel : 'rejected').")
+
+    monkeypatch.setattr("api.server.sandbox_execute", fake_execute)
+
+    response = client.post("/workspace/sandbox/1/execute")
+
+    assert response.status_code == 400
+    assert "tranchée" in response.json()["detail"]
+
+
+def test_workspace_sandbox_reject_requires_the_token(client, monkeypatch) -> None:
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    assert client.post("/workspace/sandbox/1/reject").status_code == 401
+
+
+def test_workspace_sandbox_reject_relays_the_result(client, monkeypatch) -> None:
+    fake_result = {"id": 1, "status": "rejected"}
+    monkeypatch.setattr("api.server.sandbox_reject", lambda run_id: fake_result)
+
+    response = client.post("/workspace/sandbox/1/reject")
+
+    assert response.status_code == 200
+    assert response.json() == fake_result
+
+
+def test_workspace_sandbox_reject_rejects_an_unknown_id_with_400(client, monkeypatch) -> None:
+    from modules.sandbox_manager import SandboxError
+
+    def fake_reject(run_id):
+        raise SandboxError("Proposition sandbox inconnue : 999999")
+
+    monkeypatch.setattr("api.server.sandbox_reject", fake_reject)
+
+    response = client.post("/workspace/sandbox/999999/reject")
+
+    assert response.status_code == 400
+    assert "inconnue" in response.json()["detail"]
+
+
 # ── WebSocket ─────────────────────────────────────────────────────────
 
 def _next_of_type(ws, message_type: str, limit: int = 12) -> dict:

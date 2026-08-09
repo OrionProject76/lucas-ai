@@ -35,6 +35,10 @@ from core.lucas_core import LucasCore
 from core.router import mentions_pc_explicitly, should_use_vision
 from core.world_model import get_snapshot
 from memory.memory_manager import save_event_from_any_thread
+from modules.sandbox_manager import SandboxError
+from modules.sandbox_manager import execute as sandbox_execute
+from modules.sandbox_manager import reject as sandbox_reject
+from modules.sandbox_manager import submit as sandbox_submit
 from modules.semantic_desktop import SemanticDesktop
 from modules.stt_engine import STTEngine, STTUnavailable
 from modules.voice_manager import VoiceManager
@@ -146,6 +150,10 @@ class ChatRequest(BaseModel):
 class WorkspaceLayoutRequest(BaseModel):
     order: list[str]
     sizes: dict[str, str]
+
+
+class SandboxSubmitRequest(BaseModel):
+    code: str
 
 
 # ── Jeton partagé (prérequis pour le pont mobile, ROADMAP.md §2) ───────
@@ -373,13 +381,19 @@ def finance_summary():
     }
 
 
-# ── Workspace Luca's (IDEAS.md #102, E-1) — lecture seule ──────────────
+# ── Workspace Luca's (IDEAS.md #102, E-1) ──────────────────────────────
 #
 # Rend visible ce que Luca's fait déjà : rapports, demandes en attente,
 # actions gouvernées, objectifs en cours. Voir modules/workspace_manager.py
 # pour le détail de chaque source. Même garde de jeton que /history,
 # /documents, /finance/summary — noms de rapports et objectifs
 # (potentiellement financiers) sont sensibles.
+#
+# ⚠️ Plus strictement lecture seule depuis la zone sandbox (E-3, plus
+# bas) : /workspace/sandbox/* écrit une proposition de code et son
+# résultat. /workspace/summary et /workspace/layout ci-dessous restent
+# inchangés, lecture seule pour l'un, écriture de disposition (pas de
+# contenu) pour l'autre.
 
 
 @app.get("/workspace/summary", dependencies=[Depends(verify_token)])
@@ -414,6 +428,42 @@ def workspace_save_layout_route(req: WorkspaceLayoutRequest):
     except InvalidLayout as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"status": "ok"}
+
+
+# ── Zone sandbox du Workspace (E-3, 09/08/2026) ─────────────────────────
+#
+# Le code proposé reste PROPOSÉ jusqu'à décision explicite (VISION_LONG_TERME.md
+# §4, brief cowork_workspace/BRIEF_WORKSPACE_E3_SANDBOX.md §5) : /submit
+# n'exécute jamais rien, seul /execute le fait, après que Cyril l'a
+# explicitement demandé depuis l'interface — jamais automatique. Même
+# garde de jeton que le reste du Workspace.
+
+
+@app.post("/workspace/sandbox/submit", dependencies=[Depends(verify_token)])
+def workspace_sandbox_submit_route(req: SandboxSubmitRequest):
+    """Enregistre une proposition de code, statut 'pending'. Ne l'exécute jamais."""
+    try:
+        return sandbox_submit(req.code)
+    except SandboxError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/workspace/sandbox/{run_id}/execute", dependencies=[Depends(verify_token)])
+def workspace_sandbox_execute_route(run_id: int):
+    """Exécute une proposition 'pending' dans l'environnement isolé (modules/sandbox_runner.py)."""
+    try:
+        return sandbox_execute(run_id)
+    except SandboxError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/workspace/sandbox/{run_id}/reject", dependencies=[Depends(verify_token)])
+def workspace_sandbox_reject_route(run_id: int):
+    """Marque une proposition 'pending' comme rejetée — ne l'exécute jamais."""
+    try:
+        return sandbox_reject(run_id)
+    except SandboxError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 # ── WebSocket : canal unique Luca's ↔ Godot ─────────────────────

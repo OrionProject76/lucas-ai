@@ -28,6 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from memory import memory_manager
+from modules import sandbox_manager
 
 COWORK_DIR = Path(__file__).resolve().parent.parent / "cowork_workspace"
 REPORTS_DIR = COWORK_DIR / "reports"
@@ -111,12 +112,21 @@ def list_objectives(limit: int = 20) -> list[dict]:
 
 
 def summary() -> dict:
-    """Instantané complet pour le tableau de bord Workspace (E-1)."""
+    """
+    Instantané complet pour le tableau de bord Workspace (E-1 + E-3).
+
+    `sandbox_runs` (E-3, 09/08/2026) rompt la lecture-seule stricte du
+    reste de ce module UNIQUEMENT en apparence : ce module ne fait ici
+    que RELIRE l'état déjà écrit par modules/sandbox_manager.py (submit/
+    execute/reject), jamais proposer ou exécuter quoi que ce soit
+    lui-même — même distinction que get_layout()/save_layout() plus haut.
+    """
     return {
         "reports": list_reports(),
         "pending_requests": list_pending_requests(),
         "recent_actions": list_recent_actions(),
         "objectives": list_objectives(),
+        "sandbox_runs": sandbox_manager.list_recent(),
     }
 
 
@@ -128,7 +138,7 @@ def summary() -> dict:
 # — jamais accepté silencieusement (le client pourrait sinon persister
 # un état que le frontend ne sait plus rendre).
 
-CARD_IDS = ("reports", "requests", "actions", "objectives")
+CARD_IDS = ("reports", "requests", "actions", "objectives", "sandbox")
 CARD_SIZES = ("S", "M", "L", "XL")
 _LAYOUT_STATE_KEY = "workspace_layout"
 

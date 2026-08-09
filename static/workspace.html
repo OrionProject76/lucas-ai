@@ -83,6 +83,30 @@
                 </div>
                 <div class="workspace-list" id="objectives-list"></div>
             </section>
+
+            <section class="workspace-card card-size-M" id="card-sandbox" data-card-id="sandbox">
+                <div class="workspace-card-header">
+                    <button type="button" class="workspace-drag-handle" title="Déplacer" aria-label="Déplacer la carte Sandbox">⠿</button>
+                    <h2>Sandbox</h2>
+                    <div class="workspace-size-controls" role="group" aria-label="Taille de la carte Sandbox">
+                        <button type="button" class="workspace-size-btn" data-size="S">S</button>
+                        <button type="button" class="workspace-size-btn" data-size="M">M</button>
+                        <button type="button" class="workspace-size-btn" data-size="L">L</button>
+                        <button type="button" class="workspace-size-btn" data-size="XL">XL</button>
+                    </div>
+                </div>
+                <p class="workspace-sandbox-hint">
+                    Exécution isolée (réseau bloqué, fichiers limités à
+                    <code>sandbox_workspace/</code>, délai maximal). Le code
+                    reste proposé jusqu'à décision explicite.
+                </p>
+                <form id="sandbox-form">
+                    <textarea id="sandbox-code" rows="5" spellcheck="false"
+                        placeholder="print(&quot;bonjour depuis la sandbox&quot;)"></textarea>
+                    <button type="submit" id="sandbox-submit">Proposer</button>
+                </form>
+                <div class="workspace-list" id="sandbox-list"></div>
+            </section>
         </main>
     </div>
 

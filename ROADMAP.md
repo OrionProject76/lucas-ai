@@ -8280,6 +8280,143 @@ taille confirmé (S/M/L/XL, glow actif sur le bouton sélectionné),
 navigateur (preuve que la persistance est bien côté serveur, pas
 localStorage). Aucune erreur console aux deux formats.
 
+## 5.78 Zone sandbox du Workspace (E-3) — isolation réelle vérifiée en sous-processus, 09/08/2026
+
+Brief : `cowork_workspace/BRIEF_WORKSPACE_E3_SANDBOX.md`. Objectif : donner à
+Luca's un endroit où proposer et exécuter du code (scripts, analyses, petits
+outils) en environnement isolé, visible et piloté par Cyril — cinquième
+carte du Workspace, même style "Terminal pro" que les quatre autres.
+
+### Étape préalable du brief (§3) — aucun mécanisme d'isolation n'existait
+
+Recherché avant d'écrire une ligne : `modules/automation_manager.py`,
+`core/os_controller.py`, `core/decision_engine.py`, et par mot-clé
+"sandbox"/"isolat" dans tout le projet. Le seul résultat pertinent était la
+RÈGLE elle-même (`VISION_LONG_TERME.md` §4, "Aucune exécution de code
+auto-généré hors sandbox"), jamais implémentée. `automation_manager.py` est
+une liste blanche de lancement d'applications, sans rapport avec exécuter du
+code arbitraire. Confirmé : rien à réutiliser, ce chantier part de zéro.
+
+### Cycle de vie — le code reste proposé jusqu'à décision explicite
+
+`pending → executed` (Cyril clique Exécuter) ou `pending → rejected` (Cyril
+clique Rejeter) — jamais l'inverse, jamais un troisième passage sur un id
+déjà tranché (`SandboxError`). `modules/sandbox_manager.py::submit()`
+n'exécute jamais rien lui-même, à la lettre du brief §5.
+
+### ⚠️ Isolation LOGICIELLE (niveau Python), pas une isolation OS — honnête sur la limite
+
+Pas de conteneur, pas de VM, pas d'AppContainer Windows, pas de compte
+restreint — RT-2 (`IDEAS.md`) interdit de présenter ça comme plus que ce que
+c'est. `modules/sandbox_runner.py` (exécuté dans le sous-processus, jamais
+modifiable par le code sandboxé lui-même) pose trois gardes réelles, avant
+tout `exec()` du code proposé :
+
+- **Réseau** : `socket.socket`/`socket.create_connection` remplacés par une
+  fonction qui lève `PermissionError` — coupe `socket` direct, `requests`,
+  `urllib`, `http.client` (tous construisent un `socket.socket` en interne).
+- **Fichiers** : `open`/`io.open`/`os.open` + toute la famille
+  `os.remove/unlink/rename/replace/mkdir/rmdir/chmod/truncate/listdir/scandir/
+  chdir/symlink/link` vérifient une résolution réelle du chemin (symlinks
+  compris, pas un préfixe de chaîne) contre `sandbox_workspace/` — accès
+  refusé sinon, lecture ET écriture. `pathlib.Path.unlink()`/`rename()`/
+  `mkdir()` délèguent à ces mêmes fonctions `os.*` au moment de l'appel
+  (jamais une copie figée à l'import), donc protégées aussi — vérifié par
+  test explicite, pas supposé.
+- **Processus** : `subprocess.Popen.__init__` + `os.system/popen/spawn*/
+  exec*/startfile` bloqués — ferme la porte de contournement la plus
+  directe (un script qui shell-out vers `curl.exe`/PowerShell rendrait les
+  deux gardes précédentes inutiles, un processus externe n'héritant d'aucun
+  patch posé dans ce process Python).
+
+**Ce que ça ne couvre PAS**, documenté en tête de `sandbox_runner.py` plutôt
+que caché : `ctypes`/un appel Win32 direct contournerait ces gardes, et
+`multiprocessing` sur Windows peut spawner sans passer par
+`subprocess.Popen`. Suffisant pour des scripts d'analyse/outils maladroits,
+pas une défense contre un adversaire qui écrit du code pour s'évader
+spécifiquement. Durcissement futur (compte Windows restreint, Windows
+Sandbox) : `IDEAS.md`, pas ouvert cette session.
+
+Timeout : `subprocess.Popen.communicate(timeout=...)`, et sur dépassement
+`taskkill /F /T /PID` sur le PID de tête — pas juste `proc.kill()` :
+`sys.executable` sur ce projet est le stub venvlauncher de `venv\Scripts\
+python.exe`, qui relance TOUJOURS l'interpréteur réel en process enfant
+(CLAUDE.md, leçon du 30/07/2026) ; tuer seulement la tête laisserait
+l'enfant tourner jusqu'au timeout suivant.
+
+### Persistance — table dédiée, pas une réutilisation d'`action_log`
+
+`memory/memory_manager.py` : table `sandbox_runs` (id, code, status, stdout,
+stderr, exit_code, timed_out, created_at, decided_at), SCHEMA_VERSION 4→5
+(déclenche la sauvegarde automatique habituelle — confirmée réellement
+créée : `memory/lucas_memory.db.bak-20260809-075510`). Distincte
+d'`action_log` : une proposition sandbox a un cycle de vie (mise à jour
+après coup), une ligne d'`action_log` est déjà terminée à l'écriture.
+
+### API — même garde de jeton que le reste du Workspace
+
+`POST /workspace/sandbox/submit`, `POST /workspace/sandbox/{id}/execute`,
+`POST /workspace/sandbox/{id}/reject` — 400 (pas 500) sur `SandboxError`
+(code vide, id inconnu, proposition déjà tranchée). `modules/
+workspace_manager.py::summary()` expose `sandbox_runs` (lecture de ce que
+`sandbox_manager` a déjà écrit — même distinction que `get_layout()`/
+`save_layout()`, pas une nouvelle brèche dans la lecture-seule du reste).
+`CARD_IDS` passe à 5 valeurs (`+ "sandbox"`).
+
+### Frontend — cinquième carte, même style, aucune nouvelle identité visuelle
+
+`static/workspace.html`/`workspace.js`/`workspace.css` : formulaire
+(textarea + "Proposer"), liste des propositions avec badge de statut
+(pending=ambre, executed=vert `--sandbox-ok` nouveau, rejected=`--error`
+déjà existant), boutons Exécuter/Rejeter sur le pending, sortie
+standard/erreurs affichées pour l'exécuté. `createElement`/`textContent`
+partout (jamais `innerHTML` sur du contenu dynamique), même discipline que
+le reste de `workspace.js`. `workspace.html`/`.js`/`.css` restent hors de
+`SHELL_FILES` (`static/sw.js`) — vérifié avant d'écrire, pas supposé (même
+constat que §5.76) : aucun bump de `CACHE_NAME` nécessaire.
+
+### Vérifié réellement, pas supposé
+
+- **30 nouveaux tests** (`test_sandbox_manager.py` : 21, dont les gardes
+  réseau/fichiers/processus/timeout en VRAI sous-processus, pas une
+  simulation ; `test_server.py` : 9 sur le câblage des routes) — suite
+  complète 1573 passed, `ruff check .` propre, `mypy .` propre (128
+  fichiers).
+- **Serveur réel redémarré** (arbre `venv\Scripts\python.exe` → interpréteur
+  réel retracé et tué avec `taskkill /F /T`, relancé via la tâche planifiée
+  `LucasAPIServer`) — migration de schéma confirmée (`schema_version` = 5
+  en base réelle), cycle submit→execute et submit→reject vérifié par `curl`
+  contre le serveur HTTPS réel, PAS un mock.
+- **Navigateur réel** (Claude in Chrome), aux deux largeurs : PC (1568px,
+  capture à l'appui) et mobile (412px via `<iframe>`, même méthode que
+  §5.77, capture à l'appui) — carte Sandbox affichée, glisser/redimensionner
+  hérité du mécanisme existant (aucune régression), formulaire "Proposer"
+  utilisé réellement (frappe clavier + clic, pas `fetch` direct), bouton
+  "Exécuter" cliqué réellement, résultat affiché correctement dans les deux
+  largeurs.
+
+⚠️ **Friction d'environnement rencontrée, sans rapport avec le code de ce
+chantier** — l'écran de Cyril est à l'échelle Windows 300 % (déjà connu,
+voir `cowork_workspace/ProjetWindows3D` avant son retrait). `resize_window`
+de l'extension Chrome, appelé avec une largeur en pixels physiques proche
+ou au-delà de `window.screen.availWidth` (1280 à cette échelle), a produit
+une fenêtre dégénérée (`outerWidth` ~157px) au lieu d'un redimensionnement
+ou d'une erreur claire — récupéré en fermant l'onglet et en ouvrant un
+onglet neuf plutôt qu'en persistant sur la fenêtre cassée. À réutiliser si
+un futur test navigateur sur cette machine se comporte bizarrement après un
+`resize_window` : fermer l'onglet, pas insister.
+
+### Pas encore fait
+
+- Aucune proposition automatique par Luca's elle-même (pas de LLM qui
+  écrit du code candidat) — cette session construit la zone d'exécution,
+  pas un générateur. Cohérent avec le brief : "s'il y en a" (§4).
+- Pas de suppression automatique des scripts `_proposition_*.py` après
+  exécution dans `sandbox_workspace/` — s'accumulent sur disque (gitignorés,
+  jamais versionnés). Purge à envisager si ça devient gênant en usage réel.
+- `ctypes`/`multiprocessing` non bloqués (voir plus haut) — accepté pour
+  cette version, pas oublié.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

@@ -305,6 +305,199 @@
     color: var(--error);
 }
 
+/* ── Sandbox (E-3) ─────────────────────────────────────────────────
+   Même palette ambre que le reste du Workspace — pas de nouvelle
+   identité visuelle pour cette carte (brief §6). --sandbox-ok
+   (exécuté avec succès) est la seule couleur ajoutée ici : ni ambre
+   (déjà "pending"/mise en avant) ni --error (déjà "rejected"/refus)
+   ne convenaient pour un troisième état distinct. */
+:root {
+    --sandbox-ok: #5fd68a;
+}
+
+.workspace-sandbox-hint {
+    margin: 0;
+    font-size: 0.72rem;
+    line-height: 1.4;
+    color: var(--text-dim);
+}
+
+.workspace-sandbox-hint code {
+    font-family: var(--workspace-mono);
+    color: var(--amber-neon);
+}
+
+#sandbox-form {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+#sandbox-code {
+    resize: vertical;
+    min-height: 90px;
+    padding: 8px 10px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--amber-border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: var(--workspace-mono);
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+#sandbox-code:focus-visible {
+    outline: 2px solid var(--amber-neon);
+    outline-offset: 1px;
+}
+
+#sandbox-submit {
+    align-self: flex-end;
+    padding: 6px 14px;
+    background: rgba(240, 169, 78, 0.12);
+    border: 1px solid var(--amber-border);
+    border-radius: var(--workspace-radius);
+    color: var(--amber-neon);
+    font-family: var(--workspace-mono);
+    font-size: 0.76rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+#sandbox-submit:hover {
+    background: rgba(240, 169, 78, 0.22);
+    box-shadow: var(--glow-amber);
+}
+
+#sandbox-submit:focus-visible {
+    outline: 2px solid var(--amber-neon);
+    outline-offset: 2px;
+}
+
+.workspace-sandbox-item {
+    gap: 8px;
+}
+
+.workspace-sandbox-item-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.workspace-sandbox-badge {
+    flex: 0 0 auto;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border: 1px solid currentcolor;
+}
+
+.workspace-sandbox-badge.status-pending {
+    color: var(--amber-neon);
+    background: rgba(240, 169, 78, 0.1);
+}
+
+.workspace-sandbox-badge.status-executed {
+    color: var(--sandbox-ok);
+    background: rgba(95, 214, 138, 0.1);
+}
+
+.workspace-sandbox-badge.status-rejected {
+    color: var(--error);
+    background: rgba(255, 85, 102, 0.1);
+}
+
+.workspace-sandbox-code {
+    margin: 0;
+    padding: 8px 10px;
+    max-height: 140px;
+    overflow: auto;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(240, 169, 78, 0.14);
+    border-radius: 4px;
+    font-family: var(--workspace-mono);
+    font-size: 0.76rem;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text);
+}
+
+.workspace-sandbox-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.workspace-sandbox-run-btn,
+.workspace-sandbox-reject-btn {
+    flex: 1 1 auto;
+    padding: 5px 0;
+    border-radius: 4px;
+    font-family: var(--workspace-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.workspace-sandbox-run-btn {
+    background: rgba(95, 214, 138, 0.12);
+    border: 1px solid rgba(95, 214, 138, 0.5);
+    color: var(--sandbox-ok);
+}
+
+.workspace-sandbox-run-btn:hover {
+    background: rgba(95, 214, 138, 0.22);
+}
+
+.workspace-sandbox-reject-btn {
+    background: rgba(255, 85, 102, 0.08);
+    border: 1px solid rgba(255, 85, 102, 0.4);
+    color: var(--error);
+}
+
+.workspace-sandbox-reject-btn:hover {
+    background: rgba(255, 85, 102, 0.18);
+}
+
+.workspace-sandbox-run-btn:disabled,
+.workspace-sandbox-reject-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.workspace-sandbox-output {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.workspace-sandbox-output-label {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+}
+
+.workspace-sandbox-output pre {
+    margin: 0;
+    padding: 6px 8px;
+    max-height: 120px;
+    overflow: auto;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(240, 169, 78, 0.14);
+    border-radius: 4px;
+    font-family: var(--workspace-mono);
+    font-size: 0.72rem;
+    line-height: 1.35;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text);
+}
+
 @media (max-width: 480px) {
     #workspace-header h1 {
         font-size: 0.92rem;

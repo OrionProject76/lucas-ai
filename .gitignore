@@ -75,6 +75,12 @@ data/output.mp3
 data/tts_*.mp3
 data/tts_*.wav
 
+# Zone sandbox (E-3) : scripts proposés/exécutés par le mécanisme
+# d'isolation (modules/sandbox_manager.py) — contenu généré, jamais
+# versionné. README.md excepté pour que le dossier existe dans le dépôt.
+sandbox_workspace/*
+!sandbox_workspace/README.md
+
 # --- Sorties d'inspection ponctuelles ---
 tree_output.txt
 tree_clean.txt

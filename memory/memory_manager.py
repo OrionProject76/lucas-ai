@@ -15,8 +15,9 @@ DB_PATH = Path(__file__).parent / "lucas_memory.db"
 # automatique (_backup_if_migrating) — 1 = état avant la mémoire à 5
 # types (Brique 3, 08/08/2026), 2 = état avant la colonne action_log.params
 # (Brique 2, OS Controller, 08/08/2026), 3 = état avant la table cloud_usage
-# (Brique 1, routeur hybride, 08/08/2026).
-SCHEMA_VERSION = 4
+# (Brique 1, routeur hybride, 08/08/2026), 4 = état avant la table
+# sandbox_runs (Workspace E-3, 09/08/2026).
+SCHEMA_VERSION = 5
 
 # Mémoire à 5 types (IDEAS.md #2) — distincte du transcript de chat
 # (`conversations`) : un fait retenu, pas un message. Listes en Python,
@@ -259,6 +260,27 @@ class MemoryManager:
                 output_tokens INTEGER NOT NULL DEFAULT 0,
                 cost_eur REAL NOT NULL DEFAULT 0.0,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Zone sandbox du Workspace (E-3, cowork_workspace/BRIEF_WORKSPACE_E3_SANDBOX.md,
+        # 09/08/2026) : une proposition de code, son statut, et le résultat
+        # de son exécution isolée s'il y en a eu une. Table dédiée plutôt
+        # qu'une réutilisation d'action_log — une proposition sandbox a un
+        # cycle de vie (pending → executed/rejected) qu'action_log ne
+        # modélise pas (une ligne d'action_log est déjà terminée à
+        # l'écriture, jamais mise à jour ensuite).
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sandbox_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                stdout TEXT,
+                stderr TEXT,
+                exit_code INTEGER,
+                timed_out INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                decided_at TIMESTAMP
             )
         """)
 
@@ -673,6 +695,88 @@ class MemoryManager:
         # l'est aussi — soustraire un aware d'un naïf lève.
         maintenant = datetime.now(UTC).replace(tzinfo=None)
         return (maintenant - precedent).total_seconds() / 60
+
+    # ── Zone sandbox du Workspace (E-3, nouveau, 09/08/2026) ──────────
+    #
+    # save_sandbox_run() ne fait qu'enregistrer une PROPOSITION, jamais
+    # l'exécuter — modules/sandbox_manager.py décide seul quand (et si)
+    # une exécution isolée a lieu. Cette table ne contient donc aucune
+    # logique d'exécution, seulement l'état.
+
+    _SANDBOX_RUN_COLUMNS = (
+        "id", "code", "status", "stdout", "stderr",
+        "exit_code", "timed_out", "created_at", "decided_at",
+    )
+
+    def save_sandbox_run(self, code: str) -> int:
+        """Enregistre une proposition de code, statut 'pending'. Retourne son id."""
+        self.cursor.execute(
+            "INSERT INTO sandbox_runs (code, status) VALUES (?, 'pending')",
+            (code,),
+        )
+        self.conn.commit()
+        assert self.cursor.lastrowid is not None  # garanti juste après un INSERT réussi
+        return self.cursor.lastrowid
+
+    def get_sandbox_run(self, run_id: int) -> dict | None:
+        """Une proposition sandbox par id, ou None si l'id est inconnu."""
+        self.cursor.execute(
+            f"SELECT {', '.join(self._SANDBOX_RUN_COLUMNS)} FROM sandbox_runs WHERE id = ?",
+            (run_id,),
+        )
+        row = self.cursor.fetchone()
+        if row is None:
+            return None
+        result = dict(zip(self._SANDBOX_RUN_COLUMNS, row))
+        result["timed_out"] = bool(result["timed_out"])
+        return result
+
+    def update_sandbox_run(
+        self,
+        run_id: int,
+        *,
+        status: str,
+        stdout: str | None = None,
+        stderr: str | None = None,
+        exit_code: int | None = None,
+        timed_out: bool | None = None,
+    ) -> None:
+        """
+        Fait passer une proposition 'pending' à un statut décidé
+        (executed/rejected), avec le résultat d'exécution s'il y en a un.
+        `decided_at` horodate ce passage — jamais réécrit ensuite, une
+        proposition n'est tranchée qu'une fois (voir
+        modules/sandbox_manager.py, qui refuse un second execute()/reject()
+        sur une proposition déjà décidée).
+        """
+        self.cursor.execute(
+            """
+            UPDATE sandbox_runs
+            SET status = ?, stdout = ?, stderr = ?, exit_code = ?,
+                timed_out = ?, decided_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            """,
+            (status, stdout, stderr, exit_code, int(bool(timed_out)), run_id),
+        )
+        self.conn.commit()
+
+    def load_recent_sandbox_runs(self, limit: int = 20) -> list[dict]:
+        """Les N propositions sandbox les plus récentes, les plus récentes en premier."""
+        self.cursor.execute(
+            f"""
+            SELECT {', '.join(self._SANDBOX_RUN_COLUMNS)}
+            FROM sandbox_runs
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        rows = []
+        for row in self.cursor.fetchall():
+            entry = dict(zip(self._SANDBOX_RUN_COLUMNS, row))
+            entry["timed_out"] = bool(entry["timed_out"])
+            rows.append(entry)
+        return rows
 
     def close(self):
         self.conn.close()

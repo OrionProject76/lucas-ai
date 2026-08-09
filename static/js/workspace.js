@@ -13,7 +13,8 @@
 // seul modèle, testé sur mobile ET PC (voir ROADMAP.md §5.77).
 
 (function () {
-    const CARD_IDS = ["reports", "requests", "actions", "objectives"];
+    const CARD_IDS = ["reports", "requests", "actions", "objectives", "sandbox"];
+    const SANDBOX_STATUS_LABELS = { pending: "en attente", executed: "exécuté", rejected: "rejeté" };
     const CARD_SIZES = ["S", "M", "L", "XL"];
 
     function gridEl() {
@@ -133,6 +134,134 @@
         }
     }
 
+    // ── Sandbox (E-3) ────────────────────────────────────────────────
+    //
+    // Construite avec createElement/textContent comme le reste de ce
+    // fichier — le code proposé, stdout et stderr viennent de Cyril ou
+    // d'une future proposition automatisée, jamais d'une source de
+    // confiance à traiter comme du HTML.
+
+    function appendSandboxOutputBlock(container, label, text) {
+        if (!text) return;
+        const wrapper = document.createElement("div");
+        wrapper.className = "workspace-sandbox-output";
+        const heading = document.createElement("div");
+        heading.className = "workspace-sandbox-output-label";
+        heading.textContent = label;
+        wrapper.appendChild(heading);
+        const pre = document.createElement("pre");
+        pre.textContent = text;
+        wrapper.appendChild(pre);
+        container.appendChild(wrapper);
+    }
+
+    function renderSandboxRuns(container, runs) {
+        container.textContent = "";
+        if (!runs || runs.length === 0) {
+            renderEmpty(container, "Aucune proposition pour l'instant.");
+            return;
+        }
+        for (const run of runs) {
+            const item = document.createElement("div");
+            item.className = `workspace-item workspace-sandbox-item status-${run.status}`;
+
+            const header = document.createElement("div");
+            header.className = "workspace-sandbox-item-header";
+            const badge = document.createElement("span");
+            badge.className = `workspace-sandbox-badge status-${run.status}`;
+            badge.textContent = SANDBOX_STATUS_LABELS[run.status] || run.status;
+            header.appendChild(badge);
+            const meta = document.createElement("span");
+            meta.className = "workspace-item-meta";
+            meta.textContent = `#${run.id} · ${formatDate(run.created_at)}`;
+            header.appendChild(meta);
+            item.appendChild(header);
+
+            const code = document.createElement("pre");
+            code.className = "workspace-sandbox-code";
+            code.textContent = run.code;
+            item.appendChild(code);
+
+            if (run.status === "pending") {
+                const actions = document.createElement("div");
+                actions.className = "workspace-sandbox-actions";
+                const runBtn = document.createElement("button");
+                runBtn.type = "button";
+                runBtn.className = "workspace-sandbox-run-btn";
+                runBtn.dataset.action = "execute";
+                runBtn.dataset.runId = String(run.id);
+                runBtn.textContent = "Exécuter";
+                const rejectBtn = document.createElement("button");
+                rejectBtn.type = "button";
+                rejectBtn.className = "workspace-sandbox-reject-btn";
+                rejectBtn.dataset.action = "reject";
+                rejectBtn.dataset.runId = String(run.id);
+                rejectBtn.textContent = "Rejeter";
+                actions.appendChild(runBtn);
+                actions.appendChild(rejectBtn);
+                item.appendChild(actions);
+            } else if (run.status === "executed") {
+                const resultMeta = document.createElement("div");
+                resultMeta.className = "workspace-item-meta";
+                resultMeta.textContent = run.timed_out
+                    ? "Délai dépassé — script interrompu."
+                    : `Code de sortie : ${run.exit_code}`;
+                item.appendChild(resultMeta);
+                appendSandboxOutputBlock(item, "Sortie standard", run.stdout);
+                appendSandboxOutputBlock(item, "Erreurs", run.stderr);
+            }
+
+            container.appendChild(item);
+        }
+    }
+
+    async function submitSandboxCode(code) {
+        const response = await fetch("/workspace/sandbox/submit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders() },
+            body: JSON.stringify({ code }),
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    }
+
+    async function decideSandboxRun(runId, action) {
+        const response = await fetch(`/workspace/sandbox/${runId}/${action}`, {
+            method: "POST",
+            headers: authHeaders(),
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    }
+
+    function initSandbox() {
+        const form = document.getElementById("sandbox-form");
+        const textarea = document.getElementById("sandbox-code");
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const code = textarea.value;
+            if (!code.trim()) return;
+            try {
+                await submitSandboxCode(code);
+                textarea.value = "";
+                await loadSummary();
+            } catch (error) {
+                // Le formulaire reste rempli : Cyril peut relire/corriger et
+                // renvoyer, plutôt que de perdre ce qu'il vient de taper.
+            }
+        });
+
+        document.getElementById("sandbox-list").addEventListener("click", async (event) => {
+            const button = event.target.closest("[data-action]");
+            if (!button) return;
+            button.disabled = true;
+            try {
+                await decideSandboxRun(button.dataset.runId, button.dataset.action);
+                await loadSummary();
+            } catch (error) {
+                button.disabled = false;
+            }
+        });
+    }
+
     async function loadSummary() {
         const statusEl = document.getElementById("workspace-status");
         statusEl.textContent = "Chargement...";
@@ -156,11 +285,12 @@
             );
             renderActions(document.getElementById("actions-list"), summary.recent_actions);
             renderObjectives(document.getElementById("objectives-list"), summary.objectives);
+            renderSandboxRuns(document.getElementById("sandbox-list"), summary.sandbox_runs);
 
             statusEl.textContent = `Actualisé à ${new Date().toLocaleTimeString("fr-FR")}`;
         } catch (error) {
             statusEl.textContent = "";
-            for (const id of ["reports-list", "requests-list", "actions-list", "objectives-list"]) {
+            for (const id of ["reports-list", "requests-list", "actions-list", "objectives-list", "sandbox-list"]) {
                 const container = document.getElementById(id);
                 container.textContent = "";
                 const err = document.createElement("div");
@@ -361,6 +491,7 @@
         saveTokenFromUrl();
         initSizeControls();
         initDragAndDrop();
+        initSandbox();
         document.getElementById("workspace-refresh").addEventListener("click", () => {
             loadLayout();
             loadSummary();
