@@ -8722,6 +8722,97 @@ pour continuer à tester sans attendre un cycle d'activation naturel.
   d'appairage (`?token=...`) — limite déjà connue et documentée
   (`app.js`, ROADMAP.md §5.33), sans rapport avec cette session.
 
+## 5.81 Compaction du Workspace PC — tenir sur un écran sans défiler, compromis mobile documenté, 09/08/2026
+
+Demande de Cyril : les 6 cartes doivent tenir dans la fenêtre visible sans
+défilement de PAGE (seul le défilement interne à chaque `.workspace-list`
+reste), en gardant la possibilité d'agrandir une carte précise.
+
+### Défaut S partout — Python, JS, HTML, et l'état réel de Cyril
+
+`modules/workspace_manager.py::_default_layout()` et le fallback JS
+(`static/js/workspace.js`, deux occurrences) passent de `"M"` à `"S"` ;
+`static/workspace.html` : les 6 `class="card-size-M"` → `card-size-S`.
+Une disposition réelle DÉJÀ enregistrée pour Cyril (Sandbox et Détecteur
+d'économies laissés en XL après des sessions de test précédentes)
+n'aurait pas reflété ce nouveau défaut — remise à plat explicitement
+(`workspace_manager.save_layout(CARD_IDS, {c: "S" for c in CARD_IDS})`),
+pas seulement le code changé sans effet visible pour lui.
+
+### Mesuré, pas deviné — l'écran cible réel est 1280×720, pas 1568×900
+
+Les sessions de test précédentes (§5.78-79) utilisaient une fenêtre de
+navigateur d'environ 1568 px de large, jamais remise en question. L'écran
+RÉEL de Cyril, déjà mesuré ailleurs (OLED 4K, Windows à 300 %), ne laisse
+que **1280×720 points logiques** — testé cette fois à cette résolution
+exacte via un `<iframe>` de taille fixée (même méthode que §5.77-80),
+plutôt que la fenêtre de navigateur de l'environnement de test, dont le
+dimensionnement s'est révélé peu fiable sur cet écran à plusieurs
+reprises (§5.78, §5.79, §5.80).
+
+Premier passage (S à 220px de liste, hérité de la valeur d'avant cette
+session) : **537px de débordement mesurés** (`grid.scrollHeight -
+grid.clientHeight`, pas une impression visuelle). Cause isolée par
+mesure des hauteurs de chaque carte, pas supposée : 4 cartes à liste
+unique tiennent sur une ligne (~169px chacune), mais la carte Détecteur
+d'économies (3 listes empilées — récurrentes/hausses/doublons, contre 1
+seule pour les autres cartes) atteignait 857px, étirant par
+`align-items: stretch` (flex par défaut) la carte Sandbox voisine à la
+même hauteur sur cette ligne.
+
+### Corrigé — deux réductions ciblées, mesurées jusqu'à zéro débordement
+
+- `.card-size-S .workspace-list` : 220px → 100px (règle générique,
+  s'applique à toutes les cartes à liste unique).
+- Nouvelle règle plus spécifique (3 classes, l'emporte sur la précédente
+  quel que soit l'ordre dans le fichier) :
+  `.card-size-S .workspace-savings-section .workspace-list { max-height: 64px }`
+  — sans elle, la carte à 3 listes aurait hérité de la même limite que
+  les cartes à liste unique et resterait 3× trop haute.
+- `#workspace-grid` : `overflow-y: auto` → `overflow: hidden` +
+  `min-height: 0` ajouté (indispensable : un flex-item ne se laisse pas
+  contraindre sous la hauteur naturelle de son contenu sans lui, rendant
+  `overflow: hidden` sans effet).
+
+**Revérifié après correctif, mêmes mesures** : `overflowPx: 0` exactement
+— 4 cartes simples à 169px (ligne 1), Sandbox et Détecteur d'économies à
+405px chacune, étirées à la même hauteur (ligne 2), total 588px dans
+659px disponibles (marge de 71px). M/L/XL (agrandissement volontaire,
+brief non touché ici) restent à leurs valeurs existantes.
+
+### Compromis mobile — documenté, pas un oubli
+
+À 412×915 (viewport S25 Ultra réel), les 6 cartes empilées en une seule
+colonne (règle déjà existante, `@media (max-width: 480px)`) demandent
+1345px de hauteur cumulée contre 854px disponibles — **491px de
+débordement**, mesuré. Contrairement au PC, aucune réduction
+supplémentaire de taille S n'aurait suffi sans rendre le contenu
+illisible (une carte à liste unique tient déjà à 64-100px, en-dessous il
+n'y a plus la place d'afficher un item complet).
+
+**Décision, à la lettre de la demande** : le défilement de page reste
+actif sur mobile, réactivé explicitement dans le bloc
+`@media (max-width: 480px)` déjà existant (`#workspace-grid { overflow-y:
+auto }`, qui écrase le `overflow: hidden` du PC à cette largeur). Rien
+n'est tronqué : toutes les cartes restent visibles et lisibles, au prix
+d'un défilement que le PC n'a plus.
+
+### Vérifié réellement
+
+- `test_workspace_manager.py` : 2 tests mis à jour (défaut attendu passe
+  de "M" à "S" partout) — suite complète 1594 passed, `ruff`/`mypy`
+  propres (aucun fichier `.py` supplémentaire touché au-delà du défaut).
+- **Mesures DOM réelles**, PC (1280×720, iframe) : `overflowPx: 0`, avant/
+  après comparé chiffre à chiffre, pas une impression visuelle seule.
+- **Mesures DOM réelles**, mobile (412×915, iframe) : `overflowPx: 491`,
+  confirmé attendu et accepté (compromis), `overflowYComputed: "auto"`
+  confirme que le défilement de secours est bien actif à cette largeur.
+- Captures à l'appui aux deux largeurs : PC (les 6 cartes visibles sans
+  défiler, chaque liste avec son propre ascenseur interne), mobile (page
+  défile, cartes lisibles, aucun chevauchement).
+- Disposition réelle de Cyril remise à "S" partout, confirmée par lecture
+  directe (`workspace_manager.get_layout()`) après écriture.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

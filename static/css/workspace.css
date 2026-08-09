@@ -116,9 +116,19 @@
    le navigateur reflow — pas de recalcul de grid-column/grid-row à gérer
    à la main pour chaque taille. */
 
+/* Compaction du 09/08/2026 : plus de défilement de la grille elle-même
+   sur PC — seules les .workspace-list internes défilent. min-height:0 est
+   indispensable ici : sans lui, un flex-item ne se laisse pas contraindre
+   sous la hauteur naturelle de son contenu, et `overflow: hidden`
+   n'aurait alors jamais l'occasion de s'appliquer. Écran cible réel
+   mesuré (pas supposé) : 1280×720 points logiques (OLED 4K à 300 %,
+   voir CLAUDE.md/ROADMAP.md) — le compromis mobile ci-dessous, à
+   @media (max-width: 480px), restaure le défilement : cf. son
+   commentaire pour le raisonnement. */
 #workspace-grid {
     flex: 1 1 auto;
-    overflow-y: auto;
+    min-height: 0;
+    overflow: hidden;
     display: flex;
     flex-wrap: wrap;
     align-content: flex-start;
@@ -151,7 +161,13 @@
 .workspace-card.card-size-L { flex-basis: 460px; max-width: 460px; }
 .workspace-card.card-size-XL { flex-basis: 100%; max-width: 100%; }
 
-.workspace-card.card-size-S .workspace-list { max-height: 220px; }
+/* 220px -> 100px (09/08/2026, compaction) : S est désormais le défaut
+   affiché en permanence (6 cartes), plus une taille agrandie occasionnelle
+   — mesuré réellement à 1280×720 (écran de Cyril) : 220px par carte
+   laissait un débordement de 537px sur la ligne Sandbox/Détecteur
+   d'économies. M/L/XL, réservées à un agrandissement volontaire,
+   restent inchangées. */
+.workspace-card.card-size-S .workspace-list { max-height: 100px; }
 .workspace-card.card-size-M .workspace-list { max-height: 340px; }
 .workspace-card.card-size-L .workspace-list { max-height: 420px; }
 .workspace-card.card-size-XL .workspace-list { max-height: 520px; }
@@ -525,6 +541,17 @@
     opacity: 0.85;
 }
 
+/* Compaction du 09/08/2026 : cette carte porte TROIS listes (récurrentes/
+   hausses/doublons) là où les autres n'en ont qu'une — leur appliquer la
+   même limite générique (.card-size-S .workspace-list, 100px) aurait
+   donné 3×100px+en-têtes, mesuré à 857px de haut à 1280×720, largement
+   au-dessus de ce qu'une ligne de la grille peut offrir. Sélecteur plus
+   spécifique (3 classes vs 2) : l'emporte sur la règle générique quel
+   que soit l'ordre des déclarations dans ce fichier. */
+.workspace-card.card-size-S .workspace-savings-section .workspace-list {
+    max-height: 64px;
+}
+
 .workspace-duplicate-item {
     display: flex;
     flex-direction: column;
@@ -551,8 +578,16 @@
         font-size: 0.92rem;
     }
 
+    /* Compromis mobile documenté (09/08/2026, demande explicite de
+       Cyril) : à 412 px, les 6 cartes empilées en une seule colonne
+       (voir la règle flex-basis:100% ci-dessous) ne peuvent pas tenir
+       dans la hauteur de l'écran sans réduire leur contenu à
+       l'illisible. Le défilement de la grille (supprimé sur PC
+       ci-dessus) est donc réactivé ici, à cette seule largeur — un
+       comportement différent par plateforme, choisi, pas un oubli. */
     #workspace-grid {
         padding: 10px;
+        overflow-y: auto;
     }
 
     /* Toutes les tailles se replient en pleine largeur sur mobile — la

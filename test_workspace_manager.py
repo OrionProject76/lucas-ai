@@ -225,13 +225,14 @@ def test_summary_assembles_all_six_sections(monkeypatch, tmp_path) -> None:
 
 
 def test_get_layout_returns_default_when_nothing_saved(monkeypatch, tmp_path) -> None:
+    """"S" par défaut depuis le 09/08/2026 (compaction, 6 cartes) — auparavant "M"."""
     monkeypatch.setattr(memory_manager, "DB_PATH", tmp_path / "test_layout_default.db")
     layout = workspace_manager.get_layout()
     assert layout == {
         "order": ["reports", "requests", "actions", "objectives", "sandbox", "savings"],
         "sizes": {
-            "reports": "M", "requests": "M", "actions": "M",
-            "objectives": "M", "sandbox": "M", "savings": "M",
+            "reports": "S", "requests": "S", "actions": "S",
+            "objectives": "S", "sandbox": "S", "savings": "S",
         },
     }
 
@@ -299,7 +300,7 @@ def test_get_layout_falls_back_to_default_on_corrupted_state(monkeypatch, tmp_pa
     assert workspace_manager.get_layout() == {
         "order": ["reports", "requests", "actions", "objectives", "sandbox", "savings"],
         "sizes": {
-            "reports": "M", "requests": "M", "actions": "M",
-            "objectives": "M", "sandbox": "M", "savings": "M",
+            "reports": "S", "requests": "S", "actions": "S",
+            "objectives": "S", "sandbox": "S", "savings": "S",
         },
     }

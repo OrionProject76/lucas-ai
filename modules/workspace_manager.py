@@ -166,7 +166,13 @@ _LAYOUT_STATE_KEY = "workspace_layout"
 
 
 def _default_layout() -> dict:
-    return {"order": list(CARD_IDS), "sizes": dict.fromkeys(CARD_IDS, "M")}
+    """
+    "S" par défaut depuis le 09/08/2026 (compaction du Workspace, 6
+    cartes) — auparavant "M". Cyril peut toujours agrandir une carte
+    précise via les boutons de taille déjà existants ; ce défaut ne
+    retire aucune fonction, seulement l'encombrement initial.
+    """
+    return {"order": list(CARD_IDS), "sizes": dict.fromkeys(CARD_IDS, "S")}
 
 
 class InvalidLayout(ValueError):

@@ -423,7 +423,11 @@
             if (card) grid.appendChild(card);
         }
         for (const cardId of CARD_IDS) {
-            applyCardSize(cardId, (layout.sizes && layout.sizes[cardId]) || "M");
+            // "S" par défaut (09/08/2026, compaction) — un ancien état
+            // persisté (Cyril, sessions précédentes) qui ne couvrirait pas
+            // encore une carte reçue depuis retombe sur le nouveau défaut
+            // compact, pas sur l'ancien "M".
+            applyCardSize(cardId, (layout.sizes && layout.sizes[cardId]) || "S");
         }
     }
 
@@ -435,7 +439,7 @@
         const sizes = {};
         for (const cardId of CARD_IDS) {
             const card = cardEl(cardId);
-            sizes[cardId] = CARD_SIZES.find((s) => card.classList.contains(`card-size-${s}`)) || "M";
+            sizes[cardId] = CARD_SIZES.find((s) => card.classList.contains(`card-size-${s}`)) || "S";
         }
         return { order, sizes };
     }
