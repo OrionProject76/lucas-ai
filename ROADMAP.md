@@ -8813,6 +8813,106 @@ d'un défilement que le PC n'a plus.
 - Disposition réelle de Cyril remise à "S" partout, confirmée par lecture
   directe (`workspace_manager.get_layout()`) après écriture.
 
+## 5.82 Poste de Commandement IA (E-5) — registre réel, deux capacités qui ne sont PAS ce qu'on croyait, 09/08/2026
+
+Brief : `cowork_workspace/BRIEF_POSTE_COMMANDEMENT_IA_E5.md`. Objectif :
+un espace listant les capacités réellement actives de Luca's, avec leur
+statut — V1 réaliste explicitement cadrée par le brief lui-même : pas de
+téléchargement de plugin/connecteur, aucun mécanisme de ce genre
+n'existe. Lecture seule stricte.
+
+### Ambiguïté réelle tranchée avant de construire — page séparée, pas une 7e carte
+
+Le brief laissait le choix, à clarifier si ambigu (§4). Or la session
+précédente (§5.81) venait de compacter les 6 cartes du Workspace pour
+tenir exactement dans 1280×720 avec seulement 71px de marge — une 7e
+carte aurait rouvert cette compaction immédiatement (nouvelle ligne
+entière). Question posée explicitement à Cyril plutôt que supposée :
+**page séparée confirmée**, cohérente avec la façon dont `workspace.html`
+lui-même est déjà séparé du chat.
+
+### Étape préalable — exploration réelle, pas une liste supposée
+
+Croisé `core/lucas_core.py` (imports + appels `should_use_*`),
+`lucas_daemon.py`, `api/server.py`, avec l'audit de nettoyage du
+09/08/2026
+(`cowork_workspace/reports/Audit_Nettoyage_LucasAI_2026-08-09.md`) pour
+exclure ce qui y est identifié comme orphelin. **26 capacités
+confirmées**, réparties selon les 5 couches déjà documentées dans
+`CLAUDE.md` (+ Cœur, + Sécurité, absentes de la numérotation à 5 mais
+distinctes) — pas une catégorisation inventée pour ce module.
+
+### 🔴 Deux capacités listées dans le brief lui-même ne sont pas ce que le brief supposait
+
+Le brief citait "OS Controller" comme exemple de capacité à recenser,
+sans préjuger de son statut. L'exploration a trouvé mieux que "actif" ou
+"inactif" — un TROISIÈME statut, nécessaire pour rester honnête :
+
+- **`core/os_controller.py`** — recherché dans TOUT le dépôt (`grep` sur
+  l'import, pas une supposition) : aucune référence hors de son propre
+  test. Construit et testé (Brique 2, 08/08/2026), mais jamais appelé
+  par une route API ni un déclenchement chat — Cyril ne peut pas
+  l'utiliser aujourd'hui, quoi qu'en dise son statut de "module
+  existant". Nouveau statut `"construit, non branché"`, distinct
+  d'"actif" ET d'"inactif" (qui suppose un drapeau qu'on pourrait
+  rallumer — ici il n'y a rien à rallumer, il n'y a rien de branché).
+- **`modules/vram_watchdog.py`** — même trouvaille que l'audit de
+  nettoyage cité par le brief lui-même : code réel, testé, mais aucune
+  tâche planifiée ne le démarre. Statut `"manuel"`.
+
+Présenter ces deux comme "actif" aurait été une fausse promesse (RT-2) ;
+les cacher aurait contredit l'étape préalable du brief ("établir la
+liste réelle"). Un troisième et quatrième statut réglent les deux à la
+fois, honnêtement.
+
+### `modules/capability_registry.py` — deux natures de statut, jamais mélangées
+
+Pour les capacités portant un VRAI drapeau dans `config.py`
+(`VLM_ENABLED`, `REASONING_ENGINE_ENABLED`, `OCR_ENABLED`,
+`INTENT_CLASSIFIER_ENABLED`) : le statut est **calculé à l'appel**,
+jamais figé en texte — si Cyril change le drapeau, ce registre le
+reflète sans toucher à ce fichier. Pour le reste (câblé ou non de façon
+structurelle, pas un booléen) : statut figé à `VERIFIED_AT`
+("2026-08-09"), avec la même honnêteté que le tableau de modèles de
+`CLAUDE.md` sur ce que "figé" veut dire — un instantané vérifié, pas une
+garantie perpétuelle.
+
+### Frontend — page séparée, même palette, aucune nouvelle identité visuelle
+
+`static/command-center.html` + `static/js/command-center.js` — recharge
+`workspace.css` directement (tokens ambre déjà là, pas dupliqués une
+troisième fois) et réutilise `.workspace-item`/`.workspace-item-title`/
+`.workspace-item-meta` tels quels. Nouveau : regroupement par catégorie
+(`.command-center-category`) et badge de statut à 4 couleurs (vert=actif,
+gris=inactif, ambre=manuel/construit-non-branché — même ambre pour les
+deux, aucun des deux n'est un refus ni une certitude d'activité).
+`createElement`/`textContent` partout. Page qui défile normalement — pas
+de contrainte de hauteur façon §5.81, cette page n'a jamais eu l'exigence
+"tout sur un écran" du Workspace.
+
+Icône `🧭` ajoutée à `#workspace-controls` (`static/workspace.html`),
+même position que les contrôles existants — pas de nouveau mécanisme de
+navigation.
+
+### Vérifié réellement
+
+- **11 nouveaux tests** (`test_capability_registry.py`, 9 — dont la
+  garde contre `stt_manager` et la vérification que OS Controller/VRAM
+  Watchdog ne sortent jamais "actif" ; `test_server.py`, 2 sur la route)
+  — suite complète 1605 passed, `ruff`/`mypy` propres (134 fichiers).
+- Serveur live redémarré, `/capabilities` vérifié par `curl` : 26
+  entrées, 7 catégories, 4 statuts distincts vus en réel.
+- **Navigateur réel**, PC (1280×720) et mobile (412px), même méthode
+  qu'aux sessions précédentes : page lisible aux deux largeurs, badges
+  de statut vérifiés par requête DOM directe (les 4 statuts non-actifs
+  portent la bonne classe CSS). Icône Workspace → Poste de Commandement
+  confirmée par lecture directe du DOM (`href`, `title`).
+- Aucune régression : Workspace PC rechargé après l'ajout de l'icône,
+  toujours 6 cartes compactes (§5.81) sans changement.
+
+Détail complet de la session :
+`cowork_workspace/SESSION_LOG_POSTE_COMMANDEMENT_E5_2026-08-09.md`.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

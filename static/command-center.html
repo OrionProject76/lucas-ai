@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Même garde que workspace.html/index.html (ROADMAP.md §5.33) : un
+         lien d'appairage porte le jeton en query string, jamais dans un
+         Referer sortant. -->
+    <meta name="referrer" content="no-referrer" />
+    <title>Poste de Commandement IA — Luca's</title>
+    <link rel="icon" href="/app/icons/icon-192.png" />
+    <meta name="theme-color" content="#00050a" />
+    <link rel="stylesheet" href="/app/css/style.css" />
+    <link rel="stylesheet" href="/app/css/workspace.css" />
+</head>
+<body>
+    <!-- Poste de Commandement IA (E-5, cowork_workspace/BRIEF_POSTE_COMMANDEMENT_IA_E5.md).
+         Page séparée du Workspace (pas une 7e carte) : la compaction du
+         09/08/2026 (ROADMAP.md §5.81) ne laisse pas de marge pour une carte
+         de plus sans la refaire — choix confirmé par Cyril. Lecture seule
+         stricte (brief §4) : aucun bouton d'action sur cette page. -->
+    <div id="command-center">
+        <header id="command-center-header">
+            <h1>Poste de Commandement IA</h1>
+            <div id="command-center-controls">
+                <span id="command-center-status"></span>
+                <button type="button" id="command-center-refresh" class="icon-btn" title="Actualiser">↻</button>
+                <a href="/app/workspace.html" class="icon-btn" title="Retour au Workspace">🖥️</a>
+            </div>
+        </header>
+
+        <main id="command-center-body">
+            <p class="command-center-hint">
+                Lecture seule — décrit les capacités réellement présentes dans
+                le code (vérifié le <span id="command-center-verified-at"></span>).
+                N'installe, ne configure et ne modifie rien.
+            </p>
+            <div id="command-center-categories"></div>
+        </main>
+    </div>
+
+    <script src="/app/js/command-center.js"></script>
+</body>
+</html>

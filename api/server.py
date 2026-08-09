@@ -35,6 +35,8 @@ from core.lucas_core import LucasCore
 from core.router import mentions_pc_explicitly, should_use_vision
 from core.world_model import get_snapshot
 from memory.memory_manager import save_event_from_any_thread
+from modules.capability_registry import VERIFIED_AT as CAPABILITY_REGISTRY_VERIFIED_AT
+from modules.capability_registry import list_capabilities
 from modules.sandbox_manager import SandboxError
 from modules.sandbox_manager import execute as sandbox_execute
 from modules.sandbox_manager import reject as sandbox_reject
@@ -464,6 +466,34 @@ def workspace_sandbox_reject_route(run_id: int):
         return sandbox_reject(run_id)
     except SandboxError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ── Poste de Commandement IA (E-5, 09/08/2026) — lecture seule stricte ──
+#
+# Brief : cowork_workspace/BRIEF_POSTE_COMMANDEMENT_IA_E5.md. Page séparée
+# (pas une carte du Workspace — la compaction du 09/08/2026, §5.81, laisse
+# trop peu de marge pour une 7e carte sans la refaire, choix confirmé par
+# Cyril). Même garde de jeton que le reste du Workspace : décrit
+# l'architecture réelle de Luca's, pas une donnée personnelle de Cyril,
+# mais reste réservé à qui a déjà le jeton, par cohérence.
+
+
+@app.get("/capabilities", dependencies=[Depends(verify_token)])
+def capabilities_route():
+    """Instantané des capacités réelles de Luca's — modules/capability_registry.py."""
+    return {
+        "verified_at": CAPABILITY_REGISTRY_VERIFIED_AT,
+        "capabilities": [
+            {
+                "name": c.name,
+                "category": c.category,
+                "description": c.description,
+                "status": c.status,
+                "detail": c.detail,
+            }
+            for c in list_capabilities()
+        ],
+    }
 
 
 # ── WebSocket : canal unique Luca's ↔ Godot ─────────────────────

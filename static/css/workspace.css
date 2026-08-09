@@ -573,6 +573,161 @@
     border: 1px solid currentcolor;
 }
 
+/* ── Poste de Commandement IA (E-5) ──────────────────────────────────
+   Page séparée (static/command-center.html), pas une carte — reprend
+   directement la palette/les tokens de ce fichier (même hint que le
+   commentaire d'en-tête : chargé sur plusieurs pages, pas de mécanisme
+   de partage entre elles au-delà d'un `<link>` commun). Contenu simple
+   (liste par catégorie), page qui défile normalement — aucune contrainte
+   de hauteur façon §5.81, cette page n'a pas la demande "tout sur un
+   écran" du Workspace. */
+
+#command-center {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    background-color: var(--bg);
+    font-family: var(--workspace-mono);
+}
+
+#command-center-header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--amber-border);
+    background: var(--amber-panel-bg);
+    backdrop-filter: var(--workspace-blur);
+    -webkit-backdrop-filter: var(--workspace-blur);
+    box-shadow: var(--glow-amber);
+}
+
+#command-center-header h1 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--amber-neon);
+}
+
+#command-center-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#command-center-status {
+    font-size: 0.74rem;
+    color: var(--text-dim);
+    white-space: nowrap;
+}
+
+#command-center-controls .icon-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 0.9rem;
+    border-radius: var(--workspace-radius);
+    border-color: var(--amber-border);
+    background: rgba(240, 169, 78, 0.08);
+    box-shadow: var(--glow-amber);
+}
+
+#command-center-controls .icon-btn:hover,
+#command-center-controls .icon-btn:active {
+    background: rgba(240, 169, 78, 0.22);
+    box-shadow: var(--glow-amber-strong);
+}
+
+#command-center-controls .icon-btn:focus-visible {
+    outline: 2px solid var(--amber-neon);
+    outline-offset: 2px;
+    box-shadow: var(--glow-amber-strong);
+}
+
+#command-center-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 18px 24px 32px;
+}
+
+.command-center-hint {
+    margin: 0 0 20px;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--text-dim);
+    max-width: 720px;
+}
+
+.command-center-category {
+    margin-bottom: 24px;
+}
+
+.command-center-category-heading {
+    margin: 0 0 10px;
+    font-size: 0.88rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--amber-neon);
+    border-bottom: 1px solid var(--amber-border);
+    padding-bottom: 6px;
+}
+
+.command-center-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 720px;
+}
+
+.command-center-item-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.command-center-item-detail {
+    margin-top: 3px;
+    font-size: 0.68rem;
+    line-height: 1.4;
+    color: var(--text-dim);
+    opacity: 0.75;
+}
+
+.command-center-status-badge {
+    flex: 0 0 auto;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 0.64rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border: 1px solid currentcolor;
+    white-space: nowrap;
+}
+
+.command-center-status-badge.status-actif {
+    color: var(--sandbox-ok);
+    background: rgba(95, 214, 138, 0.1);
+}
+
+.command-center-status-badge.status-inactif {
+    color: var(--text-dim);
+    background: rgba(111, 168, 184, 0.08);
+}
+
+.command-center-status-badge.status-manuel,
+.command-center-status-badge.status-construit-non-branche {
+    color: var(--amber-neon);
+    background: rgba(240, 169, 78, 0.1);
+}
+
 @media (max-width: 480px) {
     #workspace-header h1 {
         font-size: 0.92rem;
@@ -600,5 +755,13 @@
     .workspace-card.card-size-XL {
         flex-basis: 100%;
         max-width: 100%;
+    }
+
+    #command-center-header h1 {
+        font-size: 0.92rem;
+    }
+
+    #command-center-body {
+        padding: 12px 14px 24px;
     }
 }

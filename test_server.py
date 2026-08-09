@@ -577,6 +577,40 @@ def test_workspace_sandbox_reject_rejects_an_unknown_id_with_400(client, monkeyp
     assert "inconnue" in response.json()["detail"]
 
 
+# ── Poste de Commandement IA (E-5, 09/08/2026) ──────────────────────────
+
+
+def test_capabilities_requires_the_token(client, monkeypatch) -> None:
+    monkeypatch.setattr("api.server.API_TOKEN", "secret123")
+    assert client.get("/capabilities").status_code == 401
+
+
+def test_capabilities_relays_the_registry_without_transformation(client, monkeypatch) -> None:
+    from modules.capability_registry import Capability
+
+    fake_capabilities = [
+        Capability(
+            name="Test", category="Test", description="Une capacité de test",
+            status="actif", detail="test_server.py",
+        ),
+    ]
+    monkeypatch.setattr("api.server.list_capabilities", lambda: fake_capabilities)
+    monkeypatch.setattr("api.server.CAPABILITY_REGISTRY_VERIFIED_AT", "2026-01-01")
+
+    response = client.get("/capabilities")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "verified_at": "2026-01-01",
+        "capabilities": [
+            {
+                "name": "Test", "category": "Test", "description": "Une capacité de test",
+                "status": "actif", "detail": "test_server.py",
+            },
+        ],
+    }
+
+
 # ── WebSocket ─────────────────────────────────────────────────────────
 
 def _next_of_type(ws, message_type: str, limit: int = 12) -> dict:
