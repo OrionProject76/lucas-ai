@@ -498,6 +498,54 @@
     color: var(--text);
 }
 
+/* ── Détecteur d'économies (B-2) ──────────────────────────────────────
+   Trois sous-listes dans une seule carte, même palette ambre, aucune
+   nouvelle identité visuelle (brief B-2 §6, même règle que la sandbox). */
+
+.workspace-savings-hint {
+    margin: 0;
+    font-size: 0.72rem;
+    line-height: 1.4;
+    color: var(--text-dim);
+}
+
+.workspace-savings-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.workspace-savings-subheading {
+    margin: 0;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--amber-neon);
+    opacity: 0.85;
+}
+
+.workspace-duplicate-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* Ambre, pas --error : une ressemblance détectée demande une vérification,
+   ce n'est pas un refus ni une certitude (RT-2, brief §5). */
+.workspace-tag-review {
+    align-self: flex-start;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 0.64rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--amber-neon);
+    background: rgba(240, 169, 78, 0.12);
+    border: 1px solid currentcolor;
+}
+
 @media (max-width: 480px) {
     #workspace-header h1 {
         font-size: 0.92rem;

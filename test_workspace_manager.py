@@ -4,7 +4,10 @@
 # cowork_workspace/ et de la vraie base memory/lucas_memory.db :
 # REPORTS_DIR/REQUESTS_DIR pointent vers tmp_path, DB_PATH vers un
 # fichier tmp_path — même discipline que test_router.py
-# (test_cloud_budget_available_reflects_real_usage).
+# (test_cloud_budget_available_reflects_real_usage). Même chose pour
+# modules.finance_manager.load_directory (B-2, savings) : monkeypatché à
+# CHAQUE test qui touche summary()/get_savings_analysis(), pour ne jamais
+# lire le vrai data/finance/ de Cyril pendant la suite.
 
 from __future__ import annotations
 
@@ -15,6 +18,21 @@ import pytest
 
 from memory import memory_manager
 from modules import workspace_manager
+
+
+class _FakeFinanceManager:
+    """Même interface que modules.finance_manager.FinanceManager, sans disque."""
+
+    def __init__(self, transactions: list) -> None:
+        self.transactions = transactions
+
+
+def _no_finance_data(monkeypatch) -> None:
+    """Empêche get_savings_analysis()/summary() de lire le vrai data/finance/."""
+    monkeypatch.setattr(
+        "modules.finance_manager.load_directory",
+        lambda: (_FakeFinanceManager([]), []),
+    )
 
 
 def test_list_reports_returns_empty_list_when_directory_is_missing(monkeypatch, tmp_path) -> None:
@@ -140,7 +158,35 @@ def test_list_objectives_returns_empty_list_when_nothing_remembered(monkeypatch,
     assert workspace_manager.list_objectives() == []
 
 
-def test_summary_assembles_all_four_sections(monkeypatch, tmp_path) -> None:
+# ── get_savings_analysis() (B-2, 09/08/2026) ────────────────────────────
+
+
+def test_get_savings_analysis_relays_the_detector_on_real_transactions(monkeypatch) -> None:
+    from datetime import datetime
+
+    transactions = [
+        {"date": datetime(2026, 1, 8), "libelle": "NETFLIX.COM", "montant": -13.49, "categorie": "Abonnements"},  # noqa: DTZ001
+        {"date": datetime(2026, 2, 8), "libelle": "NETFLIX.COM", "montant": -13.49, "categorie": "Abonnements"},  # noqa: DTZ001
+        {"date": datetime(2026, 3, 8), "libelle": "NETFLIX.COM", "montant": -13.49, "categorie": "Abonnements"},  # noqa: DTZ001
+    ]
+    monkeypatch.setattr(
+        "modules.finance_manager.load_directory",
+        lambda: (_FakeFinanceManager(transactions), []),
+    )
+
+    result = workspace_manager.get_savings_analysis()
+    assert set(result.keys()) == {"recurring_charges", "price_increases", "duplicates"}
+    assert len(result["recurring_charges"]) == 1
+
+
+def test_get_savings_analysis_returns_empty_sections_without_finance_data(monkeypatch) -> None:
+    _no_finance_data(monkeypatch)
+    assert workspace_manager.get_savings_analysis() == {
+        "recurring_charges": [], "price_increases": [], "duplicates": [],
+    }
+
+
+def test_summary_assembles_all_six_sections(monkeypatch, tmp_path) -> None:
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir()
     requests_dir = tmp_path / "requests"
@@ -148,6 +194,7 @@ def test_summary_assembles_all_four_sections(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(workspace_manager, "REPORTS_DIR", reports_dir)
     monkeypatch.setattr(workspace_manager, "REQUESTS_DIR", requests_dir)
     monkeypatch.setattr(memory_manager, "DB_PATH", tmp_path / "test_summary.db")
+    _no_finance_data(monkeypatch)
 
     (reports_dir / "Rapport.md").write_text("# Un rapport", encoding="utf-8")
     (requests_dir / "request_test.md").write_text("# Une demande", encoding="utf-8")
@@ -161,13 +208,17 @@ def test_summary_assembles_all_four_sections(monkeypatch, tmp_path) -> None:
 
     result = workspace_manager.summary()
     assert set(result.keys()) == {
-        "reports", "pending_requests", "recent_actions", "objectives", "sandbox_runs",
+        "reports", "pending_requests", "recent_actions", "objectives",
+        "sandbox_runs", "savings",
     }
     assert len(result["reports"]) == 1
     assert len(result["pending_requests"]) == 1
     assert len(result["recent_actions"]) == 1
     assert len(result["objectives"]) == 1
     assert result["sandbox_runs"] == []  # rien proposé dans ce test
+    assert result["savings"] == {
+        "recurring_charges": [], "price_increases": [], "duplicates": [],
+    }
 
 
 # ── Disposition des cartes (glisser-déposer + tailles, 09/08/2026) ─────
@@ -177,20 +228,20 @@ def test_get_layout_returns_default_when_nothing_saved(monkeypatch, tmp_path) ->
     monkeypatch.setattr(memory_manager, "DB_PATH", tmp_path / "test_layout_default.db")
     layout = workspace_manager.get_layout()
     assert layout == {
-        "order": ["reports", "requests", "actions", "objectives", "sandbox"],
+        "order": ["reports", "requests", "actions", "objectives", "sandbox", "savings"],
         "sizes": {
             "reports": "M", "requests": "M", "actions": "M",
-            "objectives": "M", "sandbox": "M",
+            "objectives": "M", "sandbox": "M", "savings": "M",
         },
     }
 
 
 def test_save_layout_then_get_layout_round_trips(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(memory_manager, "DB_PATH", tmp_path / "test_layout_roundtrip.db")
-    new_order = ["objectives", "actions", "requests", "reports", "sandbox"]
+    new_order = ["objectives", "actions", "requests", "reports", "sandbox", "savings"]
     new_sizes = {
         "reports": "S", "requests": "L", "actions": "XL",
-        "objectives": "M", "sandbox": "L",
+        "objectives": "M", "sandbox": "L", "savings": "XL",
     }
 
     workspace_manager.save_layout(new_order, new_sizes)
@@ -202,10 +253,10 @@ def test_save_layout_rejects_unknown_card_id(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(memory_manager, "DB_PATH", tmp_path / "test_layout_unknown.db")
     with pytest.raises(workspace_manager.InvalidLayout):
         workspace_manager.save_layout(
-            ["reports", "requests", "actions", "objectives", "un_intrus"],
+            ["reports", "requests", "actions", "objectives", "sandbox", "un_intrus"],
             {
                 "reports": "M", "requests": "M", "actions": "M",
-                "objectives": "M", "sandbox": "M",
+                "objectives": "M", "sandbox": "M", "savings": "M",
             },
         )
 
@@ -214,10 +265,10 @@ def test_save_layout_rejects_missing_card(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(memory_manager, "DB_PATH", tmp_path / "test_layout_missing.db")
     with pytest.raises(workspace_manager.InvalidLayout):
         workspace_manager.save_layout(
-            ["reports", "requests", "actions", "sandbox"],  # objectives manquant
+            ["reports", "requests", "actions", "sandbox", "savings"],  # objectives manquant
             {
                 "reports": "M", "requests": "M", "actions": "M",
-                "objectives": "M", "sandbox": "M",
+                "objectives": "M", "sandbox": "M", "savings": "M",
             },
         )
 
@@ -226,10 +277,10 @@ def test_save_layout_rejects_invalid_size(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(memory_manager, "DB_PATH", tmp_path / "test_layout_bad_size.db")
     with pytest.raises(workspace_manager.InvalidLayout):
         workspace_manager.save_layout(
-            ["reports", "requests", "actions", "objectives", "sandbox"],
+            ["reports", "requests", "actions", "objectives", "sandbox", "savings"],
             {
                 "reports": "ENORME", "requests": "M", "actions": "M",
-                "objectives": "M", "sandbox": "M",
+                "objectives": "M", "sandbox": "M", "savings": "M",
             },
         )
 
@@ -246,9 +297,9 @@ def test_get_layout_falls_back_to_default_on_corrupted_state(monkeypatch, tmp_pa
         memory.close()
 
     assert workspace_manager.get_layout() == {
-        "order": ["reports", "requests", "actions", "objectives", "sandbox"],
+        "order": ["reports", "requests", "actions", "objectives", "sandbox", "savings"],
         "sizes": {
             "reports": "M", "requests": "M", "actions": "M",
-            "objectives": "M", "sandbox": "M",
+            "objectives": "M", "sandbox": "M", "savings": "M",
         },
     }

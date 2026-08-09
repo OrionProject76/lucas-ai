@@ -13,8 +13,9 @@
 // seul modèle, testé sur mobile ET PC (voir ROADMAP.md §5.77).
 
 (function () {
-    const CARD_IDS = ["reports", "requests", "actions", "objectives", "sandbox"];
+    const CARD_IDS = ["reports", "requests", "actions", "objectives", "sandbox", "savings"];
     const SANDBOX_STATUS_LABELS = { pending: "en attente", executed: "exécuté", rejected: "rejeté" };
+    const INTERVAL_LABELS = { mensuel: "mensuel", annuel: "annuel" };
     const CARD_SIZES = ["S", "M", "L", "XL"];
 
     function gridEl() {
@@ -47,6 +48,18 @@
         return date.toLocaleString("fr-FR", {
             day: "2-digit", month: "2-digit", year: "numeric",
             hour: "2-digit", minute: "2-digit",
+        });
+    }
+
+    // Dates de transaction bancaire (Détecteur d'économies, B-2) : pas
+    // d'heure/minute — un relevé bancaire n'a qu'une date, afficher
+    // "00:00" laisserait croire à une précision qui n'existe pas.
+    function formatDateOnly(isoDateString) {
+        if (!isoDateString) return "";
+        const date = new Date(isoDateString);
+        if (Number.isNaN(date.getTime())) return isoDateString;
+        return date.toLocaleDateString("fr-FR", {
+            day: "2-digit", month: "2-digit", year: "numeric",
         });
     }
 
@@ -131,6 +144,77 @@
                     `importance ${(objective.importance * 100).toFixed(0)} % · ` +
                     formatDate(objective.date || objective.created_at)
             );
+        }
+    }
+
+    // ── Détecteur d'économies (B-2) ─────────────────────────────────────
+    //
+    // Trois listes indépendantes dans la même carte — même discipline
+    // createElement/textContent que le reste : libellés et catégories
+    // viennent de vrais relevés bancaires, jamais traités comme du HTML.
+
+    function renderRecurringCharges(container, items) {
+        container.textContent = "";
+        if (!items || items.length === 0) {
+            renderEmpty(container, "Aucune charge récurrente détectée.");
+            return;
+        }
+        for (const item of items) {
+            appendItem(
+                container,
+                item.sample_label,
+                `${item.category} · ${INTERVAL_LABELS[item.interval] || item.interval} · ` +
+                    `${item.average_amount.toFixed(2)} € · ${item.occurrences.length} occurrences`
+            );
+        }
+    }
+
+    function renderPriceIncreases(container, items) {
+        container.textContent = "";
+        if (!items || items.length === 0) {
+            renderEmpty(container, "Aucune hausse de tarif détectée.");
+            return;
+        }
+        for (const item of items) {
+            appendItem(
+                container,
+                item.sample_label,
+                `${item.previous_amount.toFixed(2)} € → ${item.new_amount.toFixed(2)} € ` +
+                    `(+${item.increase_pct.toFixed(1)} %) depuis le ${formatDateOnly(item.previous_date)}`
+            );
+        }
+    }
+
+    function renderDuplicates(container, items) {
+        container.textContent = "";
+        if (!items || items.length === 0) {
+            renderEmpty(container, "Aucun doublon probable détecté.");
+            return;
+        }
+        for (const item of items) {
+            const wrapper = document.createElement("div");
+            wrapper.className = "workspace-item workspace-duplicate-item";
+
+            const badge = document.createElement("span");
+            badge.className = "workspace-tag-review";
+            badge.textContent = "À vérifier";
+            wrapper.appendChild(badge);
+
+            const detail = document.createElement("div");
+            detail.className = "workspace-item-title";
+            detail.textContent =
+                `${item.transaction_1.libelle} (${item.transaction_1.montant.toFixed(2)} €) ` +
+                `et ${item.transaction_2.libelle} (${item.transaction_2.montant.toFixed(2)} €)`;
+            wrapper.appendChild(detail);
+
+            const meta = document.createElement("div");
+            meta.className = "workspace-item-meta";
+            meta.textContent =
+                `${formatDateOnly(item.transaction_1.date)} et ${formatDateOnly(item.transaction_2.date)} ` +
+                `(${item.gap_days} jour(s) d'écart) — ressemblance détectée, pas une certitude.`;
+            wrapper.appendChild(meta);
+
+            container.appendChild(wrapper);
         }
     }
 
@@ -286,11 +370,27 @@
             renderActions(document.getElementById("actions-list"), summary.recent_actions);
             renderObjectives(document.getElementById("objectives-list"), summary.objectives);
             renderSandboxRuns(document.getElementById("sandbox-list"), summary.sandbox_runs);
+            renderRecurringCharges(
+                document.getElementById("savings-recurring-list"),
+                summary.savings.recurring_charges
+            );
+            renderPriceIncreases(
+                document.getElementById("savings-increases-list"),
+                summary.savings.price_increases
+            );
+            renderDuplicates(
+                document.getElementById("savings-duplicates-list"),
+                summary.savings.duplicates
+            );
 
             statusEl.textContent = `Actualisé à ${new Date().toLocaleTimeString("fr-FR")}`;
         } catch (error) {
             statusEl.textContent = "";
-            for (const id of ["reports-list", "requests-list", "actions-list", "objectives-list", "sandbox-list"]) {
+            for (const id of [
+                "reports-list", "requests-list", "actions-list", "objectives-list",
+                "sandbox-list", "savings-recurring-list", "savings-increases-list",
+                "savings-duplicates-list",
+            ]) {
                 const container = document.getElementById(id);
                 container.textContent = "";
                 const err = document.createElement("div");

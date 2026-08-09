@@ -8417,6 +8417,136 @@ un futur test navigateur sur cette machine se comporte bizarrement après un
 - `ctypes`/`multiprocessing` non bloqués (voir plus haut) — accepté pour
   cette version, pas oublié.
 
+## 5.79 Détecteur d'économies (B-2) — 6e carte du Workspace, un vrai bug trouvé sur données réelles, 09/08/2026
+
+Brief : `cowork_workspace/BRIEF_DETECTEUR_ECONOMIES_B2_1.md`. Objectif :
+repérer, depuis les relevés déjà importés (Finance CSV), trois motifs
+mécaniques utiles à la capitalisation retraite (Synthèse B) — charges
+récurrentes, hausses de tarif silencieuses, doublons probables — sans
+comparaison fournisseurs (hors périmètre, nécessiterait le web).
+
+### Étape préalable — schéma exploré avant d'écrire du code
+
+`modules/finance_manager.py` : chaque transaction est un dict `{date:
+datetime, libelle: str, montant: float (signé, négatif = dépense),
+categorie: str}`. Rien à changer côté import — cette session lit
+`FinanceManager.transactions`, n'y écrit jamais.
+
+### `modules/savings_detector.py` — agrégation déterministe pure, RT-3
+
+Aucun appel LLM, aucun réseau : uniquement du regroupement/comparaison sur
+des dicts déjà en mémoire. Trois détecteurs partagent un même helper de
+signature (`_core_label()` : `core/text_utils.normalize()` puis chiffres
+retirés) et un même critère de récurrence (`_find_recurring_groups()`,
+un seul endroit qui décide ce qui compte comme récurrent) :
+
+- **Charges récurrentes** : même signature + montant dans le même ordre
+  de grandeur (ratio 0,3×–3×) + intervalle régulier (mensuel : ≥2 écarts
+  25-35 j, soit 3 occurrences ; annuel : ≥1 écart 350-380 j, soit 2
+  occurrences — 3 occurrences annuelles demanderaient 3 ans d'historique).
+- **Hausses de tarif** : compare chaque occurrence à la précédente dans
+  un groupe déjà reconnu récurrent, seuil >5 % ET >1 € (évite un
+  arrondi).
+- **Doublons probables** : même signature, montant à ±0,01 €, écart ≤3
+  jours — **toujours** `status="a_verifier"` (brief §5, RT-2), jamais
+  affirmé. Un prélèvement mensuel normal n'entre jamais dans cette
+  fenêtre de 3 jours, donc aucun recouvrement avec la récurrence.
+
+### 🔴 Bug réel trouvé en validant sur le vrai historique de Cyril — retraits DAB
+
+Premier passage sur les vraies données (427 transactions, comptages
+agrégés uniquement — jamais le contenu affiché, voir plus bas) : 15
+"hausses de tarif" détectées, dont deux à +125 % et +122 % sur des
+libellés `CARTE X3422 RETRAIT DAB ... BRED SOTTEVILLE LES RO 00013732`.
+Diagnostiqué sans jamais afficher le libellé complet dans ce fichier au
+moment du diagnostic (seulement vu à l'écran, dans le Workspace, avec
+l'accord explicite de Cyril pour cette capture précise — voir plus bas) :
+un retrait DAB au même distributeur garde le même libellé une fois les
+chiffres retirés (date, heure ET montant sont tous numériques), donc
+tous les retraits à ce distributeur se groupent comme UNE charge
+récurrente — et une variation normale du montant retiré (Cyril choisit
+combien il retire, ce n'est pas un tarif) ressort comme une fausse
+"hausse de tarif" de +125 %.
+
+**Corrigé** : `_is_cash_withdrawal()` exclut tout libellé contenant
+"retrait"/"distributeur"/le mot "dab" — appliqué dans
+`_group_by_core_label()`, donc hérité par les trois détecteurs à la fois
+(un seul endroit décide, pas trois critères qui pourraient diverger).
+Après correctif sur les mêmes données réelles : 13 charges récurrentes
+(-1, le faux groupe DAB), 8 hausses de tarif (-7, toutes les fausses
+hausses sur retraits), 17 doublons inchangé (les retraits n'avaient
+jamais déclenché de doublon — écart normalement >3 jours). Régression
+ajoutée à `test_savings_detector.py` avec le motif exact reproduit
+(données 100 % fictives dans le test).
+
+⚠️ **Limite connue, acceptée sciemment** : une charge récurrente dans une
+catégorie à montant naturellement variable (ex. `Alimentation` — un plein
+de courses n'a pas de "tarif" fixe) peut ressortir en "hausse de tarif"
+si un mois coûte nettement plus qu'un autre au même magasin (vu sur les
+données réelles : Intermarché, +160 %). Les chiffres affichés restent
+vrais (le montant a réellement augmenté ce mois-là) ; c'est la catégorie
+"hausse de tarif" qui généralise un peu large pour ce cas précis. Pas
+corrigé cette session : un filtre par catégorie serait fragile (le
+catégoriseur ne distingue pas "abonnement salle" à prix fixe de "courses"
+à montant libre dans une même catégorie `Loisirs`/`Alimentation`), et le
+fait affiché n'est jamais faux, seulement son intitulé un peu trop
+général. Cyril voit le nom du marchand et la catégorie réels dans
+l'interface — recontextualise en un coup d'œil, ce que je ne peux pas
+faire moi-même (voir la règle sur l'affichage de données personnelles
+ci-dessous).
+
+### ⚠️ Méthode de validation — jamais le contenu réel affiché dans ce terminal
+
+Conforme à la règle CLAUDE.md ("jamais afficher le contenu réel d'un
+fichier de données personnelles, même en diagnostic") : la validation sur
+les 427 transactions réelles de Cyril s'est faite exclusivement par
+**comptages agrégés** (`len(...)`, `set(statuts)`) — jamais un libellé ni
+un montant individuel imprimé dans une sortie de commande. Le contenu
+réel n'a été vu qu'une fois, à l'écran, dans le navigateur, pour la
+capture PC/mobile exigée par le brief — et seulement après une question
+explicite à Cyril (« comment veux-tu que je vérifie l'affichage ? »), qui
+a choisi d'utiliser ses vraies données plutôt qu'un jeu de démo fictif.
+Ce choix lui appartenait ; il n'a pas été présumé.
+
+### Restitution Workspace — 6e carte, même style, aucune régression
+
+`modules/workspace_manager.py` : `CARD_IDS` passe à 6 (`+ "savings"`),
+`get_savings_analysis()` importe `load_directory` paresseusement (même
+motif qu'`api/server.py::finance_summary()` — permet aux tests de
+monkeypatcher `modules.finance_manager.load_directory` sans dépendre
+d'un défaut de paramètre déjà figé à l'import, piège documenté
+plusieurs fois dans ce projet). `summary()` expose `savings` — pas de
+nouvelle route API, le Workspace agrège tout via `/workspace/summary`
+comme pour la sandbox (§5.78).
+
+`static/workspace.html`/`.js`/`.css` : trois sous-listes dans une seule
+carte (Charges récurrentes / Hausses de tarif / Doublons à vérifier),
+badge ambre "À vérifier" (jamais `--error`, une ressemblance n'est pas un
+refus) sur les doublons uniquement. `createElement`/`textContent`
+partout. Hors de `SHELL_FILES` (`static/sw.js`) — aucun bump de
+`CACHE_NAME` nécessaire, même constat que §5.76/§5.78.
+
+### Vérifié réellement
+
+- **18 nouveaux tests** (`test_savings_detector.py`, données 100 %
+  fictives, y compris la régression retraits DAB) + adaptations de
+  `test_workspace_manager.py` (6e carte, `load_directory` monkeypatché
+  dans chaque test qui touche `summary()`, pour ne jamais lire le vrai
+  `data/finance/` pendant la suite) — suite complète 1592 passed, `ruff`
+  + `mypy` propres (132 fichiers).
+- **Serveur live redémarré** deux fois (une fois par version du code,
+  arbre `venv\Scripts\python.exe` → interpréteur réel retracé et tué,
+  relancé via `LucasAPIServer`) ; `/workspace/summary` vérifié par `curl`
+  avec `savings` dans les clés, comptages seulement.
+- **Navigateur réel**, PC et mobile (412px via `<iframe>`, même méthode
+  que §5.77/§5.78) : carte affichée, 6 cartes cohérentes visuellement,
+  glisser/redimensionner hérité sans régression, charges récurrentes
+  reconnaissables (Free Mobile, Amazon Music, assurance auto, crédit
+  auto — correspond au critère de validation du brief : "au moins les
+  charges récurrentes évidentes").
+
+Détail complet de la session : `cowork_workspace/SESSION_LOG_DETECTEUR_ECONOMIES_B2_2026-08-09.md`.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

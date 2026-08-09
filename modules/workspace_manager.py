@@ -28,7 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from memory import memory_manager
-from modules import sandbox_manager
+from modules import sandbox_manager, savings_detector
 
 COWORK_DIR = Path(__file__).resolve().parent.parent / "cowork_workspace"
 REPORTS_DIR = COWORK_DIR / "reports"
@@ -111,15 +111,36 @@ def list_objectives(limit: int = 20) -> list[dict]:
         memory.close()
 
 
+def get_savings_analysis() -> dict:
+    """
+    Analyse d'économies (B-2, cowork_workspace/BRIEF_DETECTEUR_ECONOMIES_B2_1.md)
+    sur les relevés déjà importés par modules/finance_manager.py. RT-3 :
+    rien ne sort de la machine, aucun appel LLM ici —
+    modules/savings_detector.py est une agrégation déterministe pure.
+
+    Import paresseux de `load_directory()`, même motif qu'`api/server.py::
+    finance_summary()` : permet aux tests de monkeypatcher
+    "modules.finance_manager.load_directory" directement, sans dépendre
+    d'une valeur par défaut de paramètre déjà figée à l'import (piège
+    documenté dans CLAUDE.md, memory/memory_manager.py, core/router.py).
+    """
+    from modules.finance_manager import load_directory
+
+    manager, _skipped_files = load_directory()
+    return savings_detector.analyze(manager.transactions)
+
+
 def summary() -> dict:
     """
-    Instantané complet pour le tableau de bord Workspace (E-1 + E-3).
+    Instantané complet pour le tableau de bord Workspace (E-1 + E-3 + B-2).
 
-    `sandbox_runs` (E-3, 09/08/2026) rompt la lecture-seule stricte du
-    reste de ce module UNIQUEMENT en apparence : ce module ne fait ici
-    que RELIRE l'état déjà écrit par modules/sandbox_manager.py (submit/
-    execute/reject), jamais proposer ou exécuter quoi que ce soit
-    lui-même — même distinction que get_layout()/save_layout() plus haut.
+    `sandbox_runs` (E-3) et `savings` (B-2) rompent la lecture-seule
+    stricte du reste de ce module UNIQUEMENT en apparence : ce module ne
+    fait ici que RELIRE un état déjà écrit ailleurs (modules/
+    sandbox_manager.py) ou calculé à la volée sans écriture (modules/
+    savings_detector.py) — jamais proposer, exécuter ou modifier quoi que
+    ce soit lui-même. Même distinction que get_layout()/save_layout() plus
+    haut.
     """
     return {
         "reports": list_reports(),
@@ -127,6 +148,7 @@ def summary() -> dict:
         "recent_actions": list_recent_actions(),
         "objectives": list_objectives(),
         "sandbox_runs": sandbox_manager.list_recent(),
+        "savings": get_savings_analysis(),
     }
 
 
@@ -138,7 +160,7 @@ def summary() -> dict:
 # — jamais accepté silencieusement (le client pourrait sinon persister
 # un état que le frontend ne sait plus rendre).
 
-CARD_IDS = ("reports", "requests", "actions", "objectives", "sandbox")
+CARD_IDS = ("reports", "requests", "actions", "objectives", "sandbox", "savings")
 CARD_SIZES = ("S", "M", "L", "XL")
 _LAYOUT_STATE_KEY = "workspace_layout"
 

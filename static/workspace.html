@@ -107,6 +107,35 @@
                 </form>
                 <div class="workspace-list" id="sandbox-list"></div>
             </section>
+
+            <section class="workspace-card card-size-M" id="card-savings" data-card-id="savings">
+                <div class="workspace-card-header">
+                    <button type="button" class="workspace-drag-handle" title="Déplacer" aria-label="Déplacer la carte Détecteur d'économies">⠿</button>
+                    <h2>Détecteur d'économies</h2>
+                    <div class="workspace-size-controls" role="group" aria-label="Taille de la carte Détecteur d'économies">
+                        <button type="button" class="workspace-size-btn" data-size="S">S</button>
+                        <button type="button" class="workspace-size-btn" data-size="M">M</button>
+                        <button type="button" class="workspace-size-btn" data-size="L">L</button>
+                        <button type="button" class="workspace-size-btn" data-size="XL">XL</button>
+                    </div>
+                </div>
+                <p class="workspace-savings-hint">
+                    Analyse des relevés déjà importés (Finance CSV) — aucune
+                    donnée ne sort de la machine.
+                </p>
+                <div class="workspace-savings-section">
+                    <h3 class="workspace-savings-subheading">Charges récurrentes</h3>
+                    <div class="workspace-list" id="savings-recurring-list"></div>
+                </div>
+                <div class="workspace-savings-section">
+                    <h3 class="workspace-savings-subheading">Hausses de tarif</h3>
+                    <div class="workspace-list" id="savings-increases-list"></div>
+                </div>
+                <div class="workspace-savings-section">
+                    <h3 class="workspace-savings-subheading">Doublons à vérifier</h3>
+                    <div class="workspace-list" id="savings-duplicates-list"></div>
+                </div>
+            </section>
         </main>
     </div>
 
