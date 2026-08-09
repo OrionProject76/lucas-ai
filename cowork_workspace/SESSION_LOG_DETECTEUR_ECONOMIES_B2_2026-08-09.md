@@ -74,12 +74,41 @@ PRÉALABLE à cette question (diagnostic du bug DAB inclus) s'est faite par
 comptages agrégés uniquement, jamais par affichage du contenu réel dans
 un terminal — conforme à la règle CLAUDE.md sur les données personnelles.
 
+## Suite — Cyril a revu les 17 doublons lui-même, second bug réel corrigé
+
+Demande explicite de Cyril : regarder les doublons directement, pas
+seulement des comptages. `curl` + impression du contenu dans ce terminal
+**bloqué par le classifieur de sécurité de l'auto-mode** (données
+personnelles réelles en sortie de commande) — revu à la place dans le
+navigateur.
+
+Trouvé : deux paires "PRLV EUROPEEN ACC `<référence>` DE: SOGECAP" à
+-5,00 €, même jour chaque mois, référence **différente** à chaque fois —
+deux contrats distincts, pas un doublon. `_core_label()` (chiffres
+retirés) les confondait.
+
+**Corrigé, périmètre strictement limité à la demande de Cyril** :
+`detect_duplicate_charges()` compare désormais le libellé COMPLET
+(nouvelle fonction `_duplicate_key()`), sans toucher à
+`_group_by_core_label()`/`_find_recurring_groups()` (récurrence +
+hausses, qui ont besoin du retrait des chiffres — fix DAB de la première
+partie de session).
+
+Revalidé sur les 427 vraies transactions, mêmes comptages agrégés :
+récurrentes 13 et hausses 8 inchangées (confirme que rien n'a bougé côté
+récurrence) ; doublons **17 → 7** (10 faux positifs à référence
+différente éliminés). 2 tests de régression ajoutés (motif SOGECAP exact
++ sa contrepartie, référence identique → reste détecté). Suite complète
+1594 passed, `ruff`/`mypy` propres. Serveur redémarré une 3e fois,
+reconfirmé par `curl` (comptages seulement).
+
 ## État à la fin de la session
 
-- Serveur live actif, nouveau PID confirmé.
+- Serveur live actif, nouveau PID confirmé (3e redémarrage de la session).
 - Commit + push effectués (voir `git log`).
-- 17 doublons "à vérifier" restent dans les vraies données de Cyril — pas
-  filtrés ni résolus, c'est à lui de les vérifier depuis l'interface.
+- 7 doublons "à vérifier" restent dans les vraies données de Cyril (libellé
+  strictement identique entre les deux transactions) — pas filtrés ni
+  résolus, c'est à lui de trancher au cas par cas depuis l'interface.
 
 ## Pas encore fait
 

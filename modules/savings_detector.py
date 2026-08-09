@@ -27,9 +27,11 @@ from typing import TypedDict
 
 from core.text_utils import normalize
 
-# Sous ce nombre de caractères, un libellé une fois les chiffres retirés
-# est trop générique ("cb", "vir") pour grouper sans faux positif —
-# regroupe systématiquement des marchands sans rapport.
+# Longueur minimale d'une clé de regroupement — que ce soit _core_label()
+# (chiffres retirés, récurrence/hausses) ou _duplicate_key() (libellé
+# complet, doublons). Sous ce seuil, une clé du type "cb" est trop
+# générique pour grouper sans faux positif — regroupe systématiquement
+# des marchands sans rapport.
 MIN_CORE_LABEL_LEN = 3
 
 # Un mois réel varie de 28 à 31 jours ; une année de facturation peut
@@ -102,7 +104,16 @@ def _is_cash_withdrawal(libelle: str) -> bool:
 
 
 def _group_by_core_label(transactions: list[dict]) -> dict[str, list[dict]]:
-    """Dépenses seulement (montant < 0), retraits DAB exclus — une charge récurrente/un doublon est une sortie d'argent FACTURÉE."""
+    """
+    Dépenses seulement (montant < 0), retraits DAB exclus — une charge
+    récurrente est une sortie d'argent FACTURÉE.
+
+    Réservé à _find_recurring_groups() (récurrence + hausses de tarif).
+    detect_duplicate_charges() a un besoin opposé (garder les chiffres,
+    pas les retirer) et regroupe via _duplicate_key() à la place — voir
+    sa docstring pour le motif réel qui a rendu cette distinction
+    nécessaire (09/08/2026, paires SOGECAP).
+    """
     groups: dict[str, list[dict]] = defaultdict(list)
     for t in transactions:
         if t["montant"] >= 0:
@@ -210,14 +221,56 @@ def detect_price_increases(transactions: list[dict]) -> list[dict]:
     return sorted(results, key=lambda r: -r["increase_pct"])
 
 
+def _duplicate_key(libelle: str) -> str:
+    """
+    Clé de comparaison pour les doublons UNIQUEMENT : libellé COMPLET
+    normalisé (minuscules, sans accents — core/text_utils.normalize()),
+    SANS retrait des chiffres.
+
+    À l'inverse de _core_label() (récurrence/hausses, qui A BESOIN de
+    retirer les chiffres pour regrouper des occurrences dont seule la
+    date/référence varie d'un mois à l'autre), un doublon doit au
+    contraire GARDER le numéro de référence : c'est précisément ce qui
+    distingue un vrai double prélèvement (même référence, débitée deux
+    fois) de deux prélèvements légitimement différents qui partagent par
+    coïncidence marchand, montant et jour.
+
+    ⚠️ Trouvé en conditions réelles (09/08/2026, données de Cyril, revues
+    par lui à l'écran, jamais affichées ici) : deux paires "PRLV EUROPEEN
+    ACC <référence> DE: SOGECAP" à -5,00 €, même jour chaque mois, mais
+    avec un numéro de référence DIFFÉRENT à chaque fois — deux contrats
+    distincts, pas un doublon. _core_label() les confondait en un seul
+    groupe parce qu'il retire justement ce numéro.
+    """
+    return normalize(libelle)
+
+
 def detect_duplicate_charges(transactions: list[dict]) -> list[dict]:
     """
     Doublons probables — TOUJOURS retournés avec status="a_verifier"
     (RT-2, brief §5) : une ressemblance n'est jamais une preuve de double
     prélèvement, seulement une paire à vérifier soi-même.
+
+    Regroupement dédié sur _duplicate_key() (libellé complet), PAS
+    _group_by_core_label() — ce dernier reste réservé à
+    _find_recurring_groups() (récurrence/hausses), qui a un besoin
+    opposé (voir la docstring de _duplicate_key ci-dessus). Les retraits
+    DAB restent exclus ici aussi : un retrait n'a pas de "charge" à
+    dédoubler, même règle que pour les deux autres détecteurs.
     """
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for t in transactions:
+        if t["montant"] >= 0:
+            continue
+        if _is_cash_withdrawal(t["libelle"]):
+            continue
+        key = _duplicate_key(t["libelle"])
+        if len(key) < MIN_CORE_LABEL_LEN:
+            continue
+        groups[key].append(t)
+
     results = []
-    for core, occurrences in _group_by_core_label(transactions).items():
+    for occurrences in groups.values():
         occurrences = sorted(occurrences, key=lambda t: t["date"])
         for a, b in itertools.pairwise(occurrences):
             gap_days = (b["date"] - a["date"]).days
@@ -227,7 +280,6 @@ def detect_duplicate_charges(transactions: list[dict]) -> list[dict]:
                 continue
             results.append({
                 "status": "a_verifier",
-                "core_label": core,
                 "transaction_1": {
                     "date": a["date"].strftime("%Y-%m-%d"), "libelle": a["libelle"],
                     "montant": round(a["montant"], 2),

@@ -8547,6 +8547,50 @@ partout. Hors de `SHELL_FILES` (`static/sw.js`) — aucun bump de
 
 Détail complet de la session : `cowork_workspace/SESSION_LOG_DETECTEUR_ECONOMIES_B2_2026-08-09.md`.
 
+### 🔴 Suite — revue par Cyril lui-même des 17 doublons, second bug réel trouvé et corrigé
+
+Cyril a demandé de regarder les 17 doublons directement dans le
+Workspace (pas seulement les comptages agrégés). Tentative par `curl` +
+impression du contenu dans ce terminal : **bloquée par le classifieur de
+sécurité de l'auto-mode** (affichage de données personnelles réelles en
+sortie de commande) — exactement la protection que la règle CLAUDE.md
+vise, elle a joué son rôle même face à une demande explicite. Revu à la
+place dans le navigateur (déjà autorisé pour la capture précédente).
+
+Deux paires "PRLV EUROPEEN ACC `<référence>` DE: SOGECAP" à -5,00 €,
+même jour chaque mois, mais avec un numéro de référence **différent** à
+chaque fois (ex. `4208756534` vs `4208756525`) — deux contrats distincts
+chez le même assureur, pas un doublon. `_core_label()` (chiffres
+retirés) les confondait en un seul groupe puisqu'il retire justement ce
+qui les distingue.
+
+**Corrigé, à la lettre de la demande de Cyril** — uniquement
+`detect_duplicate_charges()`, aucun changement sur `_group_by_core_label()`/
+`_find_recurring_groups()` (récurrence + hausses, qui ONT besoin du
+retrait des chiffres, cf. le fix DAB de §5.79) :
+
+- `_duplicate_key()` (nouveau) : libellé **complet** normalisé (minuscules/
+  accents seulement, `core/text_utils.normalize()`), chiffres/référence
+  conservés. Deux transactions ne matchent que si leur libellé est
+  identique à la casse/aux accents près.
+- `detect_duplicate_charges()` regroupe désormais sur cette clé, plus
+  `_group_by_core_label()`.
+
+**Revalidé sur les 427 vraies transactions, même méthode qu'avant**
+(comptages agrégés uniquement, jamais le contenu affiché dans ce
+terminal) : récurrentes 13 et hausses 8 **inchangées** (logique non
+touchée, confirmé) ; doublons **17 → 7** — les 10 faux positifs à
+référence différente (dont les deux paires SOGECAP) ont disparu, les 7
+restants partagent un libellé strictement identique entre les deux
+transactions.
+
+2 tests de régression ajoutés (`test_savings_detector.py`) : le motif
+SOGECAP exact (référence différente → jamais un doublon) et sa
+contrepartie (référence identique, même montant, même jour → reste
+détecté). Suite complète 1594 passed, `ruff`/`mypy` propres. Serveur
+live redémarré une 3e fois, `/workspace/summary` reconfirmé par `curl`
+(comptages : 13/8/7).
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

@@ -162,6 +162,35 @@ def test_detects_a_probable_duplicate_and_marks_it_to_verify() -> None:
     assert results[0]["gap_days"] == 1
 
 
+def test_same_amount_and_day_but_different_reference_number_is_not_a_duplicate() -> None:
+    """
+    Régression réelle (09/08/2026, revue par Cyril à l'écran) : deux
+    paires "PRLV EUROPEEN ACC <référence> DE: SOGECAP" à -5,00 €, même
+    jour chaque mois, mais une référence DIFFÉRENTE à chaque fois —
+    deux contrats distincts, pas un doublon. Le détecteur doit comparer
+    le libellé COMPLET (référence comprise), pas une version où les
+    chiffres ont été retirés.
+    """
+    transactions = [
+        _txn("2026-05-12", "PRLV EUROPEEN ACC 4208756534 DE: SOGECAP", -5.0, "Autre"),
+        _txn("2026-05-12", "PRLV EUROPEEN ACC 4208756525 DE: SOGECAP", -5.0, "Autre"),
+        _txn("2026-06-12", "PRLV EUROPEEN ACC 7311923256 DE: SOGECAP", -5.0, "Autre"),
+        _txn("2026-06-12", "PRLV EUROPEEN ACC 7311923247 DE: SOGECAP", -5.0, "Autre"),
+    ]
+    assert savings_detector.detect_duplicate_charges(transactions) == []
+
+
+def test_identical_reference_number_and_amount_close_together_is_still_a_duplicate() -> None:
+    """Contrepartie du test ci-dessus : même référence, même montant, même jour -> doit rester détecté."""
+    transactions = [
+        _txn("2026-05-12", "PRLV EUROPEEN ACC 4208756534 DE: SOGECAP", -5.0, "Autre"),
+        _txn("2026-05-12", "PRLV EUROPEEN ACC 4208756534 DE: SOGECAP", -5.0, "Autre"),
+    ]
+    results = savings_detector.detect_duplicate_charges(transactions)
+    assert len(results) == 1
+    assert results[0]["status"] == "a_verifier"
+
+
 def test_a_normal_monthly_recurrence_is_not_flagged_as_a_duplicate() -> None:
     transactions = [
         _txn("2026-01-08", "NETFLIX.COM", -13.49, "Abonnements"),
