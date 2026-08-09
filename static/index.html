@@ -68,20 +68,88 @@
             <div id="finance-log"></div>
         </div>
 
-        <div id="avatar-panel">
+        <!-- title="Retour à l'accueil" : seul chemin de retour vers home-view,
+             hors barre de navigation (le brief F-1 liste 4 entrées : Chat,
+             Vision, Workspace, Réglages -- "Accueil" n'en fait délibérément
+             pas partie, ce n'est pas une nouvelle destination mais l'écran
+             de départ). L'orbe restant visible dans les deux vues, en faire
+             le chemin de retour n'ajoute aucun élément visuel de plus. -->
+        <button type="button" id="avatar-panel" title="Retour à l'accueil">
             <canvas id="avatar-canvas" width="140" height="140"></canvas>
             <div id="avatar-label">prête</div>
+        </button>
+
+        <!-- Écran d'accueil (F-1, 09/08/2026) : orbe (ci-dessus, partagé) +
+             liste compacte de ce que workspace_manager expose déjà. Vue par
+             défaut à l'ouverture -- voir home.js pour le détail des 3
+             sources (dernier rapport, demande en attente, raccourci vision)
+             et le garde-fou RT-2 (jamais un élément vide affiché comme réel). -->
+        <div id="home-view">
+            <p class="home-hint">Aperçu — pour tout voir : <a href="/app/workspace.html">Workspace</a>.</p>
+            <div class="home-list" id="home-list"></div>
         </div>
 
-        <div id="chat-log"></div>
+        <div id="chat-view">
+            <div id="chat-log"></div>
 
-        <form id="input-bar">
-            <button type="button" id="speak-toggle" class="icon-btn" title="Réponses vocales désactivées">🔇</button>
-            <button type="button" id="camera-btn" class="icon-btn" title="Montrer à Luca's">📷</button>
-            <button type="button" id="mic-btn" class="icon-btn" title="Parler à Luca's">🎙️</button>
-            <input type="text" id="text-input" placeholder="Parler à Luca's..." autocomplete="off" />
-            <button type="submit" id="send-btn" class="icon-btn" title="Envoyer">➤</button>
-        </form>
+            <form id="input-bar">
+                <button type="button" id="speak-toggle" class="icon-btn" title="Réponses vocales désactivées">🔇</button>
+                <button type="button" id="camera-btn" class="icon-btn" title="Montrer à Luca's">📷</button>
+                <button type="button" id="mic-btn" class="icon-btn" title="Parler à Luca's">🎙️</button>
+                <input type="text" id="text-input" placeholder="Parler à Luca's..." autocomplete="off" />
+                <button type="submit" id="send-btn" class="icon-btn" title="Envoyer">➤</button>
+            </form>
+        </div>
+
+        <!-- Tiroir Vision (F-1) : "accès direct aux modes de capture" (brief
+             §3.3) -- 2 raccourcis, chacun réutilise une capacité déjà
+             câblée (chat.js/router.py pour l'écran, camera.js pour la
+             caméra), aucune nouvelle route ni logique métier. -->
+        <div id="vision-drawer">
+            <div id="vision-drawer-header">
+                <span>Vision</span>
+                <button type="button" id="vision-close" class="icon-btn" title="Fermer">✕</button>
+            </div>
+            <div id="vision-list">
+                <button type="button" class="vision-action" id="vision-screen">🖥️ Capture d'écran</button>
+                <button type="button" class="vision-action" id="vision-camera">📷 Photo caméra</button>
+            </div>
+        </div>
+
+        <!-- Tiroir Réglages (F-1) : consolide les panneaux déjà existants
+             (activité/sécurité/documents/finances/voix), chacun ouvert en
+             transmettant le clic au bouton réel déjà câblé -- pas une
+             deuxième logique d'ouverture en parallèle. -->
+        <div id="settings-drawer">
+            <div id="settings-drawer-header">
+                <span>Réglages</span>
+                <button type="button" id="settings-close" class="icon-btn" title="Fermer">✕</button>
+            </div>
+            <div id="settings-list">
+                <button type="button" class="settings-action" id="settings-voice">🔇 Réponses vocales</button>
+                <button type="button" class="settings-action" id="settings-security">🛡️ État de sécurité</button>
+                <button type="button" class="settings-action" id="settings-documents">📁 Mes documents</button>
+                <button type="button" class="settings-action" id="settings-finance">💰 Mes finances</button>
+                <button type="button" class="settings-action" id="settings-activity">📋 Journal d'activité</button>
+            </div>
+        </div>
+
+        <!-- Barre de navigation basse (F-1, brief §3.3) : 4 entrées exactes,
+             persistante quelle que soit la vue active (home-view/chat-view). -->
+        <nav id="mobile-nav">
+            <button type="button" class="nav-btn" id="nav-chat">
+                <span class="nav-icon">💬</span><span class="nav-label">Chat</span>
+            </button>
+            <button type="button" class="nav-btn" id="nav-vision">
+                <span class="nav-icon">👁️</span><span class="nav-label">Vision</span>
+            </button>
+            <a class="nav-btn" id="nav-workspace" href="/app/workspace.html">
+                <span class="nav-icon">🖥️</span><span class="nav-label">Workspace</span>
+            </a>
+            <button type="button" class="nav-btn" id="nav-settings">
+                <span class="nav-icon">⚙️</span><span class="nav-label">Réglages</span>
+            </button>
+        </nav>
     </div>
 
     <script src="/app/js/avatar.js"></script>
@@ -94,6 +162,7 @@
     <script src="/app/js/voice_output.js"></script>
     <script src="/app/js/audio.js"></script>
     <script src="/app/js/camera.js"></script>
+    <script src="/app/js/home.js"></script>
     <script src="/app/js/app.js"></script>
 </body>
 </html>

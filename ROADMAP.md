@@ -8591,6 +8591,137 @@ détecté). Suite complète 1594 passed, `ruff`/`mypy` propres. Serveur
 live redémarré une 3e fois, `/workspace/summary` reconfirmé par `curl`
 (comptages : 13/8/7).
 
+## 5.80 Écran d'accueil mobile (F-1) — nouvelle vue, nav basse, un bug de Service Worker qui a mordu son propre auteur, 09/08/2026
+
+Brief : `cowork_workspace/BRIEF_ACCUEIL_MOBILE_F1.md`. Objectif : donner à
+l'écran d'accueil de la PWA mobile (jusque-là : orbe + saisie seuls, en
+réalité déjà enrichi de 5 boutons d'icônes top — activité/sécurité/
+documents/finances/Workspace, non mentionnés par le brief mais vérifiés
+avant de coder) le même niveau de richesse que le Workspace PC, sans
+nouveau backend.
+
+### Étape préalable — rien à construire côté serveur
+
+`/workspace/summary` (déjà utilisé par le Workspace PC) expose déjà
+`reports`/`pending_requests` — exactement ce que le brief demande pour la
+liste compacte. Zéro nouvelle route, zéro modification Python cette
+session (confirmé par `git diff` avant de committer : seuls des fichiers
+`static/*` ont changé).
+
+### Architecture retenue — l'accueil devient une vue à part entière
+
+Le Chat existant ("écran actuel", brief §3.3) reste construit à
+l'identique (`#chat-log`/`#input-bar`, désormais dans un wrapper
+`#chat-view` — aucun changement pour `chat.js`, qui ne référence ces
+éléments que par id). Nouveau `#home-view` (orbe partagé + liste), affiché
+par défaut ; bascule via `home.js` (`showHome()`/`showChat()`,
+`display:none`/`flex`). Le brief liste exactement 4 entrées de nav (Chat/
+Vision/Workspace/Réglages) — "Accueil" n'en fait volontairement pas
+partie : l'orbe (`#avatar-panel`, transformé en `<button>`, seul
+changement de balise, aucun changement visuel) devient le chemin de
+retour, puisqu'il reste visible dans les deux vues.
+
+Aucune nouvelle logique métier pour Vision/Réglages (brief §2) :
+- **Vision** : "Regarde mon écran" — formulation reprise telle quelle du
+  cas nominal de `test_intent.py` ("témoin — cas nominal") — pré-remplit
+  `#text-input` et appelle `inputForm.requestSubmit()`, réutilisant TOUT
+  le pipeline existant (chat.js → websocket → `core/intent.py` →
+  `core/router.py` → `vision_manager`). "Photo caméra" simule un clic sur
+  `#camera-btn` (déjà câblé, `camera.js`).
+- **Réglages** : 5 actions, chacune un clic simulé sur le bouton déjà
+  câblé ailleurs (`speak-toggle`, `security-badge`, `documents-toggle`,
+  `finance-toggle`, `activity-toggle`) — consolide des panneaux déjà
+  réels plutôt que d'inventer un écran de réglages qui n'existerait nulle
+  part ailleurs.
+
+Palette : ambre pour `#home-view`/`#mobile-nav` (cohérence Workspace,
+brief §3.4, tokens dupliqués depuis `workspace.css` — pages séparées,
+aucun mécanisme de CSS partagé entre elles). Cyan conservé pour les
+tiroirs Vision/Réglages : ils vivent à côté des tiroirs activité/
+documents/finances déjà cyan sur la MÊME page, les distinguer par couleur
+aurait cassé la cohérence des 5 tiroirs entre eux plutôt que de la
+renforcer — décision documentée en commentaire CSS, pas une improvisation
+esthétique.
+
+### 🔴 Bug réel trouvé en testant — clic transmis puis refermé aussitôt
+
+"Réglages → État de sécurité" : le popover s'ouvrait puis se refermait
+dans le même instant. Diagnostiqué, pas supposé : `security.js` ferme le
+popover sur tout clic hors de son bouton/popover, écouté sur `document`.
+Un `forwardClick()` synchrone déclenche `security-badge.click()` PENDANT
+la remontée (bubbling) du clic d'origine sur `#settings-security` — le
+popover s'ouvre, puis le clic d'origine continue sa remontée jusqu'à
+`document`, dont la cible (`#settings-security`) est bien hors du badge/
+popover : le gestionnaire "clic extérieur" le referme aussitôt, dans le
+MÊME tour d'événement.
+
+**Corrigé** : `forwardClick()` diffère le clic simulé via `setTimeout(fn, 0)`
+— laisse le clic d'origine terminer sa remontée avant que le clic simulé
+n'existe. Revérifié après correctif : popover ouvert et RESTE ouvert
+(`popoverOpen: true` confirmé par script). Les 4 autres renvois
+(documents, finances, activité, voix) fonctionnaient déjà sans ce
+problème par coïncidence de timing, mais `forwardClick()` corrige tous
+les appels d'un coup — un seul point, pas un correctif au cas par cas.
+
+### 🔴 Second bug réel, trouvé en corrigeant le premier — un Service Worker qui a mordu son propre auteur
+
+Après avoir corrigé `home.js` (ajout du `setTimeout`), le retest dans
+l'onglet de test échouait à nouveau, à l'identique. Diagnostiqué avant de
+douter du correctif : `fetch('/app/js/home.js', {cache:'no-store'})`
+renvoyait encore l'ANCIENNE version, alors que `curl` direct contre le
+serveur (sans navigateur) renvoyait bien la nouvelle — la différence ne
+pouvait venir que du navigateur. Cause réelle : un Service Worker (`sw.js`)
+était actif dans cet onglet, avec un cache `lucas-shell-v14` déjà
+peuplé — peuplé AVANT le correctif, puisque le bump `v14` avait eu lieu
+avant l'édition de `home.js` qui a suivi dans la même session. `sw.js`
+intercepte toute requête `/app/*` et sert le cache EN PRIORITÉ
+(`caches.match(event.request).then((cached) => cached || fetch(...))`) —
+une option `cache:"no-store"` posée côté page n'a aucun effet sur ce
+qui se passe DANS le Service Worker, qui reçoit la requête avant que
+cette option ne puisse jouer un rôle.
+
+**Corrigé** : re-bump `v14` → `v15`. **Leçon générale, pas limitée à cet
+incident** : toute édition d'un fichier déjà listé dans `SHELL_FILES`
+exige un nouveau bump, MÊME si un bump a déjà eu lieu plus tôt dans la
+même session pour une raison différente — le bump protège contre l'état
+du cache au moment de l'`install()`, pas contre les éditions qui
+suivraient. Onglet de test purgé manuellement
+(`serviceWorker.getRegistrations()` + `unregister()`, `caches.delete()`)
+pour continuer à tester sans attendre un cycle d'activation naturel.
+
+### Vérifié réellement
+
+- Aucun test Python nécessaire (zéro fichier `.py` modifié) — suite
+  complète revérifiée par prudence : 1594 passed, inchangé.
+- **Navigateur réel** (Claude in Chrome) : séquence complète testée via
+  scripts (clics réels + assertions sur l'état DOM, pas seulement visuel)
+  — bascule accueil ↔ chat, orbe cliquable, tiroir Vision (2 raccourcis),
+  tiroir Réglages (5 renvois, dont le popover sécurité après correctif),
+  "Capture d'écran" vérifié BOUT EN BOUT sur le vrai serveur : bascule
+  chat, message "Regarde mon écran" réellement envoyé, avatar passé à
+  "RÉFLÉCHIT" (le pipeline vision réel a été sollicité — réponse jamais
+  affichée ici, elle aurait décrit l'écran réel de Cyril à cet instant).
+- Captures à l'appui, largeur mobile réelle (412px via `<iframe>`, même
+  méthode que §5.77-79) : accueil (orbe + liste + nav), chat actif (aucune
+  régression visuelle), tiroir Réglages.
+- Aucune régression : `git diff --stat` confirme zéro fichier Workspace/
+  Sandbox touché ; Workspace PC et carte Sandbox rechargés et vérifiés à
+  l'écran sans changement.
+- Oubli préexistant corrigé au passage (pas dans le périmètre du brief,
+  trouvé en vérifiant `SHELL_FILES` avant d'y ajouter `home.js`, même
+  discipline que §5.76/§5.78) : `documents.js`/`finance.js` chargés par
+  `index.html` depuis leur introduction mais jamais précachés.
+
+### Pas encore fait
+
+- Le libellé "Réponses vocales" dans Réglages ne reflète pas l'état
+  actuel (activé/désactivé) — `voice_output.js` gère déjà cet état sur
+  `#speak-toggle` lui-même, pas encore répercuté sur la ligne Réglages.
+  Cosmétique, pas fonctionnel (le clic fait bien ce qu'il doit).
+- Pas de purge automatique de l'historique du navigateur pour le lien
+  d'appairage (`?token=...`) — limite déjà connue et documentée
+  (`app.js`, ROADMAP.md §5.33), sans rapport avec cette session.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

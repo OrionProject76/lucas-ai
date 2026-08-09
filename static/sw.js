@@ -39,7 +39,23 @@
 // §5.75) — style.css modifié à nouveau, donc re-bump obligatoire pour la
 // MÊME raison que v12, appliquée cette fois-ci dès l'écriture plutôt
 // qu'après coup.
-const CACHE_NAME = "lucas-shell-v13";
+// v14 (09/08/2026) : écran d'accueil mobile (F-1, ROADMAP.md §5.80) —
+// index.html/style.css modifiés, nouveau home.js. Au passage :
+// documents.js/finance.js ajoutés à SHELL_FILES, absents depuis leur
+// introduction alors qu'index.html les charge déjà tous les deux — trouvé
+// en vérifiant cette liste avant d'y ajouter home.js (même discipline que
+// §5.76/§5.78 : vérifier avant de supposer). Sans eux précachés, une
+// utilisation hors ligne de la PWA les aurait silencieusement manqués.
+// v15 (09/08/2026) : correctif home.js DANS LA MÊME SESSION que v14 —
+// bug réel trouvé en testant "Réglages -> État de sécurité" (voir
+// ROADMAP.md §5.80) après le premier bump. Preuve concrète que ce
+// mécanisme mord aussi son propre auteur : un onglet de test a servi la
+// version v14 (pré-correctif) de home.js pendant plusieurs minutes malgré
+// un fetch({cache:"no-store"}) explicite, parce que le Service Worker
+// intercepte AVANT que cette option n'ait le moindre effet. Re-bump
+// systématique à chaque édition d'un SHELL_FILES, jamais seulement à la
+// première.
+const CACHE_NAME = "lucas-shell-v15";
 const SHELL_FILES = [
     "/app/",
     "/app/index.html",
@@ -50,9 +66,12 @@ const SHELL_FILES = [
     "/app/js/chat.js",
     "/app/js/activity.js",
     "/app/js/security.js",
+    "/app/js/documents.js",
+    "/app/js/finance.js",
     "/app/js/voice_output.js",
     "/app/js/audio.js",
     "/app/js/camera.js",
+    "/app/js/home.js",
     "/app/js/app.js",
     "/app/icons/icon-192.png",
     "/app/icons/icon-512.png",
