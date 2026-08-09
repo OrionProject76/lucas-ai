@@ -132,14 +132,34 @@ divergent — c'est exactement ce que ce fichier existe pour empêcher.
 
 ---
 
+## En attendant Godot : un thème Windows réel
+
+Tout ce qui précède vit dans le navigateur. `theme/` est différent : un vrai
+thème **Windows 11** (`.theme`), à appliquer directement sur le bureau de
+Cyril, pour porter la même identité visuelle (fond profond, horizon acier,
+grille en perspective) pendant que `Lucas3D/` n'existe pas encore.
+
+| Fichier | Rôle |
+|---|---|
+| `theme/make_wallpaper.py` | Génère `wall_depth_4k.png` (3840×2160) — dégradé sombre, halo d'horizon, grille en perspective, dither anti-banding. Réglé pour l'écran OLED : jamais de blanc pur, luminance moyenne basse |
+| `theme/wall_depth_4k.png` | Le fond généré. Déjà copié dans `%USERPROFILE%\Pictures\GlassDepth\` — c'est ce chemin que `GlassDepth.theme` référence |
+| `theme/preview.png` | Le même fond, réduit à 1280×720 — la résolution logique réelle de l'écran à 300 % |
+| `theme/GlassDepth.theme` | Le thème lui-même. **Double-clic pour l'appliquer** (action de Cyril, pas de Claude Code) ; `Paramètres > Personnalisation > Thèmes` pour revenir en arrière |
+
+Pas encore fait : rien d'automatique ne recopie `wall_depth_4k.png` vers
+`Pictures\GlassDepth\` si le fichier change — regénérer puis recopier à la
+main tant qu'aucun script ne fait les deux à la fois.
+
+---
+
 ## État au 09/08/2026
 
 | | |
 |---|---|
 | Décision | Option A validée par Cyril |
-| Livré | `themes.json`, `bureau3d.html`, `apercu.bat`, ce README |
-| Vérifié | Les 3 thèmes se chargent et s'appliquent réellement dans le navigateur |
-| Pas encore fait | Tout Godot. Aucun fichier de `Lucas3D/` modifié |
+| Livré | `themes.json`, `bureau3d.html`, `apercu.bat`, `theme/` (thème Windows réel), ce README |
+| Vérifié | Les 3 thèmes se chargent et s'appliquent réellement dans le navigateur. Wallpaper généré, copié dans `Pictures\GlassDepth\` |
+| Pas encore fait | Tout Godot. Aucun fichier de `Lucas3D/` modifié. Le thème `.theme` n'a pas encore été appliqué (double-clic = action de Cyril) |
 
 ### Les décisions qui restent
 
