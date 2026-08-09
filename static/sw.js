@@ -71,7 +71,9 @@
 // v19 (10/08/2026) : commande vocale d'arrêt du mode conversation (remplace
 // le minuteur de 60s comme mécanisme principal) — websocket.js/
 // conversation_mode.js/app.js modifiés.
-const CACHE_NAME = "lucas-shell-v19";
+// v20 (10/08/2026) : accueil mobile enrichi (compteurs demandes/économies/
+// sandbox) — home.js modifié, aucune nouvelle route.
+const CACHE_NAME = "lucas-shell-v20";
 const SHELL_FILES = [
     "/app/",
     "/app/index.html",

@@ -28,6 +28,14 @@ window.Lucas = window.Lucas || {};
         return date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
     }
 
+    // Accord singulier/pluriel minimal — les compteurs de l'accueil restent
+    // lisibles ("1 demande" et pas "1 demandes"), pas un vrai moteur de
+    // pluralisation (pas besoin ici : que des noms féminins/masculins
+    // réguliers en -e).
+    function pluralize(count, singular, plural) {
+        return `${count} ${count === 1 ? singular : plural}`;
+    }
+
     // Un clic simulé sur un bouton déjà câblé ailleurs (documents.js,
     // finance.js, activity.js, security.js, voice_output.js, camera.js) —
     // jamais une seconde implémentation de la même ouverture/fermeture.
@@ -183,18 +191,51 @@ window.Lucas = window.Lucas || {};
                 );
             }
 
-            const latestRequest = (summary.pending_requests || [])[0];
-            if (latestRequest) {
+            // Compteur, pas le titre de la plus récente (brief
+            // ENRICHISSEMENT_ACCUEIL_MOBILE §4) : un total dit plus en une
+            // ligne que le titre d'une seule demande parmi plusieurs.
+            const pendingCount = (summary.pending_requests || []).length;
+            if (pendingCount > 0) {
                 hasItem = true;
                 appendHomeLink(
-                    this.listEl, "📝", latestRequest.title,
-                    `Demande en attente · ${formatDate(latestRequest.modified_at)}`,
-                    "/app/workspace.html"
+                    this.listEl, "📝", pluralize(pendingCount, "demande en attente", "demandes en attente"),
+                    "Voir dans le Workspace", "/app/workspace.html"
+                );
+            }
+
+            // Détecteur d'économies (B-2) : un seul compteur, total des
+            // trois catégories — le détail (récurrentes/hausses/doublons)
+            // reste dans le Workspace complet, un clic plus loin (brief §4,
+            // "badges/compteurs plutôt que le détail complet").
+            const savings = summary.savings || {};
+            const savingsCount =
+                (savings.recurring_charges || []).length +
+                (savings.price_increases || []).length +
+                (savings.duplicates || []).length;
+            if (savingsCount > 0) {
+                hasItem = true;
+                appendHomeLink(
+                    this.listEl, "💰", pluralize(savingsCount, "signal du détecteur d'économies", "signaux du détecteur d'économies"),
+                    "Voir dans le Workspace", "/app/workspace.html"
+                );
+            }
+
+            // Sandbox (E-3) : seules les propositions encore "pending"
+            // comptent ici — exécutées/rejetées n'attendent plus de
+            // décision de Cyril, pas la peine d'encombrer l'accueil.
+            const sandboxPendingCount = (summary.sandbox_runs || []).filter(
+                (run) => run.status === "pending"
+            ).length;
+            if (sandboxPendingCount > 0) {
+                hasItem = true;
+                appendHomeLink(
+                    this.listEl, "🧪", pluralize(sandboxPendingCount, "proposition sandbox en attente", "propositions sandbox en attente"),
+                    "Voir dans le Workspace", "/app/workspace.html"
                 );
             }
 
             if (!hasItem) {
-                renderEmpty(this.listEl, "Rien de nouveau côté rapports ou demandes.");
+                renderEmpty(this.listEl, "Rien de nouveau côté rapports, demandes ou alertes.");
             }
 
             this._appendVisionShortcut();

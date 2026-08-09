@@ -9478,6 +9478,71 @@ Daemon initialisé", planning des 8 tâches programmées, "démarré").
 Détail complet dans la conversation — pas de fichier de session séparé
 pour ce point ponctuel.
 
+## 5.89 Accueil mobile enrichi — 3 compteurs réels, aucune nouvelle route, 10/08/2026
+
+Brief : `cowork_workspace/BRIEF_ENRICHISSEMENT_ACCUEIL_MOBILE.md`.
+L'accueil mobile (F-1, §5.80) était figé sur son contenu d'origine
+(dernier rapport + dernière demande + raccourci vision) alors que le
+Workspace PC s'est enrichi depuis (6 cartes, Bureau de l'IA).
+
+### Étape préalable — exploration de `/workspace/summary`
+
+`modules/workspace_manager.py::summary()` expose déjà tout le
+nécessaire : `reports`, `pending_requests`, `recent_actions`,
+`objectives`, `sandbox_runs`, `savings` (recurring_charges/
+price_increases/duplicates) — même route que le Workspace PC, **aucune
+route nouvelle créée**.
+
+### Ambiguïté posée par le brief lui-même ("à confirmer en mode plan")
+
+Le brief nommait 3 candidats sans trancher leur forme exacte. Proposé et
+confirmé par Cyril avant d'écrire le code : 3 badges compteurs (pas le
+détail complet), masqués à zéro (RT-2 — même discipline que les
+éléments déjà en place), menant au Workspace au clic :
+
+- **📝 Compteur de demandes en attente** — remplace l'ancien affichage
+  qui ne montrait que le titre de la plus récente ; un total dit plus en
+  une ligne que le titre d'une seule demande parmi plusieurs.
+- **💰 Compteur du détecteur d'économies** — total des trois catégories
+  (récurrentes + hausses + doublons), pas un badge par catégorie : le
+  détail reste dans le Workspace complet.
+- **🧪 Compteur de propositions sandbox en attente** — uniquement
+  `status === "pending"` ; exécutées/rejetées n'attendent plus de
+  décision, pas la peine d'encombrer l'accueil.
+
+### Construit
+
+- **`static/js/home.js`** — `pluralize()` (accord singulier/pluriel
+  minimal), `_render()` étendu avec les 3 compteurs, `hasItem` mis à jour
+  pour que le message d'état vide ("Rien de nouveau...") reste honnête
+  sur ce qu'il couvre désormais.
+- **`static/sw.js`** — `CACHE_NAME` v19→v20 (`home.js` modifié).
+- Aucun changement CSS : réutilise `.home-item`/`appendHomeLink()`
+  existants, aucune nouvelle classe.
+
+### Vérifié réellement
+
+- **Données réelles, pas simulées** : `/workspace/summary` interrogé en
+  direct (jeton du navigateur) — `pending_requests: 0`,
+  `savings: 28` (13 récurrentes + 8 hausses + 7 doublons),
+  `sandbox_pending: 0`. Le badge économies apparaît avec "28 signaux du
+  détecteur d'économies" ; les deux autres restent absents (comptes à
+  zéro) — comportement RT-2 confirmé en conditions réelles, pas juste
+  en théorie.
+- **Les 3 formes de pluriel** vérifiées via une instance réelle de
+  `Home` avec un résumé simulé (isolée, pas une deuxième
+  implémentation) : "2 demandes en attente", "1 signal du détecteur
+  d'économies", "1 proposition sandbox en attente" — accord singulier/
+  pluriel correct dans les deux sens.
+- **Mobile 412px** (technique d'injection d'iframe établie) : capture
+  d'écran confirmant une mise en page lisible, aucun débordement, marge
+  verticale confortable même avec 3 cartes + le raccourci vision.
+- **Régression** : bascule accueil ↔ chat toujours fonctionnelle, aucune
+  erreur console.
+
+Aucun fichier `SESSION_LOG` séparé — chantier compact, entièrement
+documenté ici.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
