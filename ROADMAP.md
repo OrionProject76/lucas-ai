@@ -9271,6 +9271,124 @@ confirmer que Whisper transcrit "stop" fidèlement en conditions réelles
 (CLAUDE.md, Priorités S1) — reste le seul test que Cyril doit faire
 lui-même, comme pour la calibration du seuil RMS.
 
+## 5.86 Style oral pour les réponses parlées (speak=true) — un vrai threading manquant, deux vraies leçons de méthode, 10/08/2026
+
+Cyril signale que la voix de Luca sonne trop littéraire — des phrases
+écrites pour être lues, pas pour être dites.
+
+### Étape préalable (demandée explicitement) — `speak` n'était threadé nulle part
+
+Recherche dans `core/lucas_core.py` : **aucune occurrence de `speak`**.
+`LucasCore.ask()` n'a jamais eu ce paramètre — `speak` n'existait que
+côté `api/server.py`, lu une seule fois (`protocol.read_speak_flag`)
+**APRÈS** que `lucas.ask()` ait déjà produit la réponse, uniquement pour
+décider de lancer la synthèse TTS sur le texte déjà généré. Aucune
+distinction "sera parlé / sera juste affiché" n'existait dans le prompt —
+l'hypothèse de départ du brief (peut-être déjà threadé) ne tenait pas.
+
+### Décision prise — une seule génération sert les deux usages
+
+Ambiguïté posée explicitement par la demande ("dis-moi ce qui te semble
+le plus cohérent si c'est ambigu"), tranchée sans plan complet (pas une
+des 4 conditions de CLAUDE.md — décision UX réversible, pas une
+architecture engageante) : **la même génération sert le texte affiché ET
+la voix**, pas un second appel séparé pour une version "orale". Générer
+deux réponses doublerait le coût/temps de chaque tour vocal pour un gain
+incertain. Conséquence acceptée et documentée (`config.py`) : en mode
+conversation, où `speak` est toujours vrai, la bulle de chat affichée
+suit donc, elle aussi, le style oral — cohérent avec l'esprit du mode
+(une conversation parlée, pas un chat qui accessoirement parle).
+
+### Construit
+
+- **`config.py`** — `ORAL_STYLE_INSTRUCTION` : phrases courtes, une idée
+  à la fois, contractions naturelles, éviter connecteurs formels
+  ("néanmoins", "par ailleurs"...), **pas de liste à puces ni de
+  markdown** ("une voix ne les lit pas").
+- **`core/lucas_core.py`** — `speak: bool = False` ajouté à `ask()` et
+  `_build_messages()`, threadé jusqu'au bout. Le bloc est ajouté juste
+  après `presence_context` (même priorité), et RÉPÉTÉ au point de
+  ré-ancrage (juste avant la question) quand un historique existe — même
+  raisonnement déjà validé pour le tutoiement (§5.29/5.32) : une règle de
+  style qui lutte contre le fil de la conversation a besoin d'être
+  répétée près de la question, pas seulement en tête de prompt.
+- **`api/server.py`** — `speak_wanted` lu UNE FOIS, avant l'appel à
+  `lucas.ask()` (pour adapter le prompt) ET réutilisé plus bas pour
+  déclencher la synthèse (au lieu de deux lectures séparées du même
+  drapeau).
+- **5 tests** (`test_oral_style_prompt.py`) + 2 tests serveur
+  (threading réel du drapeau jusqu'à `LucasCore.ask()`) + mise à jour de
+  3 doublures de `ask()` dans `test_server.py`/`test_server_intent_mutants.py`
+  qui ne connaissaient pas le nouveau paramètre (régression trouvée par
+  la suite complète, pas par un test isolé — 37 échecs `TypeError` avant
+  correctif, 1644 passed après).
+
+### Vérifié sur de VRAIES réponses générées, pas juste "le prompt contient l'instruction"
+
+Trois questions réelles, comparées `speak=False` vs `speak=True`, via un
+client WebSocket Python direct contre le serveur réel (le mode
+conversation seul n'aurait pas permis de comparer les deux côte à côte) :
+
+- **Résumé des capacités** — différence la plus nette : `speak=False`
+  produit une liste à puces (6 items) ; `speak=True` la même information
+  en phrases enchaînées, aucune puce, aucun markdown — l'instruction
+  explicite ("une voix ne lit pas les listes") suivie à la lettre.
+- **Explication de Whisper** — `speak=False` : un paragraphe dense,
+  plusieurs idées par phrase. `speak=True` : découpé en 4-5 phrases
+  courtes, une idée par ligne, structure "Chaque bout est... Le modèle
+  utilise... Un décodeur prédit..." — nettement plus séquentiel, plus
+  proche de comment on explique à voix haute.
+- **Avis sur un mot d'éveil** — `speak=True` utilise des connecteurs
+  oraux réels ("mais", "donc") et une contraction familière ("Faut
+  juste vérifier...") absents de la version écrite.
+
+**Verdict honnête** : amélioration réelle et mesurable sur la
+STRUCTURE (phrases courtes, zéro liste/markdown, connecteurs plus
+naturels) — le modèle local (gpt-oss:20b) suit ces consignes-là de façon
+fiable sur les 3 essais. Le vocabulaire reste par endroits technique/écrit
+quand le sujet l'est ("représentations numériques", "audio-texte
+multilingues") : la consigne de STRUCTURE est mieux respectée que la
+consigne de REGISTRE — cohérent avec ce que CLAUDE.md documente déjà
+ailleurs sur ce modèle (suit moins fidèlement une instruction de style
+fine qu'un modèle cloud). Pas présenté comme "réglé" : un ajustement du
+prompt pourrait affiner encore le registre, non tenté ici (hors périmètre
+de cette demande).
+
+### 🔴 Deux leçons de méthode trouvées en testant, pas supposées
+
+1. **Un modèle bombardé de questions sans rapport en quelques secondes se
+   confond.** Trois questions tirées à ~2-3 s d'intervalle ont produit une
+   réponse à la question B qui était en réalité un quasi-doublon de la
+   réponse à la question A (répété deux fois de suite) — trouvé en
+   relisant les réponses, pas supposé. Corrigé pour le test en espaçant
+   les questions de 5 s ; la question a alors reçu une vraie réponse
+   cohérente. Sans rapport avec le style oral — un symptôme du rythme de
+   test, pas du prompt — mais réel, donc documenté plutôt que caché.
+2. **Chaque message de test envoyé via le VRAI WebSocket est enregistré
+   dans la VRAIE mémoire de Cyril** (`LucasCore()` sauvegarde dans
+   `memory/lucas_memory.db`, sans distinction test/production — c'est le
+   comportement normal du serveur, aucun raccourci de test n'existe).
+   22 puis 4 lignes de test (questions Whisper/mot d'éveil/capacités) se
+   sont ainsi retrouvées dans son historique réel. **Nettoyées
+   immédiatement** après vérification précise des ID concernés (pas une
+   suppression à l'aveugle : chaque ligne supprimée a été confrontée au
+   texte exact envoyé, la conversation réelle de Cyril juste avant
+   — "salut" / "Comment ça se passe ?", 16h07 — n'a pas été touchée).
+   Leçon pour la suite : un test de génération réelle contre le serveur
+   de production laisse une trace dans la vraie base — à nettoyer
+   systématiquement après coup, pas seulement quand ça se remarque.
+
+**Signalé à Cyril, pas juste corrigé en silence** : son téléphone était
+connecté et actif pendant une partie de ce test (requêtes visibles dans
+`data/logs/server_startup.log`, IP du pont mobile). Aucun redémarrage
+serveur n'a eu lieu pendant cette fenêtre — seule sa mémoire de
+conversation a été temporairement partagée avec mes questions de test,
+le temps de les identifier et de les retirer.
+
+Serveur redémarré une fois avant de commencer les tests réels (pour
+charger `speak` dans `core/lucas_core.py`), aucun autre redémarrage
+ensuite.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

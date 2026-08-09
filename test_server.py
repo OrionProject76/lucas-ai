@@ -101,10 +101,12 @@ def fake_core(monkeypatch):
             image_path: str | None = None,
             allow_screen_capture: bool = True,
             on_activity=None,
+            speak: bool = False,
         ) -> str:
             calls["asked"] = message
             calls["asked_image_path"] = image_path
             calls["asked_allow_screen_capture"] = allow_screen_capture
+            calls["asked_speak"] = speak
             # Capturé PENDANT l'appel : le fichier temporaire est supprimé
             # juste après, dans le finally de websocket_endpoint.
             calls["image_existed_during_call"] = (
@@ -912,7 +914,7 @@ def test_websocket_no_activity_events_when_the_core_emits_none(client, monkeypat
     il n'invente rien.
     """
     class _SilentCore:
-        def ask(self, message, image_path=None, allow_screen_capture=True, on_activity=None):
+        def ask(self, message, image_path=None, allow_screen_capture=True, on_activity=None, speak=False):
             return "réponse"
 
         def recent_context(self):
@@ -1291,6 +1293,28 @@ def test_websocket_silence_returns_to_idle_without_asking_lucas(client, fake_cor
 # Optionnelle : la vaste majorité des tests ci-dessus n'envoient jamais
 # "speak", donc ce chemin n'est même pas emprunté — vérifié explicitement
 # ici (première fonction) pour que ce ne soit pas juste une supposition.
+
+def test_websocket_threads_the_speak_flag_into_lucas_ask(client, fake_core, fake_voice) -> None:
+    """
+    ROADMAP.md §5.86 : `speak` servait UNIQUEMENT, avant ce correctif, à
+    décider de synthétiser le texte déjà généré — jamais à adapter le
+    prompt (style oral). Vérifie que la même valeur lue une fois atteint
+    bien LucasCore.ask(), pas seulement le déclenchement TTS plus bas.
+    """
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "chat", "message": "bonjour", "speak": True})
+        _next_of_type(ws, "chat")
+
+    assert fake_core.get("asked_speak") is True
+
+
+def test_websocket_defaults_speak_to_false_in_lucas_ask(client, fake_core, fake_voice) -> None:
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "chat", "message": "bonjour"})
+        _next_of_type(ws, "chat")
+
+    assert fake_core.get("asked_speak") is False
+
 
 def test_websocket_sends_no_speech_without_the_speak_flag(client, fake_core, fake_voice) -> None:
     with client.websocket_connect("/ws") as ws:

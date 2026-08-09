@@ -761,6 +761,37 @@ SYSTEM_PROMPT = (
 # nom de son entreprise. Signalé ici pour qu'une relecture future ne prenne
 # pas l'écart pour une incohérence à « corriger ».
 
+# --- Style oral pour les réponses parlées (speak=true, 10/08/2026) ---
+#
+# Cyril signale que la voix de Luca sonne trop littéraire — des phrases
+# écrites pour être lues, pas pour être dites. Ce bloc n'est ajouté au
+# prompt QUE quand `speak=True` est demandé (core/lucas_core.py, ask()) —
+# le texte AFFICHÉ dans le chat (speak=False) n'est jamais concerné.
+#
+# ⚠️ speak=True et le texte AFFICHÉ partagent la MÊME génération — il n'y
+# a qu'un seul appel au modèle, pas une version "à l'oral" séparée d'une
+# version "écrite". Décision délibérée (pas une contrainte technique
+# qu'on n'a pas contournée) : générer deux réponses doublerait le coût et
+# le temps de chaque tour vocal, pour un gain incertain — voir
+# ROADMAP.md §5.86 pour le raisonnement complet. Conséquence acceptée :
+# en mode conversation (speak toujours vrai), la bulle de chat affichée
+# suit donc, elle aussi, le style oral.
+ORAL_STYLE_INSTRUCTION = (
+    "Cette réponse va être LUE À VOIX HAUTE (synthèse vocale), pas "
+    "seulement affichée à l'écran — adapte ta façon d'écrire en "
+    "conséquence, le contenu reste le même.\n"
+    "Phrases courtes, une idée à la fois. Emploie les tournures et "
+    "contractions qu'on utilise en parlant (« c'est », « y'a », « faut » "
+    "si ça sonne naturel), pas des tournures écrites.\n"
+    "Évite les subordonnées empilées et les connecteurs formels "
+    "(« néanmoins », « par ailleurs », « en effet », « de plus », « ainsi "
+    "que ») sauf s'ils sonnent vraiment naturels dits à voix haute — "
+    "préfère « mais », « et », « du coup », « donc ».\n"
+    "Vocabulaire courant, pas de jargon inutile. Pas de liste à puces ni "
+    "de mise en forme (markdown, numéros) — une voix ne les lit pas, "
+    "raconte les points les uns après les autres."
+)
+
 # --- OS Controller (core/os_controller.py) — Brique 2 du noyau, 08/08/2026 ---
 # Liste blanche stricte : organisation de fichiers, capture d'écran, volume,
 # presse-papiers. Jamais C:\Windows ni Program Files — un dossier utilisateur

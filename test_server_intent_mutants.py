@@ -45,7 +45,7 @@ def fake_core_speaks(monkeypatch):
     import api.server as srv
 
     class _FauxCore:
-        def ask(self, message, image_path=None, allow_screen_capture=True, on_activity=None):
+        def ask(self, message, image_path=None, allow_screen_capture=True, on_activity=None, speak=False):
             return "bonjour Cyril"
 
         def recent_context(self):
@@ -352,7 +352,7 @@ def test_a_vanished_temp_image_does_not_break_the_answer(client, monkeypatch) ->
     import api.server as srv
 
     class _FauxCore:
-        def ask(self, message, image_path=None, allow_screen_capture=True, on_activity=None):
+        def ask(self, message, image_path=None, allow_screen_capture=True, on_activity=None, speak=False):
             return "je vois une image"
 
         def recent_context(self):

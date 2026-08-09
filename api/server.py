@@ -825,6 +825,11 @@ async def websocket_endpoint(websocket: WebSocket):
             # action. allow_screen_capture porte cette distinction : jamais
             # de capture PC silencieuse pour un client mobile.
             allow_screen_capture = client_type != "mobile"
+            # Lu ICI, pas seulement plus bas au moment de synthétiser :
+            # LucasCore.ask() en a besoin pour adapter le PROMPT (style
+            # oral, ROADMAP.md §5.86) avant même de générer la réponse —
+            # la même valeur sert ensuite à décider de synthétiser ou non.
+            speak_wanted = protocol.read_speak_flag(data)
 
             lucas = LucasCore()
             if image_path is not None:
@@ -867,6 +872,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     message,
                     image_path=image_path,
                     allow_screen_capture=allow_screen_capture,
+                    speak=speak_wanted,
                     # B023 assumé ci-dessous : la liaison tardive est inoffensive.
                     # `activity_events` est recréée à chaque tour (l.693),
                     # `ask()` est synchrone, et la liste est relue juste
@@ -900,8 +906,9 @@ async def websocket_endpoint(websocket: WebSocket):
             # Cyril ne doit pas attendre l'audio pour lire la réponse.
             # Optionnelle, jamais déclenchée sans le demander explicitement
             # (voir protocol.read_speak_flag) — même défaut que le toggle
-            # TTS Auto de l'UI PySide6.
-            if protocol.read_speak_flag(data):
+            # TTS Auto de l'UI PySide6. Même valeur que celle déjà lue plus
+            # haut pour adapter le prompt — pas de second appel.
+            if speak_wanted:
                 try:
                     audio_path = await asyncio.to_thread(
                         _voice_manager.synthesize_routed, answer, message

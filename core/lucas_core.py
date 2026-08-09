@@ -13,6 +13,7 @@ from config import (
     MODEL_NAME,
     OCR_ENABLED,
     OCR_MAX_CHARS,
+    ORAL_STYLE_INSTRUCTION,
     REANCHOR_SYSTEM_PROMPT,
     REASONING_ENGINE_ENABLED,
     RECENT_EVENTS_IN_PROMPT,
@@ -354,6 +355,7 @@ class LucasCore:
         image_path: str | None = None,
         allow_screen_capture: bool = True,
         on_activity: ActivityCallback | None = None,
+        speak: bool = False,
     ) -> list[dict]:
         """
         Construit la liste de messages envoyée au LLM.
@@ -382,6 +384,11 @@ class LucasCore:
 
         `on_activity` : callback optionnel (kind, texte) pour la console de
         flux de la PWA (IDEAS.md #77) — voir _emit() ci-dessus.
+
+        `speak` : cette réponse sera-t-elle aussi lue à voix haute (TTS) ?
+        Ajoute ORAL_STYLE_INSTRUCTION (config.py) au prompt — voir
+        ROADMAP.md §5.86 pour pourquoi la MÊME génération sert au texte
+        affiché et à la voix (pas deux appels séparés).
         """
         is_cloud = destination == "cloud"
 
@@ -417,6 +424,8 @@ class LucasCore:
         ]
         if presence_context:
             messages.append({"role": "system", "content": presence_context})
+        if speak:
+            messages.append({"role": "system", "content": ORAL_STYLE_INSTRUCTION})
 
         # Événements système récents : ce qui s'est passé sur la machine
         # depuis le début de la session. Jamais vers le cloud — la table
@@ -1002,6 +1011,13 @@ class LucasCore:
         # les a fait fonctionner, on n'y touche pas.
         if REANCHOR_SYSTEM_PROMPT and history:
             messages.append({"role": "system", "content": SYSTEM_PROMPT})
+            # Même raisonnement que le ré-ancrage ci-dessus, appliqué au
+            # style oral : une règle qui lutte contre le fil de la
+            # conversation (des tours précédents plus écrits, avant ce
+            # correctif ou parce que speak était faux) a besoin d'être
+            # répétée près de la question, pas seulement en tête de prompt.
+            if speak:
+                messages.append({"role": "system", "content": ORAL_STYLE_INSTRUCTION})
 
         # Vision : Luca's regarde l'écran uniquement sur demande explicite.
         # Jamais vers le cloud — l'image reste locale, mais sa description
@@ -1261,11 +1277,15 @@ class LucasCore:
         image_path: str | None = None,
         allow_screen_capture: bool = True,
         on_activity: ActivityCallback | None = None,
+        speak: bool = False,
     ) -> str:
         """
         `on_activity` : callback optionnel (kind, texte) pour la console de
         flux de la PWA (IDEAS.md #77). Ne change rien à la réponse ni au
         routage — voir _emit() en tête de fichier.
+
+        `speak` : voir _build_messages() — adapte le prompt pour une
+        réponse qui sera aussi lue à voix haute (ROADMAP.md §5.86).
         """
         self.memory.save_message("user", user_message)
         # ⚠️ Ici et pas dans _build_messages : celui-ci est aussi appelé par
@@ -1294,6 +1314,7 @@ class LucasCore:
             image_path=image_path,
             allow_screen_capture=allow_screen_capture,
             on_activity=on_activity,
+            speak=speak,
         )
 
         start = time.time()
