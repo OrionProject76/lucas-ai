@@ -1318,8 +1318,18 @@ Ce bloc s'est déjà complété cinq fois le 08/08/2026 (2e passe : Groupe H
 étendu de H-1/H-2 à H-1…H-7 ; 3e passe : RT-6 ajouté ; 4e passe : RT-7
 ajouté ; 5e passe : A-4, B-4 étendu, B-5, C-5, H-8, H-9 et `#106` Lois
 d'Asimov ajoutés ; 6e passe : B-6, B-7, C-6, D-7, G-5 ajoutés, F-1 précisé
-smartphone-uniquement, E-1 marqué implémenté) — à corriger et enrichir à
-chaque nouvelle session d'idées, sans jamais prétendre être clos.
+smartphone-uniquement, E-1 marqué implémenté ; **7e passe (10/08/2026,
+audit de cohérence contre une synthèse relue par Cyril)** : D-7
+reformulé en 3 briques (mot d'éveil local + assistant système par
+défaut + lecture d'écran, périmètre initial trop étroit), E-4 enrichi
+de l'annexe de recherche écosystème agents IA (MCP/Composio/E2B/...),
+`#102` E-5 ajouté (absent jusqu'ici, alors que déjà **implémenté** —
+Bureau de l'IA) et marqué comme tel, F-1 enrichi de la structure
+d'écran d'accueil et marqué **implémenté**. D-6 vérifié : correction
+`VISION_LONG_TERME.md` déjà faite le 05/08/2026, aucune action
+nécessaire malgré une note périmée dans la synthèse source) — à
+corriger et enrichir à chaque nouvelle session d'idées, sans jamais
+prétendre être clos.
 
 - **RT-1 — Français d'abord + transparence de traduction.** Toute sortie de
   Luca's en français, tout contenu non-français traduit avant présentation.
@@ -1538,21 +1548,50 @@ Au service de l'objectif retraite.
   direct sans dépendre du téléphone. Activation toujours gatée par
   `VISION_LONG_TERME.md` §4.1/§4.2 (pas d'écoute ambiante permanente
   automatique).
-- **D-7 — Lecture d'écran du smartphone (S25 Ultra)** *(ajouté 08/08/2026,
-  6e passe)*. Distinct du micro/caméra (déjà couvert par le pipeline
-  PWA/`getUserMedia` existant). Lire ce qui s'affiche sur l'écran du
-  téléphone lui-même demande un mécanisme différent : l'API Android
-  **MediaProjection** (capture d'écran système), permission dédiée,
-  probablement une petite app compagnon native — `getUserMedia` seul ne
-  capture que caméra/micro, jamais l'écran d'autres applications.
-  Deviendrait l'équivalent mobile du système de modes de vision déjà
-  nommé pour le PC (éteint / capture écran / capture document / visionne
-  puis supprime / visionne et sauvegarde). **Garde-fou OTP étendu** : même
-  principe que pour les mails (`#100` C-1) — un code de vérification
-  affiché pendant une capture n'est jamais résumé, loggé ni transmis.
-  **RT-3** : strictement local. Gating chez moi/dehors (`VISION_LONG_TERME.md`
-  §4.2) : capture à la demande explicite uniquement, jamais continue —
-  particulièrement strict « dehors ».
+- **D-7 — Application Android native Luca's (mot d'éveil local +
+  assistant système + lecture d'écran).** *(ajouté 08/08/2026, 6e passe ;
+  **reformulé le 10/08/2026** — périmètre initial (juste lecture d'écran)
+  trop étroit, clarifié après échange avec Cyril sur son usage réel :
+  voiture, mains libres, remplacer Gemini/Bixby.)*
+
+  Objectif final : une vraie application Android native qui remplace
+  Gemini/Bixby comme assistant système, avec un mot d'éveil détecté
+  **entièrement en local** (aucun son envoyé où que ce soit tant que le
+  mot n'est pas reconnu — même famille technique qu'`openwakeword`, déjà
+  utilisée par Hermes).
+
+  Trois briques, à construire dans cet ordre :
+  1. **Mot d'éveil local** — service Android au premier plan (notification
+     permanente obligatoire, jamais masquée), modèle de détection
+     embarqué, aucune dépendance à Google/Assistant. C'est la brique qui
+     débloque l'usage voiture mains libres sans compromis de
+     confidentialité.
+  2. **Enregistrement comme assistant par défaut Android** — via le
+     mécanisme système officiel (`VoiceInteractionService`), pour que
+     Luca's remplace réellement Gemini/Bixby, pas seulement coexister à
+     côté.
+  3. **Lecture d'écran** (périmètre D-7 initial) — API Android
+     **MediaProjection** (capture d'écran système), permission dédiée.
+     Deviendrait l'équivalent mobile du système de modes de vision déjà
+     nommé pour le PC (éteint / capture écran / capture document /
+     visionne puis supprime / visionne et sauvegarde). **Garde-fou OTP
+     étendu** : même principe que pour les mails (`#100` C-1) — un code
+     de vérification affiché pendant une capture n'est jamais résumé,
+     loggé ni transmis.
+
+  **Contraintes** : domaine technique différent du reste du projet
+  (Kotlin/Android natif, pas web) — nécessite une vraie planification de
+  session dédiée, pas une brique parmi d'autres. Consommation batterie
+  réelle et non négligeable pour l'écoute continue — à mesurer
+  honnêtement une fois construit, pas minimisée à l'avance. Activation
+  reste consciente et réversible (`VISION_LONG_TERME.md` §4.2) — Cyril
+  active, jamais un défaut silencieux. **RT-3** : strictement local.
+  Gating chez moi/dehors (`VISION_LONG_TERME.md` §4.2) : capture à la
+  demande explicite uniquement, jamais continue — particulièrement
+  strict « dehors ». **Écarté explicitement** : faire transiter la voix
+  par Google Assistant/Tasker avant Luca's (proposé puis rejeté le
+  10/08/2026 — contraire au local-first, et de toute façon ne résout pas
+  le mains-libres puisque l'app ouverte n'écoute pas automatiquement).
 
 **Rien n'est construit.** Catalogage uniquement.
 
@@ -1605,7 +1644,45 @@ Au service de l'objectif retraite.
   (règle 12 `CLAUDE.md`) — outils appelés par Luca's, pas IA autonomes.
   Chaque ajout soumis à `#97` RT-4.
 
-**Rien n'est construit.** Catalogage uniquement.
+  **Annexe recherche** *(ajoutée 09/08/2026, notes fournies par Cyril)* —
+  écosystème agents IA, évalué avant tout catalogue brut :
+
+  | Outil/catégorie | Nature | Évaluation |
+  |---|---|---|
+  | MCP (Model Context Protocol) | Standard ouvert, créé par Anthropic | ✅ Piste la plus solide pour E-5 V2 — serveurs auto-hébergeables en local, pas de dépendance à un cloud tiers pour l'appel d'outil lui-même |
+  | Composio | Service cloud tiers (1000+ apps, gère OAuth) | ⚠️ Ferait transiter les appels d'outils par une infra cloud tierce — à l'opposé du Zero-Trust local ; envisageable seulement pour des intégrations non sensibles, au cas par cas |
+  | E2B / Daytona | Sandboxes cloud | ❌ Redondant avec E-3 (sandbox locale déjà construite et testée) — une sandbox cloud ferait sortir du code vers un tiers, régression de confidentialité |
+  | Browserbase / Stagehand | Navigateurs headless pour agents (contournement CAPTCHA) | ⚠️ Contournement de CAPTCHA = souvent contraire aux CGU des sites ciblés ; cloud également |
+  | Mem0 / Zep | Moteurs de mémoire long terme | ❌ Redondant avec la mémoire à 5 types déjà construite (Brique 3), locale, avec provenance |
+  | LangGraph / CrewAI / OpenAI Agents SDK | Frameworks d'orchestration multi-agents | 🛑 C'est très exactement la Swarm Intelligence, règle 12 — territoire différé à une session supervisée dédiée, pas de l'intégration d'outils |
+  | Registres MCP (Glama, PulseMCP, Smithery) | Répertoires d'outils prêts à l'emploi | ⚠️ Utile en principe pour E-5 V2, mais vecteur direct de risque chaîne d'approvisionnement (`#97`-adjacent, H-7) — un registre compromis pourrait injecter un outil malveillant. Jamais d'ajout automatique, toujours validation explicite avant intégration |
+  | Dynamic Tool Discovery (« effet Windows Update ») | Agent qui télécharge/exécute un schéma d'outil à la volée depuis un registre distant | 🛑 Même risque que ci-dessus, en pire — aucune revue humaine dans la boucle par construction. À ne jamais activer tel quel ; si un jour retenu, la validation Cyril doit rester obligatoire à chaque nouvel outil, pas seulement à la première connexion au registre |
+
+- **E-5 — Poste de Commandement IA (« Bureau de l'IA »).** ✅ **V1
+  implémentée le 09/08/2026** (brief `cowork_workspace/BRIEF_POSTE_COMMANDEMENT_IA_E5.md`,
+  renommée par Cyril le même jour, voir `ROADMAP.md` §5.82) :
+  `modules/capability_registry.py` + `GET /capabilities` +
+  `static/command-center.html`, page séparée accessible depuis une icône
+  du Workspace (pas une 7e carte — la compaction du 09/08/2026 ne
+  laissait pas de marge). Module dédié aux capacités de Luca's
+  elle-même — distinct des données/résultats déjà affichés (rapports,
+  finances) : celui-ci porte sur les outils/modules dont Luca's dispose.
+  **V1 réalisée** : registre en lecture, 26 capacités réparties par
+  catégories fonctionnelles trouvées par exploration réelle (pas une
+  liste imposée d'avance), **4 statuts visuellement distincts**
+  (actif/inactif/manuel/construit-non-branché — badge violet dédié pour
+  ce dernier après un correctif de lisibilité le même jour). Deux
+  capacités listées comme « construit, non branché » plutôt qu'actif,
+  trouvées en explorant plutôt que supposées : `core/os_controller.py`
+  (aucun import hors de son propre test) et `modules/vram_watchdog.py`
+  (aucun mécanisme d'auto-démarrage). **V2, toujours hors périmètre tant
+  que non construite** : téléchargement/installation de nouveaux
+  connecteurs/skills/plugins — nécessite un mécanisme de chargement de
+  plugin qui n'existe toujours pas. Mêmes garde-fous que le reste (RT-4,
+  confirmation, test sandbox avant intégration réelle) le jour où V2
+  s'ouvre. Style Terminal Pro, cohérent avec le reste du Workspace.
+
+**E-1, E-5 implémentées (V1) — le reste (E-2, E-4 V2) reste catalogage uniquement.**
 
 ---
 
@@ -1626,7 +1703,19 @@ Au service de l'objectif retraite.
   précisée dans cette même passe** : sur PC, avatar fantôme minimal
   (présence bureau) + Workspace (`#102` E-1, déjà implémenté) ; sur
   smartphone, cette interface complète façon JARVIS. Deux appareils, deux
-  rôles distincts, pas la même interface partout.
+  rôles distincts, pas la même interface partout. **Structure d'écran
+  d'accueil précisée (09/08/2026, référence image fournie par Cyril) et
+  ✅ implémentée le même jour** (brief `cowork_workspace/BRIEF_ACCUEIL_MOBILE_F1.md`,
+  voir `ROADMAP.md` §5.80, enrichie le 10/08/2026 avec des compteurs
+  réels — `ROADMAP.md` §5.89) : orbe d'état de l'avatar en haut
+  (conservé tel quel, pas remplacé par un cadran décoratif générique) ;
+  sous l'orbe, liste compacte d'éléments récents (dernier rapport,
+  compteur de demandes en attente, alertes du détecteur d'économies,
+  propositions sandbox en attente, raccourci mode vision) réutilisant
+  les données déjà exposées par `workspace_manager` — même backend que
+  le Workspace PC, présentation mobile ; barre de navigation basse
+  (Chat / Vision / Workspace / Réglages). Palette ambre « Terminal pro »
+  déjà en place, cohérente avec la référence fournie.
 - **F-2 — TTS interchangeable (adaptateur).** Module TTS conçu avec une
   interface interchangeable. Par défaut : local (Piper/edge_tts, qualité
   correcte). Évolution possible vers un TTS cloud premium (type ElevenLabs,
@@ -1634,7 +1723,7 @@ Au service de l'objectif retraite.
   Décision de Cyril : rester local pour l'instant, avec porte ouverte sur le
   cloud payant plus tard. Rien payé tant que non basculé (`#97` RT-5).
 
-**Rien n'est construit.** Catalogage uniquement.
+**F-1 implémenté (écran d'accueil mobile) — F-2 reste catalogage uniquement.**
 
 ---
 
