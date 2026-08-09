@@ -483,7 +483,12 @@ ce qui tourne, pas ce qui avait été imaginé au lancement.
 **Installés mais non utilisés par le code** : `qwen2.5:7b` (ex-classifieur,
 remplacé par `gpt-oss:20b`), `qwen3:14b`, `gemma3:12b`, `gemma4:latest`,
 `deepseek-r1:14b`, `deepseek-coder:33b`, `llama3.1:8b`, `llama3:70b`,
-`qwen3.6:latest`, `qwen2.5:latest`, `kimi-k2.7-code:cloud`.
+`qwen3.6:latest`, `qwen2.5:latest`, `kimi-k2.7-code:cloud`,
+`ministral-3:8b` (**écarté le 10/08/2026** — VRAM/vitesse excellentes
+mais hallucine des scénarios sans rapport avec la question posée sur le
+prompt actuel de Luca's, même problème mesuré sur `qwen3:14b` avec ce
+même prompt ; voir ROADMAP.md §5.87 et
+`cowork_workspace/reports/Comparatif_LLM_Ministral3_LucasAI_2026-08-10.md`).
 
 ⚠️ **`internvl2` n'est pas installé** et reste une piste v1.1 — `config.py`
 (l.91, 143-147) et `core/lucas_core.py` (l.1163) le citent comme plan de

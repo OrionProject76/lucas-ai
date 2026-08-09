@@ -9389,6 +9389,46 @@ Serveur redémarré une fois avant de commencer les tests réels (pour
 charger `speak` dans `core/lucas_core.py`), aucun autre redémarrage
 ensuite.
 
+## 5.87 Veille modèles — Ministral 3 8B (`ministral-3:8b`) écarté, un vrai problème de fiabilité trouvé, 10/08/2026
+
+Demande ponctuelle de Cyril (pas le cycle complet LLM+VLM de la règle
+12 — celui-là reste dû séparément si les 30 jours depuis la 1re veille
+sont écoulés). Tag vérifié (pas deviné) : "Mistral 3 8B" n'existe pas
+sous ce nom sur Ollama — le vrai tag est **`ministral-3:8b`** (famille
+Mistral AI "Ministral", 8,9 B, Q4_K_M, 6,0 Go), déjà présent sur cette
+machine (pull antérieur, jamais mesuré).
+
+**Mesures réelles** : VRAM 5,25-5,38 Go, ~130-136 tok/s — nettement plus
+léger et rapide que `qwen3:14b` (remesuré au passage : 8,98 Go, ~86
+tok/s) et que `gpt-oss:20b` (12,5 Go, production).
+
+**🔴 Écarté, pas sur la qualité du français mais sur la fiabilité** :
+les deux modèles (`ministral-3:8b` ET `qwen3:14b`), soumis au VRAI
+prompt de `_build_messages()` (système + contexte + `ORAL_STYLE_INSTRUCTION`
+du jour, §5.86), ont **halluciné des scénarios sans rapport avec la
+question posée**, dans les 3 tests sur 3. Cause partiellement identifiée :
+la fenêtre active réelle de Cyril (une recherche Google) a été prise
+pour LE sujet de la question par les deux modèles. Mais retirer le titre
+de fenêtre (contexte "cloud") ne suffit pas : les deux modèles confondent
+alors la LISTE DE LEURS CAPACITÉS (bloc du prompt système) avec une
+tâche déjà en cours, et inventent des fichiers/dossiers qui n'existent
+pas. `gpt-oss:20b` ne présente pas ce problème sur ce même prompt (toutes
+les campagnes précédentes, ROADMAP entier). Étape d'écoute par Cyril
+(qualité orale) volontairement PAS préparée : juger le style de phrases
+hallucinées n'aurait aucun sens.
+
+**Aucun changement de production.** `config.py::MODEL_NAME` reste
+`gpt-oss:20b`. `gpt-oss:20b` a été temporairement évincé de la VRAM
+pendant les mesures (16 Go au total, pas de place pour deux modèles à la
+fois) puis rechargé et vérifié actif immédiatement après — signalé à
+Cyril, dont le téléphone était connecté à ce moment.
+
+Rapport complet, daté :
+`cowork_workspace/reports/Comparatif_LLM_Ministral3_LucasAI_2026-08-10.md`
+(pistes proposées pour une prochaine session : isoler quel bloc du
+prompt fait dérailler ces modèles, bloc par bloc — non commencé, hors
+périmètre de cette demande).
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
