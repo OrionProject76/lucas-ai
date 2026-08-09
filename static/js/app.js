@@ -69,24 +69,60 @@
             logEl: document.getElementById("finance-log"),
         });
         new window.Lucas.Home();
+        // Rempli après la création de ConversationMode (référence circulaire
+        // socket <-> conversationMode) — voir plus bas.
+        let conversationMode = null;
         const voiceOutput = new window.Lucas.VoiceOutput({
             toggleEl: document.getElementById("speak-toggle"),
             onBargeIn: () => activity.add("voice", "Interruption détectée — coupée immédiatement."),
+            onPlaybackEnded: () => {
+                if (conversationMode) conversationMode.notifyPlaybackEnded();
+            },
         });
 
         const socket = new window.Lucas.LucasSocket({
-            onAvatarState: (state) => avatar.setState(state),
+            onAvatarState: (state) => {
+                // Mode conversation actif : le serveur envoie "idle" en fin
+                // de tour raté (transcription peu fiable, api/server.py) —
+                // ce message arrive APRÈS "error", donc APRÈS que
+                // conversationMode.notifyError() ait déjà remis l'avatar en
+                // "écoute". Sans ce filtre, "idle" écrase "écoute" une
+                // fraction de seconde plus tard, alors que le micro écoute
+                // réellement encore — affichage trompeur, pas un problème
+                // fonctionnel. Le mode ne connaît pas d'état "idle" tant
+                // qu'il est actif : il redevient lui-même "écoute" via
+                // notifyLucasReplied()/notifyPlaybackEnded()/notifyError().
+                if (state === "idle" && conversationMode && conversationMode.active) return;
+                avatar.setState(state);
+            },
             onChat: (text, fromLucas) => {
-                if (fromLucas) chat.addLucasMessage(text);
+                if (fromLucas) {
+                    chat.addLucasMessage(text);
+                    if (conversationMode) conversationMode.notifyLucasReplied();
+                }
             },
             onActivity: (kind, text) => activity.add(kind, text),
             onSecurityStatus: (status) => security.update(status),
             onSpeech: (audioBase64, mime) => voiceOutput.play(audioBase64, mime),
-            onError: (detail) => chat.addError(detail),
+            onError: (detail) => {
+                chat.addError(detail);
+                if (conversationMode) conversationMode.notifyError();
+            },
             onConnectionChange: (connected) => {
                 banner.classList.toggle("visible", !connected);
                 banner.textContent = connected ? "" : "Reconnexion à Luca's...";
             },
+        });
+
+        // Mode conversation mains libres (BRIEF_MODE_VOCAL_CONTINU_MOBILE.md).
+        conversationMode = new window.Lucas.ConversationMode({
+            toggleEl: document.getElementById("conv-mode-toggle"),
+            avatar,
+            socket,
+            voiceOutput,
+            micBtnEl: document.getElementById("mic-btn"),
+            onNotice: (text) => chat.addSystemNotice(text),
+            onError: (message) => chat.addError(message),
         });
 
         const form = document.getElementById("input-bar");

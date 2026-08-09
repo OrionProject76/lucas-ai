@@ -20,6 +20,10 @@ window.Lucas = window.Lucas || {};
             this._addBubble(detail, "error");
         }
 
+        addSystemNotice(text) {
+            this._addBubble(text, "system");
+        }
+
         _addBubble(text, kind) {
             const bubble = document.createElement("div");
             bubble.className = `bubble ${kind}`;

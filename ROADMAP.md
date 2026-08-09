@@ -8935,6 +8935,175 @@ réel : les 3 statuts non-actifs (inactif/manuel/construit-non-branché)
 sont désormais visuellement distincts au premier coup d'œil, pas
 seulement dans le texte de description.
 
+## 5.83 Mode conversation mains libres (mobile) — VAD réel, un vrai bug de course avatar trouvé, 09/08/2026
+
+Brief : `cowork_workspace/BRIEF_MODE_VOCAL_CONTINU_MOBILE.md`. Objectif :
+une conversation vocale sans reclic à chaque tour de parole sur mobile —
+écoute → détection automatique de fin de phrase → transcription → envoi
+→ réponse vocale → retour à l'écoute, activable/désactivable
+explicitement par Cyril, jamais un état par défaut.
+
+### Distinction posée par le brief, vérifiée à chaque étape
+
+"Ce n'est PAS de la perception continue" (`VISION_LONG_TERME.md` §4.2) :
+le micro n'est ouvert qu'entre un clic d'activation et un clic (ou une
+inactivité, ou un passage en arrière-plan) de désactivation — jamais
+avant, jamais après. `conversation_mode.js` coupe le flux dans les TROIS
+cas (arrêt manuel, inactivité, `visibilitychange` si l'onglet est masqué
+— même garde-fou que `audio.js`).
+
+### Étape préalable obligatoire (brief §3) — aucun VAD trouvé, un candidat écarté à raison
+
+Recherche `grep` sur "VAD" dans tout le dépôt : aucune implémentation.
+Le seul mécanisme voisin est le barge-in de `voice_output.js`
+(`AnalyserNode`/RMS), **désactivé par défaut** et conçu pour un usage
+différent (détecter Cyril qui interrompt Luca's pendant qu'elle parle,
+pas détecter le début/la fin d'une phrase pendant l'écoute) — repris
+comme TECHNIQUE (même calcul RMS), pas comme code partagé, dans un
+nouveau fichier dédié : `static/js/vad.js`
+(`VoiceActivityDetector`).
+
+Pipeline STT existant confirmé inchangé : `audio.js` (push-to-talk,
+capture/encode/envoie), `websocket.js` (`sendAudio`, déjà avec un
+paramètre `speak`), `api/protocol.py`/`api/server.py` (le message
+`"audio"` transcrit, vérifie `transcript.is_confident` — rejette les
+hallucinations Whisper sur silence pur — puis appelle `LucasCore.ask()`
+comme n'importe quel message texte). **Aucun changement serveur
+nécessaire** : le mode conversation ne fait qu'appeler `sendAudio(...,
+speak=true)` automatiquement au lieu d'un clic, sur un pipeline qui
+existait déjà en entier.
+
+### Construit
+
+- **`static/js/vad.js`** (nouveau) — `VoiceActivityDetector` : un seul
+  `AudioContext`/`AnalyserNode` créé au `start()` et gardé vivant toute
+  la session (jamais recréé par tour, `pause()`/`resume()` suspendent
+  juste la boucle `requestAnimationFrame`). Seuil `SPEECH_RMS_THRESHOLD
+  = 0.02` (nettement plus bas que le barge-in, 0.09 — signal direct du
+  micro, pas une voix rejouée par un haut-parleur), 3 trames consécutives
+  pour démarrer un tour, 1,5 s de silence continu pour le clore, garde-fou
+  30 s max par tour.
+- **`static/js/conversation_mode.js`** (nouveau) — `ConversationMode` :
+  orchestrateur du cycle complet. Un seul bouton (`#conv-mode-toggle`,
+  🔁) sert à la fois d'activation ET d'arrêt immédiat (brief §4) — décision
+  documentée plutôt qu'un second bouton : il ne disparaît jamais tant que
+  la page est ouverte, un second clic en pleine activité arrête sur-le-champ.
+  Minuteur d'inactivité **60 s** (aucune parole détectée pendant l'écoute
+  → extinction automatique) et délai de grâce **6 s** après le texte de
+  réponse avant de reprendre l'écoute si aucun audio de synthèse n'arrive
+  (contenu sensible routé Piper indisponible → "rien n'est prononcé",
+  la réponse texte suffit alors à clore le tour). Ces deux durées sont
+  des points de départ raisonnés, non mesurés en conditions réelles
+  (cette machine n'a pas de micro, voir plus bas) — mêmes réserves que
+  `BARGE_IN_RMS_THRESHOLD` en son temps.
+- **Tour-à-tour strict, volontairement** : le VAD est mis en pause
+  pendant qu'un tour est traité/répondu, jamais de barge-in dans ce mode
+  — évite d'affronter le risque de rebouclage (micro qui recapte la
+  propre voix de Luca's) déjà documenté comme non résolu pour le
+  barge-in existant, plutôt que de le reproduire une deuxième fois.
+- **`voice_output.js`** — nouveau callback `onPlaybackEnded`, posé en
+  écouteur INCONDITIONNEL sur `this.player` (pas dans
+  `_startBargeInWatch()`, qui ne s'exécute jamais tant que le barge-in
+  reste désactivé) : seul signal fiable de "réponse vocale terminée"
+  pour reprendre l'écoute.
+- **`index.html`/`style.css`** — bouton `#conv-mode-toggle` dans la
+  rangée d'icônes existante (5e position, `left: 196px`, même gabarit
+  38×38 que ses voisins). Trois états visuels distincts : cyan par défaut,
+  **vert** (`--success-green`, dupliqué de `--sandbox-ok` de
+  `workspace.css`, même raison que `--amber-neon` — pas de mécanisme CSS
+  partagé entre les deux pages) quand le mode écoute, **rouge pulsant**
+  (réutilise `mic-pulse`, déjà existant pour `#mic-btn.recording`) pendant
+  la capture d'un tour. Le micro push-to-talk (`#mic-btn`) est désactivé
+  visuellement et fonctionnellement pendant que le mode est actif (évite
+  deux flux micro concurrents) — la caméra et le chat texte restent
+  intacts (brief §7, "aucune régression").
+- **`chat.js`** — nouvelle méthode `addSystemNotice()` (bulle neutre,
+  distincte de `.bubble.error`) pour annoncer l'activation/désactivation
+  du mode sans les faire passer pour un problème.
+
+### 🔴 Bug réel trouvé en testant le cycle complet — course entre "écoute" et "idle" serveur
+
+Après un tour raté (transcription peu fiable), le serveur envoie dans
+l'ordre : `activity`, `error`, puis `avatar_state(idle)`
+(`api/server.py`, ~l.765-779). `conversationMode.notifyError()` remet
+l'avatar en "écoute" DÈS l'arrivée du message `error` — mais le message
+`avatar_state(idle)` qui suit, quelques instants plus tard, écrasait
+cette reprise sans condition (`onAvatarState: (state) => avatar.setState(state)`,
+`app.js`, appliqué à CHAQUE message reçu). Résultat observé en test réel :
+l'avatar affichait "prête" alors que le micro écoutait réellement encore
+— pas un problème fonctionnel (le VAD tournait bel et bien), mais un
+affichage trompeur qui aurait fait croire à Cyril que le mode s'était
+arrêté tout seul.
+
+**Corrigé** : `app.js` filtre désormais un seul cas précis — `avatar_state("idle")`
+reçu du serveur **pendant que le mode conversation est actif** n'est
+jamais appliqué (le mode ne connaît pas d'état "idle" tant qu'il tourne :
+il redevient "écoute" lui-même via `notifyLucasReplied()`/
+`notifyPlaybackEnded()`/`notifyError()`). Aucun changement côté serveur —
+ce `avatar_state(idle)` reste le bon comportement pour le flux push-to-talk
+normal, seul le CLIENT en mode conversation avait besoin de l'ignorer.
+
+### Vérifié réellement — sans microphone sur cette machine (CLAUDE.md, Priorités S1)
+
+Aucun micro physique disponible ici pour tester avec une vraie voix — même
+contrainte, déjà documentée, qui a laissé le barge-in désactivé et non
+calibré. Méthode retenue pour ne pas se contenter d'une simulation JS pure :
+un flux audio **synthétique mais réel** (oscillateur Web Audio →
+`MediaStreamDestination`), injecté à la place de `getUserMedia()`, pour
+exercer le VRAI code de `vad.js` (`AnalyserNode`/RMS) et le VRAI
+`MediaRecorder` de bout en bout, pas une simulation d'événements.
+
+- **Détection réelle confirmée** : RMS mesuré à 0,42-0,43 avec le ton de
+  test (largement au-dessus du seuil 0,02), `.capturing` posé/retiré au
+  bon moment, `MediaRecorder` produit un blob réel (~530 Ko encodés en
+  base64) envoyé via `sendAudio(..., speak=true)`.
+- **Contrainte d'environnement découverte en testant** : l'onglet piloté
+  par l'automatisation navigateur est signalé `document.hidden = true`
+  par Chrome, qui gèle/throttle `requestAnimationFrame` pour les onglets
+  non visibles (comportement standard, pas un bug de `vad.js`) — un
+  correctif de `requestAnimationFrame`/`cancelAnimationFrame` a été posé
+  UNIQUEMENT dans l'onglet de test pour valider l'algorithme malgré cette
+  contrainte du harnais d'automatisation. Sur le vrai téléphone, l'app
+  est au premier plan pendant l'usage (le mode s'arrête de toute façon si
+  elle passe en arrière-plan) — cette contrainte ne s'applique pas à
+  l'usage réel.
+- **Chemin d'erreur** (transcription peu fiable) : `notifyError()` reprend
+  l'écoute, avatar reste "écoute" après le correctif ci-dessus, mode
+  toujours actif.
+- **Chemin de succès** (délai de grâce + fin de lecture) : testé
+  directement sur la vraie classe `ConversationMode` avec des objets de
+  test (avatar/socket/voiceOutput factices) plutôt qu'une transcription
+  chanceuse sur un ton pur — `notifyPlaybackEnded()` reprend
+  immédiatement sans attendre les 6 s ; sans lui, la reprise intervient
+  après exactement 6 000 ms (mesuré : ~6-7 s avec la marge du test).
+- **Minuteur d'inactivité** : capturé par espionnage de `setTimeout`,
+  confirmé à exactement 60 000 ms — et déclenché ORGANIQUEMENT une fois
+  en cours de session (le mode s'est éteint tout seul avec le bon message
+  "aucune parole détectée" après un long silence pendant le débogage),
+  preuve supplémentaire en conditions réelles.
+- **Régression** : chat texte envoyé avec succès pendant que le mode
+  était actif, bouton caméra jamais désactivé.
+- **Mobile 412px** (technique d'injection d'iframe déjà établie) : bouton
+  visible et correctement positionné dans la rangée d'icônes, sans
+  chevauchement ; capture d'écran zoomée confirmant l'anneau vert distinct
+  du cyan par défaut ; label d'avatar "ÉCOUTE" visible en conditions
+  réelles pendant l'activité du mode.
+
+**Non mesuré, honnêtement** : l'impact batterie réel (brief §6) — aucun
+moyen de le mesurer sans le vrai S25 Ultra ; le coût théorique (flux micro
+permanent + boucle `requestAnimationFrame` + encodages base64 périodiques
+par tour) est documenté ici, la mesure réelle reste à faire par Cyril en
+usage. Les seuils RMS/durées (0,02 / 1,5 s / 60 s / 6 s) sont des points
+de départ raisonnés, ajustables, non calibrés sur le vrai appareil — même
+statut que `BARGE_IN_RMS_THRESHOLD`.
+
+`static/sw.js` : `CACHE_NAME` v15→v16 (nouveaux fichiers +
+modifications), puis v16→v17 dans la même session après le correctif de
+la course avatar (même leçon que v14→v15 : re-bump à chaque édition).
+
+Détail complet de la session :
+`cowork_workspace/SESSION_LOG_MODE_VOCAL_CONTINU_2026-08-09.md`.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

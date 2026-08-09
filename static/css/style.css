@@ -32,6 +32,10 @@
     --bubble-user: rgba(0, 40, 55, 0.55);
     --bubble-lucas: rgba(0, 60, 75, 0.35);
     --error: #ff5566;
+    /* Identique à --sandbox-ok de workspace.css — même signification
+       ("ça tourne correctement"), dupliqué pour la même raison que
+       --amber-neon ci-dessous. */
+    --success-green: #5fd68a;
 
     /* Ambre "Terminal pro" (F-1, 09/08/2026) — valeurs identiques à
        static/css/workspace.css (à garder synchronisées si l'une change) :
@@ -253,6 +257,17 @@ html, body {
     font-size: 0.85rem;
 }
 
+/* Notice neutre (ex. activation/désactivation du mode conversation) —
+   distincte de .bubble.error : ce n'est pas un problème, juste un état. */
+.bubble.system {
+    align-self: center;
+    background: rgba(0, 212, 255, 0.08);
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    color: var(--text-dim);
+    font-size: 0.82rem;
+    font-style: italic;
+}
+
 /* ── Barre de saisie ────────────────────────────────────────────────── */
 
 #input-bar {
@@ -342,12 +357,49 @@ a.icon-btn:focus-visible {
     font-size: 1rem;
 }
 
+/* ── Mode conversation mains libres (BRIEF_MODE_VOCAL_CONTINU_MOBILE.md,
+   09/08/2026) ────────────────────────────────────────────────────────── */
+
+#conv-mode-toggle {
+    position: fixed;
+    top: calc(10px + env(safe-area-inset-top));
+    left: 196px;
+    z-index: 20;
+    width: 38px;
+    height: 38px;
+    font-size: 1rem;
+}
+
+/* Mode actif (en écoute, ou en attente d'une réponse) : vert, distinct du
+   cyan par défaut et du rouge de capture — --success-green réutilise
+   exactement --sandbox-ok de workspace.css (même sens : "ça tourne
+   correctement"), dupliqué plutôt que partagé car les deux pages n'ont pas
+   de mécanisme CSS commun (même choix que --amber-neon plus haut). */
+#conv-mode-toggle.active {
+    background: rgba(95, 214, 138, 0.18);
+    border-color: var(--success-green);
+    box-shadow: 0 0 8px rgba(95, 214, 138, 0.5), 0 0 20px rgba(95, 214, 138, 0.25);
+}
+
+/* Tour de parole en cours de capture : même rouge/pulsation que le micro
+   push-to-talk (#mic-btn.recording) — un seul signal "j'enregistre",
+   réutilisé plutôt que réinventé. */
+#conv-mode-toggle.capturing {
+    background: rgba(255, 60, 80, 0.25);
+    border-color: var(--error);
+    animation: mic-pulse 1s ease-in-out infinite;
+}
+
 /* Micro en cours d'enregistrement : rouge franc, pas d'ambiguïté possible
    avec l'ambre de WATCHING — deux signaux différents, deux couleurs. */
 #mic-btn.recording {
     background: rgba(255, 60, 80, 0.25);
     border-color: var(--error);
     animation: mic-pulse 1s ease-in-out infinite;
+}
+
+#mic-btn:disabled {
+    opacity: 0.35;
 }
 
 @keyframes mic-pulse {

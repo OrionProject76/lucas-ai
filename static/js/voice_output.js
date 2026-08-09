@@ -52,9 +52,14 @@ window.Lucas = window.Lucas || {};
     const BARGE_IN_DIAGNOSTIC = false;
 
     class VoiceOutput {
-        constructor({ toggleEl, onBargeIn }) {
+        constructor({ toggleEl, onBargeIn, onPlaybackEnded }) {
             this.toggleEl = toggleEl;
             this.onBargeIn = onBargeIn;
+            // Mode conversation (BRIEF_MODE_VOCAL_CONTINU_MOBILE.md) : seul
+            // signal fiable de "réponse vocale terminée" pour reprendre
+            // l'écoute — indépendant du barge-in (désactivé par défaut, ne
+            // pose donc aucun listener aujourd'hui, voir _startBargeInWatch).
+            this.onPlaybackEnded = onPlaybackEnded || (() => {});
             this.enabled = window.localStorage.getItem("lucas_speak") === "1";
 
             // État du micro de surveillance barge-in — distinct de
@@ -88,6 +93,12 @@ window.Lucas = window.Lucas || {};
                 // Pas de son plutôt qu'une erreur qui remonte — le texte
                 // reste affiché dans le chat.
             });
+            // Écouteur inconditionnel (pas dans _startBargeInWatch, qui ne
+            // s'exécute que si BARGE_IN_ENABLED/DIAGNOSTIC — tous deux
+            // false aujourd'hui) : le mode conversation a besoin de savoir
+            // qu'une lecture s'est terminée NATURELLEMENT, indépendamment
+            // du barge-in.
+            this.player.addEventListener("ended", () => this.onPlaybackEnded());
 
             this._reflect();
 

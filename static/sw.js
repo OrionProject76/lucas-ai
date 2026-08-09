@@ -55,7 +55,17 @@
 // intercepte AVANT que cette option n'ait le moindre effet. Re-bump
 // systématique à chaque édition d'un SHELL_FILES, jamais seulement à la
 // première.
-const CACHE_NAME = "lucas-shell-v15";
+// v16 (09/08/2026) : mode conversation mains libres
+// (BRIEF_MODE_VOCAL_CONTINU_MOBILE.md, ROADMAP.md §5.83) — index.html,
+// style.css, voice_output.js, chat.js, app.js modifiés, deux nouveaux
+// fichiers (vad.js, conversation_mode.js) ajoutés à SHELL_FILES.
+// v17 (09/08/2026) : correctif app.js DANS LA MÊME SESSION que v16 — bug
+// réel trouvé en testant le cycle complet du mode conversation (voir
+// ROADMAP.md §5.83) : l'"idle" envoyé par le serveur après une
+// transcription peu fiable écrasait l'état "écoute" que le mode venait de
+// reprendre localement. Même leçon que v15 : re-bump à chaque édition,
+// jamais seulement à la première.
+const CACHE_NAME = "lucas-shell-v17";
 const SHELL_FILES = [
     "/app/",
     "/app/index.html",
@@ -71,6 +81,8 @@ const SHELL_FILES = [
     "/app/js/voice_output.js",
     "/app/js/audio.js",
     "/app/js/camera.js",
+    "/app/js/vad.js",
+    "/app/js/conversation_mode.js",
     "/app/js/home.js",
     "/app/js/app.js",
     "/app/icons/icon-192.png",

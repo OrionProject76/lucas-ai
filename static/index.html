@@ -44,6 +44,15 @@
             🖥️
         </a>
 
+        <!-- Mode conversation mains libres (BRIEF_MODE_VOCAL_CONTINU_MOBILE.md,
+             09/08/2026) : activation/désactivation explicites uniquement,
+             jamais par défaut. Ce même bouton sert aussi d'arrêt immédiat
+             (brief §4) — un second clic pendant que le mode est actif
+             l'arrête sur-le-champ, voir conversation_mode.js. -->
+        <button type="button" id="conv-mode-toggle" class="icon-btn" title="Mode conversation (mains libres)">
+            🔁
+        </button>
+
         <div id="activity-drawer">
             <div id="activity-drawer-header">
                 <span>Journal d'activité</span>
@@ -162,6 +171,8 @@
     <script src="/app/js/voice_output.js"></script>
     <script src="/app/js/audio.js"></script>
     <script src="/app/js/camera.js"></script>
+    <script src="/app/js/vad.js"></script>
+    <script src="/app/js/conversation_mode.js"></script>
     <script src="/app/js/home.js"></script>
     <script src="/app/js/app.js"></script>
 </body>
