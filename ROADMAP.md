@@ -9429,6 +9429,55 @@ Rapport complet, daté :
 prompt fait dérailler ces modèles, bloc par bloc — non commencé, hors
 périmètre de cette demande).
 
+## 5.88 Daemon sécurité — tâche planifiée réellement fonctionnelle, un vrai bug de répertoire de travail trouvé, 10/08/2026
+
+Suite de §5.85 (daemon jamais installé de façon persistante). Cyril a
+créé la tâche `LucasDaemon` lui-même (droits de création refusés depuis
+cet environnement — lecture seule sur le Planificateur de tâches) avec
+la commande fournie :
+
+```
+schtasks /create /tn "LucasDaemon" /tr "\"C:\OrionAI\venv\Scripts\pythonw.exe\" lucas_daemon.py" /sc onlogon /rl limited /f
+```
+
+### 🔴 Bug réel dans la commande fournie — trouvé en vérifiant, pas supposé
+
+Premier lancement (`Start-ScheduledTask`) : `LastTaskResult = 2`, et
+**aucune nouvelle ligne dans `data/logs/daemon.log`** — le process n'a
+même pas atteint sa première instruction de log. Cause confirmée via
+`schtasks /query /tn LucasDaemon /xml` : l'action ne porte **aucun
+`<WorkingDirectory>`**, contrairement à la tâche `LucasAPIServer`
+existante. `schtasks /create` n'a pas d'option native pour fixer le
+répertoire de travail d'une action — la commande fournie plus haut dans
+cette session n'en tenait pas compte. Sans lui, `pythonw.exe` cherche
+l'argument relatif `lucas_daemon.py` dans le répertoire de travail par
+défaut du Planificateur de tâches (pas `C:\OrionAI`), et échoue avant
+même d'écrire une ligne de log.
+
+### Corrigé — même mécanisme que les 4 autres services
+
+Nouveau `start_daemon_hidden.vbs` (mêmes principes que
+`start_server_hidden.vbs`) : `cmd.exe /c cd /d C:\OrionAI && venv\Scripts\pythonw.exe lucas_daemon.py`,
+lancé fenêtre cachée. Pas de redirection de sortie ajoutée :
+`lucas_daemon.py` écrit déjà ses propres logs dans `data/logs/daemon.log`.
+
+Tâche recréée par Cyril pour pointer vers `wscript.exe
+"C:\OrionAI\start_daemon_hidden.vbs"` :
+
+```
+schtasks /delete /tn "LucasDaemon" /f
+schtasks /create /tn "LucasDaemon" /tr "wscript.exe \"C:\OrionAI\start_daemon_hidden.vbs\"" /sc onlogon /rl limited /f
+```
+
+**Vérifié réellement** : `LastTaskResult = 0`, deux process `pythonw.exe`
+visibles (le stub venvlauncher et son enfant réel, même relation
+parent-enfant que documentée pour l'API — voir addendum du 30/07/2026),
+`data/logs/daemon.log` montre une session fraîche complète ("Lucas
+Daemon initialisé", planning des 8 tâches programmées, "démarré").
+
+Détail complet dans la conversation — pas de fichier de session séparé
+pour ce point ponctuel.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
