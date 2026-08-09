@@ -33,6 +33,7 @@ from api import log_scrub, protocol
 from config import API_TOKEN
 from core.lucas_core import LucasCore
 from core.router import mentions_pc_explicitly, should_use_vision
+from core.voice_commands import is_stop_command
 from core.world_model import get_snapshot
 from memory.memory_manager import save_event_from_any_thread
 from modules.capability_registry import VERIFIED_AT as CAPABILITY_REGISTRY_VERIFIED_AT
@@ -776,6 +777,24 @@ async def websocket_endpoint(websocket: WebSocket):
                             "rapproche-toi du micro."
                         )
                     )
+                    await websocket.send_json(protocol.avatar_state(protocol.STATE_IDLE))
+                    continue
+
+                # Commande vocale d'arrêt du mode conversation (suite du
+                # 10/08/2026, cowork_workspace/BRIEF_MODE_VOCAL_CONTINU_MOBILE.md)
+                # — UNIQUEMENT si le client signale ce mode explicitement.
+                # Dire "stop" en push-to-talk classique reste un message
+                # normal envoyé à Luca's : aucune action cachée déclenchée
+                # par une phrase qu'on n'a pas demandé à surveiller.
+                # Interceptée ICI, avant LucasCore.ask() — jamais envoyée
+                # au modèle comme une question.
+                if protocol.read_conversation_mode_flag(data) and is_stop_command(message):
+                    await websocket.send_json(
+                        protocol.activity(
+                            "voice", "commande vocale reconnue : arrêt du mode conversation"
+                        )
+                    )
+                    await websocket.send_json(protocol.voice_command("stop"))
                     await websocket.send_json(protocol.avatar_state(protocol.STATE_IDLE))
                     continue
 

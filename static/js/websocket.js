@@ -27,6 +27,7 @@ window.Lucas = window.Lucas || {};
             onActivity,
             onSecurityStatus,
             onSpeech,
+            onVoiceCommand,
             onError,
             onConnectionChange,
         }) {
@@ -35,6 +36,10 @@ window.Lucas = window.Lucas || {};
             this.onActivity = onActivity || (() => {});
             this.onSecurityStatus = onSecurityStatus || (() => {});
             this.onSpeech = onSpeech || (() => {});
+            // Commande vocale d'arrêt du mode conversation (api/protocol.py,
+            // voice_command()) — distincte de "speech" (réponse SYNTHÉTISÉE) :
+            // ce message ne transporte jamais d'audio, juste une action.
+            this.onVoiceCommand = onVoiceCommand || (() => {});
             this.onError = onError;
             this.onConnectionChange = onConnectionChange || (() => {});
             this.socket = null;
@@ -131,6 +136,9 @@ window.Lucas = window.Lucas || {};
                     // Voir api/protocol.py, speech().
                     this.onSpeech(data.audio_base64 || "", data.mime || "");
                     break;
+                case "voice_command":
+                    this.onVoiceCommand(data.action || "");
+                    break;
                 case "error":
                     this.onError(data.detail || "erreur inconnue");
                     break;
@@ -155,9 +163,14 @@ window.Lucas = window.Lucas || {};
             this._send(payload);
         }
 
-        sendAudio(audioBase64, speak) {
+        sendAudio(audioBase64, speak, conversationMode) {
             const payload = { type: "audio", audio_base64: audioBase64 };
             if (speak) payload.speak = true;
+            // Seul ce drapeau active la détection de commande vocale
+            // d'arrêt côté serveur (api/protocol.py, read_conversation_mode_flag) —
+            // absent pour le micro push-to-talk classique (audio.js),
+            // où dire "stop" doit rester un message normal.
+            if (conversationMode) payload.conversation_mode = true;
             this._send(payload);
         }
 

@@ -16,7 +16,21 @@
 window.Lucas = window.Lucas || {};
 
 (function () {
-    const SPEECH_RMS_THRESHOLD = 0.02;
+    // ⚠️ 0,02 -> 0,008 le 10/08/2026 : Cyril rapporte (S25 Ultra, premier
+    // vrai usage) devoir parler fort pour déclencher la détection. Piste la
+    // plus probable, déjà documentée pour le MÊME symptôme sur le micro
+    // push-to-talk (audio.js, 05/08/2026) : Chrome/Android désactive
+    // volontiers l'AGC (autoGainControl) quand echoCancellation est
+    // demandé — les deux passent par la même chaîne de traitement — ce qui
+    // laisse un signal brut plus faible que prévu. `conversation_mode.js`
+    // demande les deux (MIC_CONSTRAINTS), pour les mêmes raisons de qualité
+    // de dictée qu'audio.js — le seuil s'adapte au signal plutôt que
+    // l'inverse, sur demande explicite de Cyril (« abaisse le seuil »,
+    // pas « change les contraintes micro »). Point de départ raisonné,
+    // toujours pas calibré au double sens du terme (pas de micro sur cette
+    // machine, et un seul retour d'usage réel jusqu'ici) — à réajuster de
+    // nouveau si trop/pas assez sensible en usage.
+    const SPEECH_RMS_THRESHOLD = 0.008;
     // Exige un dépassement soutenu avant de déclarer un début de parole —
     // évite qu'un clic ou un bruit bref ne déclenche un enregistrement.
     const SPEECH_START_CONSECUTIVE_FRAMES = 3;

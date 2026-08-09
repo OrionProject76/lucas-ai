@@ -9169,6 +9169,108 @@ reproduction) :
 tactile Android — la reproduction utilise de vrais événements DOM, pas un
 vrai geste physique.
 
+## 5.85 Mode conversation — trois ajustements sur retour d'usage réel (S25 Ultra), 10/08/2026
+
+Premier vrai usage du mode conversation (§5.83) par Cyril sur son
+téléphone — trois retours concrets, traités dans l'ordre demandé.
+
+### 1. Seuil de détection micro trop élevé
+
+`SPEECH_RMS_THRESHOLD` de `vad.js` : 0,02 → 0,008. Piste la plus probable
+(pas certaine, mais cohérente avec un précédent déjà documenté) : Chrome/
+Android désactive l'AGC (`autoGainControl`) quand `echoCancellation` est
+demandé — exactement le même symptôme déjà diagnostiqué pour le micro
+push-to-talk (`audio.js`, 05/08/2026). `conversation_mode.js` demande les
+deux réglages pour les mêmes raisons de qualité de dictée — le seuil
+s'adapte au signal plutôt que l'inverse, sur demande explicite de Cyril
+("abaisse le seuil", pas "change les contraintes micro").
+
+**Vérifié réellement** (flux audio synthétique, même méthode que §5.83) :
+un ton à amplitude 0,02 (RMS ≈ 0,0141 — sous l'ancien seuil, au-dessus du
+nouveau) ne déclenchait PAS `.capturing` avec l'ancien seuil ; déclenche
+correctement avec le nouveau. Simule "parler normalement" plutôt que
+"parler fort", exactement le symptôme rapporté.
+
+### 2. Volume de sortie TTS trop faible
+
+Nouveau contrôle de volume (`-`/`+`, pas de curseur — plus fiable au
+toucher) dans le tiroir Réglages, agissant sur `voiceOutput.player.volume`
+— indépendant du volume système du téléphone. Pas de slider : un tap
+imprécis sur un curseur est plus pénalisant sur mobile qu'un bouton
+discret, et les paliers de 10 % suffisent pour ce réglage.
+
+- `voice_output.js` : `setVolume()`/`getVolume()`, persisté
+  (`lucas_speak_volume`, localStorage), appliqué dès la construction
+  (défaut 100 %, comme aujourd'hui).
+- `index.html`/`app.js` : rangée "🔊 Volume voix" dans `#settings-list`.
+
+**Vérifié réellement** (navigateur, pas de synthèse audible possible sans
+micro/haut-parleur adapté sur cette machine — seule la mécanique est
+testée) : deux clics "-" → 80 %, un clic "+" → 90 %, plancher à 0 %,
+plafond à 100 %, persistance confirmée après un rechargement complet de
+page (70 % → reload → 70 % toujours affiché). Capture d'écran mobile
+(412px) : rangée lisible, cohérente avec le reste du tiroir.
+
+### 3. Minuteur de 60s remplacé par une commande vocale d'arrêt
+
+Le minuteur devient un **filet de sécurité** (5 min), plus le mécanisme
+principal — Cyril dit "stop"/"arrête-toi"/etc., le mode s'arrête
+immédiatement, sans attendre un silence.
+
+- **`core/voice_commands.py`** (nouveau) — `is_stop_command(text)` :
+  comparaison déterministe sur texte normalisé (`core/text_utils.normalize`,
+  même outil que `core/router.is_sensitive`), pas un appel LLM. Liste de
+  12 phrases (stop, arrête-toi, tu peux t'éteindre, coupe le micro,
+  termine la conversation...), retrait d'un préambule court en tête
+  ("Luca's, stop", "OK stop") avant comparaison EXACTE — jamais une
+  recherche de sous-chaîne, pour ne pas confondre "stop" en commande avec
+  le même mot dans une phrase ordinaire ("qu'est-ce qui a stoppé le
+  service ?"). 25 tests (`test_voice_commands.py`).
+- **`api/protocol.py`** — `voice_command(action)` (nouveau type de
+  message `{type: "voice_command", action}`) et
+  `read_conversation_mode_flag(data)`, même patron que `read_speak_flag`.
+- **`api/server.py`** — dans le handler `"audio"`, après la vérification
+  de confiance de la transcription : si `conversation_mode` est vrai ET
+  `is_stop_command(message)`, la commande est interceptée — `voice_command("stop")`
+  envoyé, **`LucasCore.ask()` jamais appelé**, le tour ne devient jamais
+  une question posée au modèle. Filtré explicitement par le drapeau
+  client : dire "stop" en push-to-talk classique reste un message normal,
+  aucune action cachée déclenchée par une phrase qu'on n'a pas demandé à
+  surveiller dans ce contexte.
+- **Côté client** — `websocket.js` : `sendAudio()` accepte un 3e
+  paramètre (`conversation_mode`), dispatch du nouveau type
+  `"voice_command"` vers `onVoiceCommand`. `conversation_mode.js` :
+  `notifyVoiceCommand("stop")` arrête le mode ; `SAFETY_TIMEOUT_MS = 300000`
+  (5 min) remplace `IDLE_TIMEOUT_MS` comme filet plutôt que mécanisme
+  principal — renommage complet (`_armSafetyTimer`/`_clearSafetyTimer`),
+  message de notice distinct selon la raison de l'arrêt (manuel / commande
+  vocale / inactivité prolongée).
+
+**Vérifié réellement** :
+- Serveur : 2 tests d'intégration WebSocket réels (`test_server.py`,
+  `TestClient` Starlette, pas un mock du transport — seul le moteur STT
+  est doublé) — la transcription "stop" avec `conversation_mode: true`
+  déclenche `voice_command("stop")` et **n'appelle jamais**
+  `LucasCore.ask()` ; le même mot SANS le drapeau reste un message normal
+  effectivement transmis à Luca's.
+- Client : `LucasSocket._dispatch()` route bien `"voice_command"` vers
+  `onVoiceCommand` (instance réelle, testée isolément) ;
+  `ConversationMode.notifyVoiceCommand("stop")` arrête réellement le mode
+  et ignore l'appel si le mode n'est pas actif ou si l'action n'est pas
+  "stop" (vocabulaire futur sans faux déclenchement) ; `sendAudio()`
+  confirmé taguer `conversation_mode: true` uniquement quand explicitement
+  demandé (3 scénarios réels : mode conversation, push-to-talk avec voix,
+  push-to-talk sans voix — un seul des trois porte le drapeau).
+- Suite complète : 1637 passed (+33 depuis §5.83), `ruff`/`mypy` propres.
+
+**Non vérifiable depuis cette machine, honnêtement** : la reconnaissance
+d'une VRAIE commande vocale prononcée par Cyril — `is_stop_command()` est
+testé à fond sur du texte, mais seul un vrai micro/vraie voix peut
+confirmer que Whisper transcrit "stop" fidèlement en conditions réelles
+(bruit ambiant, débit de parole, accent). Cette machine n'a pas de micro
+(CLAUDE.md, Priorités S1) — reste le seul test que Cyril doit faire
+lui-même, comme pour la calibration du seuil RMS.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

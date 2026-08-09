@@ -127,6 +127,27 @@ def test_read_speak_flag(payload, expected: bool) -> None:
     assert protocol.read_speak_flag(payload) is expected
 
 
+@pytest.mark.parametrize(
+    "payload, expected",
+    [
+        ({"conversation_mode": True}, True),
+        ({"conversation_mode": False}, False),
+        ({}, False),
+        ("pas un dict", False),
+    ],
+)
+def test_read_conversation_mode_flag(payload, expected: bool) -> None:
+    assert protocol.read_conversation_mode_flag(payload) is expected
+
+
+def test_voice_command_carries_the_action() -> None:
+    assert protocol.voice_command("stop") == {
+        "type": "voice_command",
+        "action": "stop",
+        "source_agent": "main",
+    }
+
+
 def test_system_rounds_and_defaults_gpu() -> None:
     """
     Le GPU vaut 0 quand il n'est pas lisible : le HUD affiche une jauge

@@ -136,6 +136,17 @@
             </div>
             <div id="settings-list">
                 <button type="button" class="settings-action" id="settings-voice">🔇 Réponses vocales</button>
+                <!-- Volume TTS (ROADMAP.md §5.83 suite, 10/08/2026) : agit
+                     sur voiceOutput.player.volume, indépendant du volume
+                     système du téléphone. -->
+                <div class="settings-action settings-volume-row" id="settings-volume">
+                    <span class="settings-volume-label">🔊 Volume voix</span>
+                    <div class="settings-volume-controls">
+                        <button type="button" id="volume-down" class="icon-btn-small" aria-label="Baisser le volume">−</button>
+                        <span id="volume-value">100%</span>
+                        <button type="button" id="volume-up" class="icon-btn-small" aria-label="Augmenter le volume">+</button>
+                    </div>
+                </div>
                 <button type="button" class="settings-action" id="settings-security">🛡️ État de sécurité</button>
                 <button type="button" class="settings-action" id="settings-documents">📁 Mes documents</button>
                 <button type="button" class="settings-action" id="settings-finance">💰 Mes finances</button>

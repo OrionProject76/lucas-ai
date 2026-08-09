@@ -174,9 +174,39 @@ def read_speak_flag(data: dict) -> bool:
     return bool(data.get("speak"))
 
 
+def read_conversation_mode_flag(data: dict) -> bool:
+    """
+    Ce message "audio" vient-il du mode conversation mains libres
+    (static/js/conversation_mode.js), pas d'un push-to-talk ponctuel ?
+
+    Seul ce cas déclenche la détection de commande vocale d'arrêt
+    (core/voice_commands.is_stop_command) côté serveur — dire "stop" en
+    push-to-talk classique doit rester un message normal envoyé à
+    Luca's, jamais une action cachée. Faux par défaut, comme
+    read_speak_flag().
+    """
+    if not isinstance(data, dict):
+        return False
+    return bool(data.get("conversation_mode"))
+
+
 def error(detail: str) -> dict:
     """Panne côté serveur, à afficher plutôt qu'à laisser en silence."""
     return {"type": "error", "detail": detail, "source_agent": DEFAULT_SOURCE_AGENT}
+
+
+def voice_command(action: str) -> dict:
+    """
+    Commande vocale reconnue dans une transcription du mode conversation
+    (core/voice_commands.is_stop_command) — jamais envoyée à LucasCore.ask(),
+    c'est le tour ENTIER qui est intercepté avant d'atteindre le modèle.
+
+    Un seul type émis aujourd'hui ("stop"), mais gardé sous forme de
+    message générique {type, action} plutôt qu'un type "stop_command" dédié
+    — un futur "pause"/"répète" tiendrait dans le même vocabulaire, sans
+    toucher au protocole.
+    """
+    return {"type": "voice_command", "action": action, "source_agent": DEFAULT_SOURCE_AGENT}
 
 
 # Émis pendant LucasCore.ask() (voir core/lucas_core.py, paramètre

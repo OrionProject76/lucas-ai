@@ -27,15 +27,21 @@
 window.Lucas = window.Lucas || {};
 
 (function () {
-    // Aucune parole détectée pendant cette durée alors que le mode est en
-    // écoute active (hors traitement/lecture d'une réponse) -> extinction
-    // automatique (brief §4). 60 s : assez long pour ne pas couper une
-    // pause de réflexion normale en pleine conversation, assez court pour
-    // ne pas laisser le micro ouvert indéfiniment si Cyril repose le
-    // téléphone sans désactiver le mode. Non mesuré en usage réel (pas de
-    // micro sur cette machine pour le tester avec une vraie voix) —
-    // ajustable, même statut que les seuils de vad.js.
-    const IDLE_TIMEOUT_MS = 60000;
+    // ⚠️ Mécanisme d'arrêt PRINCIPAL depuis le 10/08/2026 : une commande
+    // vocale ("stop", "arrête-toi"...) reconnue côté serveur
+    // (core/voice_commands.py) et relayée ici via notifyVoiceCommand().
+    // Le minuteur ci-dessous n'est plus qu'un FILET DE SÉCURITÉ, au cas où
+    // Cyril oublierait de désactiver le mode et où la commande vocale ne
+    // serait pas prononcée/reconnue — pas la façon normale de s'arrêter,
+    // d'où une durée bien plus longue que l'ancien réglage (60 s).
+    //
+    // 5 min : assez généreux pour ne jamais couper une conversation
+    // active (même avec des pauses de réflexion longues), assez court
+    // pour ne pas laisser le micro ouvert indéfiniment si Cyril repose le
+    // téléphone sans y penser. Non mesuré en usage réel (pas de micro sur
+    // cette machine pour le tester avec une vraie voix) — ajustable, même
+    // statut que les seuils de vad.js.
+    const SAFETY_TIMEOUT_MS = 300000;
 
     // Après l'arrivée du texte de la réponse, délai maximal d'attente d'un
     // audio de synthèse avant de reprendre l'écoute quand même. Couvre le
@@ -69,7 +75,7 @@ window.Lucas = window.Lucas || {};
             this._vad = null;
             this._recorder = null;
             this._chunks = null;
-            this._idleTimer = null;
+            this._safetyTimer = null;
             this._speechGraceTimer = null;
 
             toggleEl.addEventListener("click", () => this.toggle());
@@ -116,7 +122,7 @@ window.Lucas = window.Lucas || {};
             if (!this.active) return;
             this.active = false;
             this._awaitingResponse = false;
-            this._clearIdleTimer();
+            this._clearSafetyTimer();
             this._clearSpeechGraceTimer();
 
             if (this._recorder && this._recorder.state !== "inactive") {
@@ -138,11 +144,25 @@ window.Lucas = window.Lucas || {};
             if (this.micBtnEl) this.micBtnEl.disabled = false;
 
             this._reflect();
-            this.onNotice(
-                reason === "inactivite"
-                    ? "Mode conversation désactivé (aucune parole détectée)."
-                    : "Mode conversation désactivé."
-            );
+            let notice = "Mode conversation désactivé.";
+            if (reason === "inactivite") {
+                notice = "Mode conversation désactivé (inactivité prolongée).";
+            } else if (reason === "commande-vocale") {
+                notice = "Mode conversation désactivé (commande vocale reconnue).";
+            }
+            this.onNotice(notice);
+        }
+
+        // Appelé par app.js quand le serveur signale une commande vocale
+        // reconnue (api/protocol.py, voice_command()) — mécanisme
+        // PRINCIPAL d'arrêt depuis le 10/08/2026, voir SAFETY_TIMEOUT_MS
+        // plus haut. Ignoré si le mode n'est pas actif (une commande
+        // reconnue en push-to-talk classique n'atteint jamais ce code,
+        // voir api/server.py — filtré par conversation_mode côté serveur
+        // avant même l'envoi de ce message).
+        notifyVoiceCommand(action) {
+            if (!this.active || action !== "stop") return;
+            this.stop("commande-vocale");
         }
 
         // Appelé par app.js quand le texte de la réponse de Lucas arrive.
@@ -177,13 +197,13 @@ window.Lucas = window.Lucas || {};
         _enterListening() {
             if (!this.active) return;
             this.avatar.setState("listening");
-            this._armIdleTimer();
+            this._armSafetyTimer();
             if (this._vad) this._vad.resume();
         }
 
         _onSpeechStart() {
             if (!this.active || this._awaitingResponse) return;
-            this._clearIdleTimer();
+            this._clearSafetyTimer();
             this.toggleEl.classList.add("capturing");
             this._chunks = [];
             this._recorder = new MediaRecorder(this._stream);
@@ -228,20 +248,23 @@ window.Lucas = window.Lucas || {};
                 // speak forcé à true : le principe même du mode est une
                 // réponse vocale, pas seulement affichée (brief §2, "cycle
                 // automatique ... réponse vocale ... retour à l'écoute").
-                this.socket.sendAudio(base64, true);
+                // conversationMode=true : seul ce qui transite par CETTE
+                // classe déclenche la détection de commande vocale d'arrêt
+                // côté serveur (api/protocol.py, read_conversation_mode_flag).
+                this.socket.sendAudio(base64, true, true);
             };
             reader.readAsDataURL(blob);
         }
 
-        _armIdleTimer() {
-            this._clearIdleTimer();
-            this._idleTimer = setTimeout(() => this.stop("inactivite"), IDLE_TIMEOUT_MS);
+        _armSafetyTimer() {
+            this._clearSafetyTimer();
+            this._safetyTimer = setTimeout(() => this.stop("inactivite"), SAFETY_TIMEOUT_MS);
         }
 
-        _clearIdleTimer() {
-            if (this._idleTimer !== null) {
-                clearTimeout(this._idleTimer);
-                this._idleTimer = null;
+        _clearSafetyTimer() {
+            if (this._safetyTimer !== null) {
+                clearTimeout(this._safetyTimer);
+                this._safetyTimer = null;
             }
         }
 

@@ -1230,6 +1230,46 @@ def test_websocket_stt_unavailable_reports_an_error_not_a_crash(client, fake_cor
     assert idle["state"] == "idle"
 
 
+def test_websocket_stop_command_in_conversation_mode_is_intercepted(
+    client, fake_core, fake_stt
+) -> None:
+    """
+    Mode conversation actif (BRIEF_MODE_VOCAL_CONTINU_MOBILE.md, suite du
+    10/08/2026) : une transcription reconnue comme commande d'arrêt ne
+    doit JAMAIS atteindre LucasCore.ask() — le tour est intercepté avant.
+    """
+    fake_stt["_double"].texte = "stop"
+
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json(
+            {"type": "audio", "audio_base64": "ZmF1eCBhdWRpbw==", "conversation_mode": True}
+        )
+        voice_cmd = _next_of_type(ws, "voice_command")
+        idle = _next_of_type(ws, "avatar_state")
+
+    assert voice_cmd["action"] == "stop"
+    assert idle["state"] == "idle"
+    assert "asked" not in fake_core
+
+
+def test_websocket_stop_word_without_conversation_mode_flag_is_a_normal_message(
+    client, fake_core, fake_stt
+) -> None:
+    """
+    Le même mot "stop", dit en push-to-talk classique (sans le drapeau
+    conversation_mode) : reste un message normal envoyé à Luca's, aucune
+    action cachée déclenchée par une phrase qu'on n'a pas demandé à
+    surveiller dans ce contexte.
+    """
+    fake_stt["_double"].texte = "stop"
+
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "audio", "audio_base64": "ZmF1eCBhdWRpbw=="})
+        _next_of_type(ws, "chat")
+
+    assert fake_core.get("asked") == "stop"
+
+
 def test_websocket_silence_returns_to_idle_without_asking_lucas(client, fake_core, fake_stt) -> None:
     """
     Un extrait sans parole (texte transcrit vide) ne doit pas devenir une

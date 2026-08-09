@@ -104,6 +104,9 @@
             onActivity: (kind, text) => activity.add(kind, text),
             onSecurityStatus: (status) => security.update(status),
             onSpeech: (audioBase64, mime) => voiceOutput.play(audioBase64, mime),
+            onVoiceCommand: (action) => {
+                if (conversationMode) conversationMode.notifyVoiceCommand(action);
+            },
             onError: (detail) => {
                 chat.addError(detail);
                 if (conversationMode) conversationMode.notifyError();
@@ -113,6 +116,23 @@
                 banner.textContent = connected ? "" : "Reconnexion à Luca's...";
             },
         });
+
+        // Volume TTS (ROADMAP.md §5.83 suite) — pas de forwardClick ici,
+        // ces deux boutons n'ont pas d'équivalent "réel" ailleurs à
+        // relayer, contrairement au reste du tiroir Réglages.
+        const volumeValueEl = document.getElementById("volume-value");
+        function reflectVolume() {
+            volumeValueEl.textContent = `${Math.round(voiceOutput.getVolume() * 100)}%`;
+        }
+        document.getElementById("volume-down").addEventListener("click", () => {
+            voiceOutput.setVolume(voiceOutput.getVolume() - voiceOutput.volumeStep());
+            reflectVolume();
+        });
+        document.getElementById("volume-up").addEventListener("click", () => {
+            voiceOutput.setVolume(voiceOutput.getVolume() + voiceOutput.volumeStep());
+            reflectVolume();
+        });
+        reflectVolume();
 
         // Mode conversation mains libres (BRIEF_MODE_VOCAL_CONTINU_MOBILE.md).
         conversationMode = new window.Lucas.ConversationMode({

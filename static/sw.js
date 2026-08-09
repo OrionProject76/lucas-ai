@@ -65,7 +65,13 @@
 // transcription peu fiable écrasait l'état "écoute" que le mode venait de
 // reprendre localement. Même leçon que v15 : re-bump à chaque édition,
 // jamais seulement à la première.
-const CACHE_NAME = "lucas-shell-v17";
+// v18 (10/08/2026) : ajustements mode conversation sur retour d'usage réel
+// (S25 Ultra) — contrôle de volume TTS (index.html/style.css/
+// voice_output.js/app.js modifiés).
+// v19 (10/08/2026) : commande vocale d'arrêt du mode conversation (remplace
+// le minuteur de 60s comme mécanisme principal) — websocket.js/
+// conversation_mode.js/app.js modifiés.
+const CACHE_NAME = "lucas-shell-v19";
 const SHELL_FILES = [
     "/app/",
     "/app/index.html",

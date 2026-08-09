@@ -891,6 +891,53 @@ button.document-name:active {
     outline-offset: 2px;
 }
 
+/* ── Volume TTS (ROADMAP.md §5.83 suite, 10/08/2026) ─────────────────── */
+
+.settings-volume-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    /* cursor par défaut : contrairement aux .settings-action voisines,
+       cette ligne n'a pas de handler de clic global, seuls ses deux
+       boutons internes en ont un. */
+    cursor: default;
+}
+
+.settings-volume-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#volume-value {
+    min-width: 3.2em;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-dim);
+}
+
+.icon-btn-small {
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid var(--border-cyan);
+    background: rgba(0, 212, 255, 0.08);
+    color: var(--text);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.icon-btn-small:active {
+    background: rgba(0, 212, 255, 0.25);
+}
+
+.icon-btn-small:focus-visible {
+    outline: 2px solid var(--neon-cyan);
+    outline-offset: 2px;
+}
+
 /* ── Barre de navigation basse (F-1) ─────────────────────────────────
    Ambre, cohérente avec le Workspace (brief §3.4) — seul élément de
    chrome persistant dans les deux vues (accueil/chat), toujours au-dessus

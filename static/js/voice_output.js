@@ -51,6 +51,15 @@ window.Lucas = window.Lucas || {};
     // et d'en déduire un seuil, au lieu de le deviner une seconde fois.
     const BARGE_IN_DIAGNOSTIC = false;
 
+    // Volume de lecture des réponses vocales (ROADMAP.md §5.83 suite,
+    // 10/08/2026) — Cyril rapporte le volume TTS trop faible sur le S25
+    // Ultra. Indépendant du volume système : agit sur `.volume` de
+    // l'élément <audio>, pas sur le mixeur du téléphone. Persisté comme
+    // `lucas_speak` (localStorage), pour survivre à une fermeture d'onglet.
+    const VOLUME_STORAGE_KEY = "lucas_speak_volume";
+    const DEFAULT_VOLUME = 1.0;
+    const VOLUME_STEP = 0.1;
+
     class VoiceOutput {
         constructor({ toggleEl, onBargeIn, onPlaybackEnded }) {
             this.toggleEl = toggleEl;
@@ -99,6 +108,11 @@ window.Lucas = window.Lucas || {};
             // qu'une lecture s'est terminée NATURELLEMENT, indépendamment
             // du barge-in.
             this.player.addEventListener("ended", () => this.onPlaybackEnded());
+
+            const storedVolume = parseFloat(window.localStorage.getItem(VOLUME_STORAGE_KEY));
+            this.player.volume = Number.isFinite(storedVolume)
+                ? Math.min(1, Math.max(0, storedVolume))
+                : DEFAULT_VOLUME;
 
             this._reflect();
 
@@ -207,6 +221,29 @@ window.Lucas = window.Lucas || {};
         stop() {
             this.player.pause();
             this.player.currentTime = 0;
+        }
+
+        // Volume de lecture, 0.0-1.0 — appliqué immédiatement, y compris en
+        // cours de lecture (`.volume` sur <audio> agit en direct, sans
+        // redémarrer le flux). Persisté pour la session suivante.
+        getVolume() {
+            return this.player.volume;
+        }
+
+        setVolume(value) {
+            // Arrondi à 2 décimales : des additions/soustractions répétées
+            // de VOLUME_STEP (0.1, non représentable exactement en binaire)
+            // dérivent sinon vers des valeurs du type 0.7000000000000001 —
+            // sans conséquence sur le son, mais une valeur stockée illisible
+            // pour rien.
+            const clamped = Math.round(Math.min(1, Math.max(0, value)) * 100) / 100;
+            this.player.volume = clamped;
+            window.localStorage.setItem(VOLUME_STORAGE_KEY, String(clamped));
+            return clamped;
+        }
+
+        volumeStep() {
+            return VOLUME_STEP;
         }
 
         // ── Barge-in : micro de surveillance pendant la lecture ────────
