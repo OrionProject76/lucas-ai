@@ -573,7 +573,26 @@
     border: 1px solid currentcolor;
 }
 
-/* ── Poste de Commandement IA (E-5) ──────────────────────────────────
+/* --status-unwired : demande explicite de Cyril (09/08/2026) après la
+   première version de cette page — "construit, non branché" (ex. OS
+   Controller) et "manuel" (ex. VRAM Watchdog) portaient le MÊME badge
+   ambre, alors que ce sont deux réalités différentes : "manuel" est une
+   vraie mécanique qui marche, il suffit de la lancer soi-même ; "construit,
+   non branché" n'a purement et simplement AUCUN chemin pour être déclenché
+   aujourd'hui (ni route, ni chat) — un geste ne suffit pas, il faudrait
+   écrire du code de branchement. Ni vert (pas actif), ni gris (il y a un
+   vrai code fonctionnel derrière, pas un simple silence), ni ambre (rien
+   à activer d'un geste, contrairement à "manuel"), ni rouge (--error,
+   déjà "refus/problème" ailleurs dans le Workspace — ce n'en est pas un).
+   Violet doux : seule teinte encore libre dans ce fichier, jamais utilisée
+   pour l'identité globale du Workspace (l'exploration violette de §5.75
+   concernait le thème D'ENSEMBLE de la page, écarté — un accent ponctuel
+   sur un seul badge de statut n'est pas la même décision). */
+:root {
+    --status-unwired: #a78bfa;
+}
+
+/* ── Bureau de l'IA (E-5, brief "Poste de Commandement IA", renommé) ──
    Page séparée (static/command-center.html), pas une carte — reprend
    directement la palette/les tokens de ce fichier (même hint que le
    commentaire d'en-tête : chargé sur plusieurs pages, pas de mécanisme
@@ -722,10 +741,21 @@
     background: rgba(111, 168, 184, 0.08);
 }
 
-.command-center-status-badge.status-manuel,
-.command-center-status-badge.status-construit-non-branche {
+/* "manuel" : une vraie mécanique qui marche, à lancer soi-même — ambre,
+   même famille que "à vérifier"/"pending" ailleurs dans le Workspace
+   (mise en avant, action possible). */
+.command-center-status-badge.status-manuel {
     color: var(--amber-neon);
     background: rgba(240, 169, 78, 0.1);
+}
+
+/* "construit, non branché" : aucun chemin pour être déclenché aujourd'hui
+   (ni route, ni chat) — pas la même réalité que "manuel", donc pas le
+   même badge (demande explicite de Cyril, voir le commentaire au-dessus
+   de --status-unwired). */
+.command-center-status-badge.status-construit-non-branche {
+    color: var(--status-unwired);
+    background: rgba(167, 139, 250, 0.12);
 }
 
 @media (max-width: 480px) {

@@ -577,7 +577,7 @@ def test_workspace_sandbox_reject_rejects_an_unknown_id_with_400(client, monkeyp
     assert "inconnue" in response.json()["detail"]
 
 
-# ── Poste de Commandement IA (E-5, 09/08/2026) ──────────────────────────
+# ── Bureau de l'IA (E-5, 09/08/2026) ────────────────────────────────────
 
 
 def test_capabilities_requires_the_token(client, monkeypatch) -> None:

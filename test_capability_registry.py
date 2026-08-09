@@ -1,4 +1,4 @@
-# test_capability_registry.py — Poste de Commandement IA (E-5)
+# test_capability_registry.py — Bureau de l'IA (E-5)
 
 from __future__ import annotations
 

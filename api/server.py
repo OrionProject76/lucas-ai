@@ -468,9 +468,11 @@ def workspace_sandbox_reject_route(run_id: int):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-# ── Poste de Commandement IA (E-5, 09/08/2026) — lecture seule stricte ──
+# ── Bureau de l'IA (E-5, 09/08/2026) — lecture seule stricte ───────────
 #
-# Brief : cowork_workspace/BRIEF_POSTE_COMMANDEMENT_IA_E5.md. Page séparée
+# Brief nommé "Poste de Commandement IA" (cowork_workspace/BRIEF_POSTE_COMMANDEMENT_IA_E5.md),
+# renommé "Bureau de l'IA" par Cyril après coup — même fonctionnalité.
+# Page séparée
 # (pas une carte du Workspace — la compaction du 09/08/2026, §5.81, laisse
 # trop peu de marge pour une 7e carte sans la refaire, choix confirmé par
 # Cyril). Même garde de jeton que le reste du Workspace : décrit

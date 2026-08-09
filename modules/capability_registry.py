@@ -1,5 +1,6 @@
 # modules/capability_registry.py — registre en lecture des capacités de
-# Luca's (Poste de Commandement IA, E-5, IDEAS.md #102 groupe E)
+# Luca's (Bureau de l'IA, E-5, IDEAS.md #102 groupe E — brief nommé
+# "Poste de Commandement IA", renommé par Cyril après coup)
 #
 # Brief : cowork_workspace/BRIEF_POSTE_COMMANDEMENT_IA_E5.md. Étape
 # préalable (§3) : exploré modules/, core/, croisé avec l'audit de

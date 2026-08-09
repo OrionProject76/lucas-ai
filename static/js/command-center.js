@@ -1,4 +1,5 @@
-// static/js/command-center.js — Poste de Commandement IA (E-5).
+// static/js/command-center.js — Bureau de l'IA (E-5, brief nommé "Poste
+// de Commandement IA", renommé par Cyril après coup).
 //
 // Page autonome, comme workspace.js : ni chat ni WebSocket, seulement un
 // jeton et un fetch vers /capabilities (modules/capability_registry.py).

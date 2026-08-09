@@ -8913,6 +8913,28 @@ navigation.
 Détail complet de la session :
 `cowork_workspace/SESSION_LOG_POSTE_COMMANDEMENT_E5_2026-08-09.md`.
 
+### Suite — renommé "Bureau de l'IA", et un vrai défaut de lisibilité corrigé
+
+Cyril a renommé "Poste de Commandement IA" en **"Bureau de l'IA"** (nom
+affiché uniquement — fichiers, routes, identifiants de code inchangés ;
+même logique que le renommage Orion→Luca's : le nom visible change, pas
+la structure technique). Mis à jour : `<title>`/`<h1>` de
+`command-center.html`, l'attribut `title` de l'icône dans
+`workspace.html`, et les commentaires d'en-tête des fichiers concernés.
+
+**Corrigé au même moment** — remarque explicite de Cyril, reçue avant
+que le contenu de la page ne soit terminé mais traitée à son arrivée :
+"manuel" (VRAM Watchdog) et "construit, non branché" (OS Controller)
+portaient le **même badge ambre**, alors que ce sont deux réalités
+différentes — "manuel" est une vraie mécanique qui marche, "construit,
+non branché" n'a AUCUN chemin de déclenchement aujourd'hui. Nouveau
+token `--status-unwired` (violet doux, `#a78bfa`) — seule teinte encore
+libre dans `workspace.css` (vert/ambre/gris/rouge déjà pris,
+cyan réservé au chat) — réservé à ce seul badge. Revérifié en navigateur
+réel : les 3 statuts non-actifs (inactif/manuel/construit-non-branché)
+sont désormais visuellement distincts au premier coup d'œil, pas
+seulement dans le texte de description.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
