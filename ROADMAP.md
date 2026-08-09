@@ -9104,6 +9104,71 @@ la course avatar (même leçon que v14→v15 : re-bump à chaque édition).
 Détail complet de la session :
 `cowork_workspace/SESSION_LOG_MODE_VOCAL_CONTINU_2026-08-09.md`.
 
+## 5.84 Workspace mobile — clic fantôme qui avalait le tap suivant, bug réel confirmé et corrigé, 10/08/2026
+
+Cyril signale (S25 Ultra) : "dans la plupart des cas je ne peux pas
+cliquer ni ouvrir de fenêtre dans le Workspace". Diagnostic demandé
+explicitement AVANT tout correctif — pas de supposition.
+
+### Diagnostic — deux pistes vérifiées, une confirmée par reproduction
+
+Exploré en parallèle : le mode Daemon ("le Daemon ne fonctionne pas
+encore") — voir §5.85 pour ce volet, traité séparément.
+
+Pour le Workspace : `elementFromPoint` sur chaque contrôle interactif à
+412px (boutons de taille, poignées, sandbox, liens d'en-tête) ne montrait
+AUCUN chevauchement/overlay — chaque zone tactile atterrit bien sur le
+bon élément. Le scroll interne de `#workspace-grid` fonctionne
+mécaniquement (`overflow-y: auto` appliqué, `scrollTop` réagit). Donc pas
+un problème de superposition ni de CSS de défilement.
+
+**Cause réelle, reproduite avec de vrais `PointerEvent`/`MouseEvent`** :
+dans `static/js/workspace.js`, le garde-fou "clic fantôme après un
+glisser" (posé le 09/08/2026, §5.77) s'armait sur TOUT contact avec une
+poignée de glisser (`.workspace-drag-handle`), y compris un simple **tap
+immobile sans le moindre déplacement** — puis avalait le **tout prochain
+clic, n'importe où sur la page**, aussi tard qu'il survienne (jusqu'au
+clic suivant, sans lien avec la poignée). Reproduction : tap immobile sur
+la poignée de "Rapports produits", puis clic sur le bouton de taille "M"
+(élément totalement différent) → le second clic était silencieusement
+annulé, aucune erreur, aucun retour visuel.
+
+Sur un vrai écran tactile, les poignées (28×28px) sont collées aux 4
+boutons de taille dans un en-tête de carte compact à 412px de large — un
+effleurement accidentel de la poignée en visant un bouton voisin est
+plausible, et suffit à déclencher ce bug. Explique "dans la plupart des
+cas" : une fois la poignée effleurée par mégarde, le tap suivant, n'importe
+où, ne fait plus rien jusqu'au clic d'après.
+
+**"Ouvrir une fenêtre"** : aucun mécanisme de fenêtre/modale n'existe nulle
+part dans le frontend (`grep` sur `window.open`/`<dialog>`/équivalent,
+aucune occurrence) — les rapports/demandes affichés sont du texte simple,
+jamais cliquables. Le plus probable est que Cyril décrit le même symptôme
+autrement (un tap qui ne fait rien) — non confirmé séparément, à vérifier
+avec lui si le correctif ci-dessous ne suffit pas.
+
+### Corrigé
+
+`initDragAndDrop()` exige maintenant un déplacement réel (≥ 6px, seuil
+anti-tremblement) avant d'armer `justDragged` et de déclencher la
+sauvegarde de disposition. Un tap immobile ne modifie plus rien au-delà
+du clic lui-même — un vrai glisser continue d'avaler le clic fantôme
+suivant, comportement inchangé pour l'usage prévu.
+
+**Vérifié réellement** (mêmes `PointerEvent`/`MouseEvent` de
+reproduction) :
+- Tap immobile sur une poignée → clic suivant sur un bouton de taille
+  fonctionne (`cardSizeAfterTap` change bien).
+- Vrai glisser (déplacement > 6px) → le clic fantôme qui suit reste bien
+  avalé (protection préservée).
+- Aucune erreur console, `workspace.js` n'est pas dans `SHELL_FILES` du
+  Service Worker (jamais mis en cache) — pas de bump `CACHE_NAME`
+  nécessaire pour ce fichier.
+
+**Non vérifiable depuis cette machine** : le rendu sur un vrai doigt/écran
+tactile Android — la reproduction utilise de vrais événements DOM, pas un
+vrai geste physique.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

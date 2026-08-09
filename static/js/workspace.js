@@ -509,6 +509,24 @@
     function initDragAndDrop() {
         const grid = gridEl();
         let dragCard = null;
+        // ⚠️ Bug réel trouvé le 10/08/2026 (Cyril, S25 Ultra — "je ne peux
+        // plus cliquer sur rien la plupart du temps") : `justDragged`
+        // s'armait sur TOUT contact avec une poignée, y compris un simple
+        // tap immobile, et avalait ensuite le clic suivant N'IMPORTE OÙ
+        // sur la page, aussi tard qu'il survienne. Reproduit avec de vrais
+        // PointerEvent/MouseEvent (pas une supposition) : un tap
+        // stationnaire sur la poignée de "Rapports produits" suivi d'un
+        // clic sur le bouton de taille "M" — le second clic était
+        // silencieusement annulé. Sur un vrai écran tactile, les poignées
+        // (28×28px) sont collées aux boutons de taille dans un en-tête de
+        // carte compact à 412px : un effleurement accidentel suffit.
+        // Corrigé en exigeant un déplacement réel (au-delà d'un seuil
+        // anti-tremblement) avant d'armer le garde-fou — un tap qui ne
+        // bouge pas ne peut plus poisonner le clic suivant.
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let dragMoved = false;
+        const DRAG_MOVE_THRESHOLD_PX = 6;
 
         function cardCenter(card) {
             const rect = card.getBoundingClientRect();
@@ -537,6 +555,13 @@
         function onPointerMove(event) {
             if (!dragCard) return;
             event.preventDefault();
+            if (!dragMoved) {
+                const dx = event.clientX - dragStartX;
+                const dy = event.clientY - dragStartY;
+                if (dx * dx + dy * dy >= DRAG_MOVE_THRESHOLD_PX * DRAG_MOVE_THRESHOLD_PX) {
+                    dragMoved = true;
+                }
+            }
             const target = closestSibling(event.clientX, event.clientY);
             if (!target) return;
             const children = Array.from(grid.children);
@@ -551,11 +576,17 @@
             if (!dragCard) return;
             dragCard.classList.remove("dragging");
             dragCard = null;
-            justDragged = true;
             window.removeEventListener("pointermove", onPointerMove);
             window.removeEventListener("pointerup", endDrag);
             window.removeEventListener("pointercancel", endDrag);
-            saveLayoutDebounced();
+            // Seul un déplacement réel justifie d'avaler le clic suivant
+            // (ghost click sur un élément recomposé sous le doigt) ET de
+            // sauvegarder une disposition — un tap immobile n'a rien
+            // changé, il ne doit rien déclencher de plus qu'un clic normal.
+            if (dragMoved) {
+                justDragged = true;
+                saveLayoutDebounced();
+            }
         }
 
         for (const handle of document.querySelectorAll(".workspace-drag-handle")) {
@@ -563,6 +594,9 @@
                 event.preventDefault();
                 dragCard = handle.closest(".workspace-card");
                 dragCard.classList.add("dragging");
+                dragStartX = event.clientX;
+                dragStartY = event.clientY;
+                dragMoved = false;
                 window.addEventListener("pointermove", onPointerMove);
                 window.addEventListener("pointerup", endDrag);
                 window.addEventListener("pointercancel", endDrag);
