@@ -9543,6 +9543,96 @@ détail complet), masqués à zéro (RT-2 — même discipline que les
 Aucun fichier `SESSION_LOG` séparé — chantier compact, entièrement
 documenté ici.
 
+## 5.90 Daemon — mécanisme de démarrage sans faux positif antivirus, hypothèse du brief infirmée par une plus simple, 10/08/2026
+
+Brief : `cowork_workspace/BRIEF_DAEMON_SANS_FAUX_POSITIF.md`. Suite de
+§5.88 : Bitdefender a flagué la tâche `LucasDaemon`
+(`wscript.exe`+`.vbs` caché) comme « ligne de commande malveillante » /
+« application potentiellement malveillante ». Les deux exceptions
+ajoutées ont été retirées par Cyril par prudence — objectif : un
+mécanisme qui ne ressemble pas à un motif de persistance malveillante,
+sans dépendre d'une exception antivirus permanente.
+
+### Étape préalable — l'hypothèse du brief ne tenait pas, la vraie raison était ailleurs
+
+Le brief supposait que le `.vbs` servait à masquer la fenêtre de
+console qu'ouvrirait `python.exe`, et proposait `pythonw.exe` comme
+remplacement direct. **Vérifié faux** : `start_daemon_hidden.vbs`
+appelle déjà `venv\Scripts\pythonw.exe` (sans fenêtre par nature) — son
+en-tête et §5.88 documentent la vraie raison : `schtasks /create` n'a
+pas d'option native pour fixer le répertoire de travail d'une action.
+La première tentative de tâche (§5.88) passait `lucas_daemon.py` en
+argument **relatif** à `pythonw.exe`, qui le cherchait dans le
+répertoire de travail par défaut du Planificateur (pas `C:\OrionAI`) et
+échouait (`LastTaskResult=2`). Le `.vbs` fait `cd /d C:\OrionAI &&` avant
+de lancer `pythonw.exe` pour contourner ça — pas pour masquer une
+fenêtre qui n'existe déjà pas.
+
+### Solution plus simple que celle envisagée par le brief lui-même
+
+Vérifié dans `lucas_daemon.py` : le script n'a **aucune dépendance au
+répertoire de travail du process**. `LUCAS_ROOT = Path("C:/OrionAI")`
+est une constante absolue en tête de fichier, et les trois
+`subprocess.run` qu'il lance (`train_lora.py`, `index_documents.py`,
+pytest) utilisent tous des chemins construits depuis `LUCAS_ROOT` (le
+premier avec un chemin absolu direct, celui de pytest avec
+`cwd=str(LUCAS_ROOT)` explicite). Le seul problème réel était l'argument
+**relatif** passé à `pythonw.exe`, pas le `cwd` du process lui-même.
+
+Conséquence : pas besoin de `cd /d`, donc pas besoin de `cmd.exe`, donc
+pas besoin de `wscript.exe`+`.vbs` du tout. Une tâche planifiée peut
+appeler `pythonw.exe` directement avec le **chemin absolu** du script en
+argument :
+
+```
+schtasks /delete /tn "LucasDaemon" /f
+schtasks /create /tn "LucasDaemon" /tr "\"C:\OrionAI\venv\Scripts\pythonw.exe\" \"C:\OrionAI\lucas_daemon.py\"" /sc onlogon /rl limited /f
+```
+
+Motif final : `pythonw.exe "chemin absolu"` — aucun interpréteur de
+commande imbriqué (`cmd.exe`), aucun script `wscript.exe`+`.vbs`. Plus
+simple que l'alternative "direct avec `cd /d`" envisagée en repli par le
+brief lui-même (§4), et strictement plus simple que ce que le brief
+anticipait comme scénario principal.
+
+### Bloqué — même restriction de permissions que le 03-04/08/2026 nuit
+
+`schtasks /delete /tn "LucasDaemon" /f` lancé depuis cet environnement a
+échoué : `Erreur : Accès refusé.` Confirmé un `/query` juste après : la
+tâche existante (`.vbs`) est intacte, toujours fonctionnelle
+(`LastTaskResult=0`), rien cassé. Sauvegarde de sa définition XML avant
+la tentative :
+`C:\Users\PC\AppData\Local\Temp\claude\C--OrionAI\4b9eda5d-fe6e-49b2-bd40-07cdf82baeec\scratchpad\LucasDaemon_backup_before_vbs_removal.xml`
+(hors dépôt, dossier scratchpad de session).
+
+**Reste à faire par Cyril** — lancer lui-même les deux commandes
+ci-dessus, puis :
+- `schtasks /query /tn "LucasDaemon" /v /fo list` → vérifier
+  `Dernier résultat: 0`
+- Vérifier une nouvelle ligne dans `data/logs/daemon.log` après
+  `schtasks /run /tn "LucasDaemon"`
+- Vérifier qu'aucune alerte Bitdefender ne se déclenche (sans exception
+  active — c'est le but même du changement)
+- Idéalement, un redémarrage réel du PC (pas seulement une relance à
+  chaud) pour confirmer le déclencheur "à la connexion"
+
+`start_daemon_hidden.vbs` **n'a pas été supprimé** (§6 du brief) — il
+reste en place tant que la nouvelle méthode n'est pas confirmée stable
+par Cyril en conditions réelles.
+
+### Périmètre — 4 autres services non touchés
+
+Le même motif (`wscript.exe`+`.vbs`) équipe aussi `LucasAPIServer`,
+`start_ollama_hidden.vbs`, `start_veille_modeles_hidden.vbs` et
+`start_cowork_requests_hidden.vbs`. Conformément au brief (§5), aucun
+n'a été modifié dans cette session — généralisation à proposer
+uniquement après validation du correctif Daemon par Cyril. À noter pour
+cette généralisation future : les autres services n'ont pas forcément la
+même propriété (chemins internes déjà absolus) que `lucas_daemon.py` —
+à vérifier service par service, pas à supposer transposable tel quel.
+
+Session log : `cowork_workspace/SESSION_LOG_DAEMON_SANS_FAUX_POSITIF_2026-08-10.md`.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
