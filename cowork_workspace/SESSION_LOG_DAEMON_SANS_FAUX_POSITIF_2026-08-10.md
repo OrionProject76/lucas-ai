@@ -33,48 +33,55 @@ en une fois : un motif de tâche planifiée strictement plus simple que
 ce qu'envisageait le brief, et plus simple encore que son plan de repli
 ("direct avec `cd /d`").
 
-## Bloqué — même restriction que le 03-04/08/2026
+## Validé par Cyril en conditions réelles — 10/08/2026
 
-Comme pour la création initiale de cette tâche, cet environnement n'a
-pas les droits de modifier le Planificateur de tâches
-(`schtasks /delete` a renvoyé "Accès refusé"). Rien n'a été cassé : la
-tâche existante (`.vbs`) est intacte et vérifiée fonctionnelle
-(`Dernier résultat: 0`) avant et après la tentative. Sa définition XML a
-été sauvegardée avant toute tentative, dans le dossier scratchpad de
-session (hors dépôt).
+Bloqué initialement par la même restriction que le 03-04/08/2026
+(`schtasks /delete` → "Accès refusé" depuis cet environnement). Cyril a
+lancé les deux commandes lui-même, puis **redémarré réellement le PC** :
 
-## Reste à faire par Cyril
+- Nouvelle entrée dans `daemon.log` à 19:54:45, juste après le
+  redémarrage — déclencheur "à la connexion" confirmé.
+- **Aucune alerte Bitdefender**, testé sans exception active — objectif
+  premier atteint.
+- Tâches horaires observées ensuite (20:54:45, 21:54:46) — fonctionnement
+  continu, pas juste un démarrage isolé.
 
-Lancer lui-même, dans une invite (`cmd.exe` — syntaxe déjà testée avec
-succès pour cette même tâche, voir §5.88) :
+Effet de bord noté en vérifiant : `Dernier résultat` affiche maintenant
+`267009` (`SCHED_S_TASK_RUNNING`) au lieu de `0` en fonctionnement
+normal — pas une erreur, juste un signal plus fidèle puisque
+`pythonw.exe` est directement l'action de la tâche (avant, `wscript.exe`
+rendait la main immédiatement après avoir détaché le vrai process).
+Détail complet : `ROADMAP.md` §5.90.
 
-```
-schtasks /delete /tn "LucasDaemon" /f
-schtasks /create /tn "LucasDaemon" /tr "\"C:\OrionAI\venv\Scripts\pythonw.exe\" \"C:\OrionAI\lucas_daemon.py\"" /sc onlogon /rl limited /f
-```
+`start_daemon_hidden.vbs` **supprimé** — méthode confirmée stable.
 
-Puis vérifier :
-- `schtasks /query /tn "LucasDaemon" /v /fo list` → `Dernier résultat: 0`
-- Une nouvelle ligne dans `data/logs/daemon.log` après
-  `schtasks /run /tn "LucasDaemon"`
-- Aucune alerte Bitdefender (sans exception active)
-- Idéalement un redémarrage réel du PC pour confirmer le déclencheur
-  "à la connexion", pas seulement une relance à chaud
+## 4 autres services — audités, aucun n'est le même cas
 
-`start_daemon_hidden.vbs` n'a pas été supprimé — à retirer seulement une
-fois la nouvelle méthode confirmée stable par Cyril.
+Cyril a demandé d'appliquer le même correctif partout sauf dépendance
+réelle différente. Vérification faite en lisant chaque `.vbs` et le
+script qu'il lance :
 
-## Point à trancher avec Cyril avant de continuer
+- **Ollama, veille modèles, cowork requests** (3 scripts PowerShell) —
+  aucun chemin relatif, donc "pythonw.exe direct" ne s'applique même
+  pas (pas de Python dans la chaîne). Le `.vbs` sert uniquement à
+  masquer la fenêtre PowerShell ; l'équivalent natif
+  (`-WindowStyle Hidden`) est documenté comme pouvant encore flasher
+  brièvement selon la version — jamais vérifié sur cette machine.
+- **LucasAPIServer** — `python.exe -m uvicorn ...` avec 3 dépendances
+  réelles que le Daemon n'avait pas : résolution du module via
+  `sys.path[0]` (= cwd), chemins relatifs pour cert/clé SSL, et
+  redirection shell (`>>`) que `pythonw.exe` seul ne sait pas faire.
 
-Le même motif (`wscript.exe`+`.vbs`) équipe 4 autres services
-(`LucasAPIServer`, veille modèles, Ollama, cowork requests). Cette
-session ne touche qu'à `LucasDaemon`, conformément au brief — la
-généralisation attend le retour de Cyril sur ce correctif, et une
-vérification service par service (les autres n'ont pas forcément la
-même propriété de chemins internes déjà absolus).
+**Aucun correctif appliqué** à ces 4 services dans cette session — seul
+le Daemon a été réellement flagué par Bitdefender à ce jour, pas
+d'urgence à toucher des mécanismes qui fonctionnent pour un gain
+préventif, avec un risque réel de casser un service utilisé au
+quotidien (`LucasAPIServer` = pont mobile). Pistes concrètes par service
+proposées dans `ROADMAP.md` §5.90, pour une session dédiée si Cyril la
+valide.
 
 ## Fichiers modifiés
 
-- `ROADMAP.md` (§5.90)
-- Aucun fichier de code modifié — la tâche planifiée elle-même n'a pas
-  pu être touchée depuis cet environnement (accès refusé)
+- `ROADMAP.md` (§5.90, mis à jour deux fois dans cette session)
+- `start_daemon_hidden.vbs` — supprimé
+- Aucun autre fichier de code touché

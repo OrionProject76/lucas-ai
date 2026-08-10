@@ -9595,41 +9595,84 @@ simple que l'alternative "direct avec `cd /d`" envisagée en repli par le
 brief lui-même (§4), et strictement plus simple que ce que le brief
 anticipait comme scénario principal.
 
-### Bloqué — même restriction de permissions que le 03-04/08/2026 nuit
+### Bloqué côté modification, exécuté par Cyril — validé en conditions réelles le 10/08/2026
 
-`schtasks /delete /tn "LucasDaemon" /f` lancé depuis cet environnement a
-échoué : `Erreur : Accès refusé.` Confirmé un `/query` juste après : la
-tâche existante (`.vbs`) est intacte, toujours fonctionnelle
-(`LastTaskResult=0`), rien cassé. Sauvegarde de sa définition XML avant
-la tentative :
-`C:\Users\PC\AppData\Local\Temp\claude\C--OrionAI\4b9eda5d-fe6e-49b2-bd40-07cdf82baeec\scratchpad\LucasDaemon_backup_before_vbs_removal.xml`
-(hors dépôt, dossier scratchpad de session).
+`schtasks /delete /tn "LucasDaemon" /f` lancé depuis cet environnement
+avait échoué (`Erreur : Accès refusé.`) — même restriction que la nuit
+du 03-04/08/2026. Sauvegarde de la définition XML faite avant la
+tentative (scratchpad de session, hors dépôt). Cyril a lancé lui-même
+les deux commandes de la section précédente, puis **redémarré
+réellement le PC** :
 
-**Reste à faire par Cyril** — lancer lui-même les deux commandes
-ci-dessus, puis :
-- `schtasks /query /tn "LucasDaemon" /v /fo list` → vérifier
-  `Dernier résultat: 0`
-- Vérifier une nouvelle ligne dans `data/logs/daemon.log` après
-  `schtasks /run /tn "LucasDaemon"`
-- Vérifier qu'aucune alerte Bitdefender ne se déclenche (sans exception
-  active — c'est le but même du changement)
-- Idéalement, un redémarrage réel du PC (pas seulement une relance à
-  chaud) pour confirmer le déclencheur "à la connexion"
+- Nouvelle entrée dans `data/logs/daemon.log` à 19:54:45, immédiatement
+  après le redémarrage — déclencheur "à la connexion" confirmé.
+- **Aucune alerte Bitdefender**, testé **sans exception active** — objectif
+  premier de la session atteint.
+- Tâches horaires du daemon ("Tests automatiques") observées à 20:54:45
+  et 21:54:46 — fonctionnement continu confirmé, pas juste un
+  démarrage isolé.
 
-`start_daemon_hidden.vbs` **n'a pas été supprimé** (§6 du brief) — il
-reste en place tant que la nouvelle méthode n'est pas confirmée stable
-par Cyril en conditions réelles.
+⚠️ **Effet de bord découvert en vérifiant** : `schtasks /query /v`
+affiche désormais `Dernier résultat: 267009` en fonctionnement normal,
+plus `0`. Ce n'est **pas une erreur** — `267009` (`0x41301`,
+`SCHED_S_TASK_RUNNING`) signifie "la tâche est en cours d'exécution".
+Avec l'ancien mécanisme, l'action de la tâche était `wscript.exe`, qui
+rendait la main immédiatement après avoir détaché le vrai daemon
+(`Run(..., 0, False)`) — le Planificateur perdait alors toute visibilité
+sur le process réel et affichait `0` en continu, qu'il tourne encore ou
+non. Avec `pythonw.exe` lancé directement, c'est lui qui EST l'action de
+la tâche : le Planificateur sait donc correctement que le daemon tourne
+toujours, tant qu'il tourne — signal plus fidèle qu'avant, mais à ne pas
+confondre avec un code d'échec au prochain diagnostic.
 
-### Périmètre — 4 autres services non touchés
+`start_daemon_hidden.vbs` **supprimé** (méthode confirmée stable en
+conditions réelles, plus de raison de le garder — §6 du brief).
 
-Le même motif (`wscript.exe`+`.vbs`) équipe aussi `LucasAPIServer`,
-`start_ollama_hidden.vbs`, `start_veille_modeles_hidden.vbs` et
-`start_cowork_requests_hidden.vbs`. Conformément au brief (§5), aucun
-n'a été modifié dans cette session — généralisation à proposer
-uniquement après validation du correctif Daemon par Cyril. À noter pour
-cette généralisation future : les autres services n'ont pas forcément la
-même propriété (chemins internes déjà absolus) que `lucas_daemon.py` —
-à vérifier service par service, pas à supposer transposable tel quel.
+### 4 autres services — audité un par un, aucun n'est le même cas que le Daemon
+
+Cyril a demandé d'appliquer le même correctif aux 4 autres services
+utilisant `wscript.exe`+`.vbs`, sauf dépendance réelle différente — à
+vérifier au cas par cas plutôt qu'à supposer. Vérification faite en
+lisant chaque `.vbs` et le script qu'il lance : **aucun des 4 n'est en
+fait le même cas que `lucas_daemon.py`**, chacun pour une raison
+technique distincte, propre à ce qu'il fait :
+
+- **`LucasOllamaServer`, `LucasVeilleModeles`, `LucasCoworkRequests`**
+  (`start_ollama_hidden.vbs`, `start_veille_modeles_hidden.vbs`,
+  `start_cowork_requests_hidden.vbs`) — lancent tous les trois
+  `powershell.exe -File "<chemin absolu>.ps1"`, sans aucun chemin
+  relatif (`ollama_server_runner.ps1`, `veille_modeles_runner.ps1` et
+  `cowork_request_runner.ps1` utilisent déjà `$Projet = "C:\OrionAI"`
+  en dur). **"pythonw.exe direct" ne s'applique pas** : il n'y a pas de
+  Python dans la chaîne de lancement, le problème n'a jamais été un
+  répertoire de travail. Le `.vbs` sert ici uniquement à masquer la
+  fenêtre PowerShell, ce que `pythonw.exe` fait nativement mais dont
+  l'équivalent PowerShell (`-WindowStyle Hidden`) est documenté comme
+  pouvant encore laisser un flash bref selon la version — une garantie
+  moins sûre que celle du Daemon, jamais vérifiée sur cette machine.
+- **`LucasAPIServer`** (`start_server_hidden.vbs`) — lance
+  `venv\Scripts\python.exe -m uvicorn api.server:app ... --ssl-certfile
+  data/cert.pem --ssl-keyfile data/key.pem >> data\logs\server_startup.log
+  2>&1`. Trois dépendances réelles au `cd /d` que le Daemon n'avait
+  pas : (1) `-m uvicorn` résout `api.server:app` via `sys.path[0]`, qui
+  vaut le répertoire de travail du process — contrairement au Daemon,
+  ce n'est pas juste l'argument passé à l'interpréteur qui est relatif ;
+  (2) `--ssl-certfile`/`--ssl-keyfile` sont des chemins relatifs ; (3)
+  la redirection `>>` exige un interpréteur de commande — `pythonw.exe`
+  seul ne sait pas rediriger sa sortie vers un fichier.
+
+**Aucun correctif appliqué à ces 4 services dans cette session.** Le
+motif reste un risque partagé, mais seul le Daemon a été réellement
+flagué par Bitdefender à ce jour — pas d'urgence à toucher des
+mécanismes qui fonctionnent, pour un gain préventif, avec un risque de
+casser un service dont Cyril dépend au quotidien (`LucasAPIServer` porte
+le pont mobile). Piste pour une session dédiée, si Cyril la valide :
+écrire un petit lanceur Python (`pythonw.exe` + chemin absolu, sur le
+modèle de `lucas_daemon.py` lui-même) pour `LucasAPIServer`, qui fixe
+son propre `sys.path`/répertoire de travail et redirige sa sortie en
+Python plutôt que par le shell ; et pour les 3 scripts PowerShell,
+vérifier réellement (pas supposer) si `-WindowStyle Hidden` reste sans
+flash visible sur cette machine avant de remplacer le `.vbs`.
 
 Session log : `cowork_workspace/SESSION_LOG_DAEMON_SANS_FAUX_POSITIF_2026-08-10.md`.
 
