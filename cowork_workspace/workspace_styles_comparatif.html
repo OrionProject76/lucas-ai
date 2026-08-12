@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Luca's — Comparatif de styles Workspace</title>
+<style>
+  :root{
+    --bg:#08080c;
+    --panel:rgba(255,255,255,0.04);
+    --panel-border:rgba(255,255,255,0.08);
+    --text:#e8e8ef;
+    --text-dim:#8b8b9a;
+    --accent:#22d3ee;
+    --accent-soft:rgba(34,211,238,0.15);
+    --accent-glow:rgba(34,211,238,0.35);
+    --radius:16px;
+    --font-display:'Segoe UI', system-ui, sans-serif;
+    --font-mono:'Consolas','SF Mono',monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--font-display);
+    min-height:100vh;
+    padding:0;
+    transition:background 0.4s ease;
+  }
+  .switcher{
+    display:flex;
+    gap:0;
+    padding:14px 24px;
+    background:rgba(0,0,0,0.4);
+    border-bottom:1px solid rgba(255,255,255,0.06);
+    position:sticky;
+    top:0;
+    z-index:10;
+    backdrop-filter:blur(12px);
+  }
+  .switcher button{
+    background:none;
+    border:1px solid transparent;
+    color:var(--text-dim);
+    padding:9px 18px;
+    border-radius:10px;
+    cursor:pointer;
+    font-size:13px;
+    font-weight:600;
+    letter-spacing:0.02em;
+    margin-right:8px;
+    transition:all 0.25s ease;
+    font-family:var(--font-display);
+  }
+  .switcher button.active{
+    color:var(--text);
+    border-color:var(--panel-border);
+    background:var(--panel);
+  }
+  .switcher .label{
+    color:var(--text-dim);
+    font-size:12px;
+    align-self:center;
+    margin-right:16px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+  }
+
+  .wrap{max-width:1100px;margin:0 auto;padding:32px 24px 60px;}
+  .header{margin-bottom:28px;}
+  .header h1{
+    font-size:22px;
+    font-weight:700;
+    margin:0 0 4px;
+    letter-spacing:-0.01em;
+  }
+  .header .sub{color:var(--text-dim);font-size:13px;}
+
+  .grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:18px;
+  }
+  @media (max-width:720px){ .grid{grid-template-columns:1fr;} }
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:var(--radius);
+    padding:20px 22px;
+    backdrop-filter:blur(14px);
+    -webkit-backdrop-filter:blur(14px);
+    transition:all 0.4s ease;
+  }
+  .card h2{
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:0.09em;
+    color:var(--text-dim);
+    margin:0 0 16px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .card h2 .dot{
+    width:6px;height:6px;border-radius:50%;
+    background:var(--accent);
+    box-shadow:0 0 8px 1px var(--accent-glow);
+  }
+  .item{
+    padding:11px 0;
+    border-bottom:1px solid rgba(255,255,255,0.05);
+    font-size:14px;
+  }
+  .item:last-child{border-bottom:none;}
+  .item .title{color:var(--text);margin-bottom:2px;}
+  .item .meta{color:var(--text-dim);font-size:12px;font-family:var(--font-mono);}
+  .badge{
+    display:inline-block;
+    font-size:10px;
+    padding:2px 8px;
+    border-radius:20px;
+    background:var(--accent-soft);
+    color:var(--accent);
+    font-weight:600;
+    letter-spacing:0.03em;
+  }
+  .note{
+    margin-top:24px;
+    font-size:12px;
+    color:var(--text-dim);
+    text-align:center;
+  }
+
+  /* ===== STYLE A — Violet néon (inspiré vidéo) ===== */
+  body.style-a{
+    --accent:#a78bfa;
+    --accent-soft:rgba(167,139,250,0.15);
+    --accent-glow:rgba(167,139,250,0.45);
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(139,92,246,0.12), transparent),
+      var(--bg);
+  }
+  body.style-a .card{
+    border-color:rgba(167,139,250,0.18);
+    box-shadow:0 0 0 1px rgba(167,139,250,0.04), 0 8px 32px rgba(139,92,246,0.06);
+  }
+  body.style-a .card:hover{
+    border-color:rgba(167,139,250,0.4);
+    box-shadow:0 0 24px rgba(139,92,246,0.15), 0 8px 32px rgba(139,92,246,0.08);
+  }
+
+  /* ===== STYLE B — Cyan cohérent (identité existante) ===== */
+  body.style-b .card{
+    border-color:rgba(34,211,238,0.14);
+  }
+  body.style-b .card:hover{
+    border-color:rgba(34,211,238,0.35);
+    box-shadow:0 0 18px rgba(34,211,238,0.1);
+  }
+  body.style-b .switcher{border-bottom-color:rgba(34,211,238,0.1);}
+
+  /* ===== STYLE C — Terminal pro (sobre, ambre) ===== */
+  body.style-c{
+    --accent:#f0a94e;
+    --accent-soft:rgba(240,169,78,0.13);
+    --accent-glow:rgba(240,169,78,0.3);
+    --radius:6px;
+    --font-display:'Consolas','SF Mono',monospace;
+  }
+  body.style-c .card{
+    background:rgba(255,255,255,0.02);
+    border-color:rgba(255,255,255,0.09);
+    backdrop-filter:blur(6px);
+  }
+  body.style-c .card:hover{border-color:rgba(240,169,78,0.35);}
+  body.style-c .header h1{letter-spacing:0;}
+  body.style-c .item .title{font-family:var(--font-display);}
+</style>
+</head>
+<body class="style-a">
+
+  <div class="switcher">
+    <span class="label">Comparatif de styles</span>
+    <button class="active" data-style="style-a" onclick="setStyle('style-a', this)">A — Violet néon</button>
+    <button data-style="style-b" onclick="setStyle('style-b', this)">B — Cyan cohérent</button>
+    <button data-style="style-c" onclick="setStyle('style-c', this)">C — Terminal pro</button>
+  </div>
+
+  <div class="wrap">
+    <div class="header">
+      <h1>Luca's — Poste de commandement</h1>
+      <div class="sub">Aperçu comparatif · données d'exemple, pas réelles</div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2><span class="dot"></span>Rapports récents</h2>
+        <div class="item">
+          <div class="title">Veille Innovation — semaine 32</div>
+          <div class="meta">08/08/2026 · reports/</div>
+        </div>
+        <div class="item">
+          <div class="title">Synthèse session noyau v1</div>
+          <div class="meta">08/08/2026 · reports/</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><span class="dot"></span>Demandes en attente <span class="badge">2</span></h2>
+        <div class="item">
+          <div class="title">Confirmer plafond budget cloud</div>
+          <div class="meta">en attente de validation</div>
+        </div>
+        <div class="item">
+          <div class="title">Marque enceinte connectée à préciser</div>
+          <div class="meta">en attente de validation</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><span class="dot"></span>Actions récentes</h2>
+        <div class="item">
+          <div class="title">Capture d'écran — Bureau</div>
+          <div class="meta">action_log · réussie</div>
+        </div>
+        <div class="item">
+          <div class="title">Ouverture application whitelistée</div>
+          <div class="meta">action_log · réussie</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2><span class="dot"></span>Objectifs en cours</h2>
+        <div class="item">
+          <div class="title">Capitalisation retraite — 500k€ / 2045</div>
+          <div class="meta">mémoire prospective</div>
+        </div>
+        <div class="item">
+          <div class="title">Reconversion aide-soignant — CPF</div>
+          <div class="meta">mémoire prospective</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note">Clique les boutons en haut pour comparer A / B / C — même contenu, style différent.</div>
+  </div>
+
+<script>
+function setStyle(style, btn){
+  document.body.className = style;
+  document.querySelectorAll('.switcher button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+</script>
+</body>
+</html>

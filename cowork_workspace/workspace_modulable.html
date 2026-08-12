@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Luca's — Comparatif Workspace modulable</title>
+<style>
+  :root{
+    --bg:#08080c;
+    --panel:rgba(255,255,255,0.04);
+    --panel-border:rgba(255,255,255,0.08);
+    --text:#e8e8ef;
+    --text-dim:#8b8b9a;
+    --accent:#22d3ee;
+    --accent-soft:rgba(34,211,238,0.15);
+    --accent-glow:rgba(34,211,238,0.35);
+    --radius:16px;
+    --font-display:'Segoe UI', system-ui, sans-serif;
+    --font-mono:'Consolas','SF Mono',monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--font-display);
+    min-height:100vh;
+    transition:background 0.4s ease;
+  }
+  .switcher{
+    display:flex;
+    align-items:center;
+    gap:0;
+    padding:14px 24px;
+    background:rgba(0,0,0,0.4);
+    border-bottom:1px solid rgba(255,255,255,0.06);
+    position:sticky;
+    top:0;
+    z-index:10;
+    backdrop-filter:blur(12px);
+    flex-wrap:wrap;
+  }
+  .switcher button{
+    background:none;
+    border:1px solid transparent;
+    color:var(--text-dim);
+    padding:9px 18px;
+    border-radius:10px;
+    cursor:pointer;
+    font-size:13px;
+    font-weight:600;
+    letter-spacing:0.02em;
+    margin-right:8px;
+    transition:all 0.25s ease;
+    font-family:var(--font-display);
+  }
+  .switcher button.active{
+    color:var(--text);
+    border-color:var(--panel-border);
+    background:var(--panel);
+  }
+  .switcher .label{
+    color:var(--text-dim);
+    font-size:12px;
+    align-self:center;
+    margin-right:16px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+  }
+  .switcher .hint{
+    margin-left:auto;
+    font-size:11.5px;
+    color:var(--text-dim);
+  }
+
+  .wrap{max-width:1400px;margin:0 auto;padding:28px 24px 60px;}
+  .header{margin-bottom:22px;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px;}
+  .header h1{font-size:22px;font-weight:700;margin:0 0 4px;letter-spacing:-0.01em;}
+  .header .sub{color:var(--text-dim);font-size:13px;}
+  .reset-btn{
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    color:var(--text-dim);
+    padding:7px 14px;
+    border-radius:8px;
+    font-size:12px;
+    cursor:pointer;
+    font-family:var(--font-display);
+  }
+  .reset-btn:hover{color:var(--text);border-color:var(--accent);}
+
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    grid-auto-rows:minmax(150px, auto);
+    gap:16px;
+  }
+  @media (max-width:900px){ .grid{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:560px){ .grid{grid-template-columns:1fr;} }
+
+  .card{
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:var(--radius);
+    padding:18px 20px;
+    backdrop-filter:blur(14px);
+    -webkit-backdrop-filter:blur(14px);
+    transition:border-color 0.3s ease, box-shadow 0.3s ease, transform 0.15s ease;
+    grid-column:span 2;
+    grid-row:span 1;
+    cursor:grab;
+    display:flex;
+    flex-direction:column;
+  }
+  .card.dragging{opacity:0.4;cursor:grabbing;}
+  .card.drag-over{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft);}
+  .card[data-size="S"]{grid-column:span 1;}
+  .card[data-size="M"]{grid-column:span 2;}
+  .card[data-size="L"]{grid-column:span 2;grid-row:span 2;}
+  .card[data-size="XL"]{grid-column:span 4;grid-row:span 2;}
+
+  .card-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:14px;
+  }
+  .card h2{
+    font-size:13px;
+    text-transform:uppercase;
+    letter-spacing:0.09em;
+    color:var(--text-dim);
+    margin:0;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .card h2 .dot{
+    width:6px;height:6px;border-radius:50%;
+    background:var(--accent);
+    box-shadow:0 0 8px 1px var(--accent-glow);
+  }
+  .size-toggle{display:flex;gap:3px;}
+  .size-toggle button{
+    width:20px;height:20px;
+    border-radius:5px;
+    border:1px solid var(--panel-border);
+    background:transparent;
+    color:var(--text-dim);
+    font-size:9px;
+    cursor:pointer;
+    font-family:var(--font-mono);
+    line-height:1;
+    padding:0;
+  }
+  .size-toggle button.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);}
+
+  .item{
+    padding:9px 0;
+    border-bottom:1px solid rgba(255,255,255,0.05);
+    font-size:13.5px;
+  }
+  .item:last-child{border-bottom:none;}
+  .item .title{color:var(--text);margin-bottom:2px;}
+  .item .meta{color:var(--text-dim);font-size:11.5px;font-family:var(--font-mono);}
+  .badge{
+    display:inline-block;
+    font-size:10px;
+    padding:2px 8px;
+    border-radius:20px;
+    background:var(--accent-soft);
+    color:var(--accent);
+    font-weight:600;
+    letter-spacing:0.03em;
+  }
+  .drag-handle{
+    color:var(--text-dim);
+    font-size:11px;
+    opacity:0.5;
+  }
+  .note{margin-top:20px;font-size:12px;color:var(--text-dim);text-align:center;}
+
+  /* STYLE A — Violet néon */
+  body.style-a{
+    --accent:#a78bfa;--accent-soft:rgba(167,139,250,0.15);--accent-glow:rgba(167,139,250,0.45);
+    background:radial-gradient(ellipse 80% 50% at 50% -10%, rgba(139,92,246,0.12), transparent), var(--bg);
+  }
+  body.style-a .card{border-color:rgba(167,139,250,0.18);}
+  body.style-a .card:hover{border-color:rgba(167,139,250,0.4);box-shadow:0 0 24px rgba(139,92,246,0.15);}
+
+  /* STYLE B — Cyan cohérent */
+  body.style-b .card{border-color:rgba(34,211,238,0.14);}
+  body.style-b .card:hover{border-color:rgba(34,211,238,0.35);box-shadow:0 0 18px rgba(34,211,238,0.1);}
+
+  /* STYLE C — Terminal pro */
+  body.style-c{--accent:#f0a94e;--accent-soft:rgba(240,169,78,0.13);--accent-glow:rgba(240,169,78,0.3);--radius:6px;--font-display:'Consolas','SF Mono',monospace;}
+  body.style-c .card{background:rgba(255,255,255,0.02);border-color:rgba(255,255,255,0.09);backdrop-filter:blur(6px);}
+  body.style-c .card:hover{border-color:rgba(240,169,78,0.35);}
+  body.style-c .item .title{font-family:var(--font-display);}
+</style>
+</head>
+<body class="style-a">
+
+  <div class="switcher">
+    <span class="label">Style</span>
+    <button class="active" onclick="setStyle('style-a', this)">A — Violet néon</button>
+    <button onclick="setStyle('style-b', this)">B — Cyan cohérent</button>
+    <button onclick="setStyle('style-c', this)">C — Terminal pro</button>
+    <span class="hint">Glisse une carte pour la déplacer · boutons S/M/L/XL pour la taille</span>
+  </div>
+
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <h1>Luca's — Poste de commandement</h1>
+        <div class="sub">Aperçu comparatif · données d'exemple, pas réelles · 7 sections, entièrement réorganisable</div>
+      </div>
+      <button class="reset-btn" onclick="location.reload()">↺ Réinitialiser la disposition</button>
+    </div>
+
+    <div class="grid" id="grid">
+
+      <div class="card" data-size="M" draggable="true">
+        <div class="card-head">
+          <h2><span class="dot"></span>Rapports récents</h2>
+          <div class="size-toggle" data-sizes="S,M,L"></div>
+        </div>
+        <div class="item"><div class="title">Veille Innovation — semaine 32</div><div class="meta">08/08/2026 · reports/</div></div>
+        <div class="item"><div class="title">Synthèse session noyau v1</div><div class="meta">08/08/2026 · reports/</div></div>
+      </div>
+
+      <div class="card" data-size="M" draggable="true">
+        <div class="card-head">
+          <h2><span class="dot"></span>Demandes en attente <span class="badge">2</span></h2>
+          <div class="size-toggle" data-sizes="S,M,L"></div>
+        </div>
+        <div class="item"><div class="title">Confirmer plafond budget cloud</div><div class="meta">en attente de validation</div></div>
+        <div class="item"><div class="title">Marque enceinte connectée à préciser</div><div class="meta">en attente de validation</div></div>
+      </div>
+
+      <div class="card" data-size="S" draggable="true">
+        <div class="card-head">
+          <h2><span class="dot"></span>Actions récentes</h2>
+          <div class="size-toggle" data-sizes="S,M,L"></div>
+        </div>
+        <div class="item"><div class="title">Capture d'écran — Bureau</div><div class="meta">action_log · réussie</div></div>
+      </div>
+
+      <div class="card" data-size="S" draggable="true">
+        <div class="card-head">
+          <h2><span class="dot"></span>Objectifs en cours</h2>
+          <div class="size-toggle" data-sizes="S,M,L"></div>
+        </div>
+        <div class="item"><div class="title">Capitalisation — 500k€/2045</div><div class="meta">mémoire prospective</div></div>
+        <div class="item"><div class="title">Reconversion aide-soignant</div><div class="meta">mémoire prospective</div></div>
+      </div>
+
+      <div class="card" data-size="L" draggable="true">
+        <div class="card-head">
+          <h2><span class="dot"></span>Aperçu financier <span class="badge">bientôt E-2</span></h2>
+          <div class="size-toggle" data-sizes="S,M,L,XL"></div>
+        </div>
+        <div class="item"><div class="title">PEA + CTO — valorisation</div><div class="meta">local uniquement · exemple</div></div>
+        <div class="item"><div class="title">Écart objectif vs capacité réelle</div><div class="meta">Investment Tracker (B-1)</div></div>
+        <div class="item"><div class="title">Détecteur d'économies — 3 alertes</div><div class="meta">B-2</div></div>
+      </div>
+
+      <div class="card" data-size="M" draggable="true">
+        <div class="card-head">
+          <h2><span class="dot"></span>Rappels administratifs</h2>
+          <div class="size-toggle" data-sizes="S,M,L"></div>
+        </div>
+        <div class="item"><div class="title">Déclaration CAF trimestrielle</div><div class="meta">échéance dans 12 jours</div></div>
+        <div class="item"><div class="title">Préavis LOA véhicule</div><div class="meta">B-4 · juillet 2027</div></div>
+      </div>
+
+      <div class="card" data-size="S" draggable="true">
+        <div class="card-head">
+          <h2><span class="dot"></span>Véhicule</h2>
+          <div class="size-toggle" data-sizes="S,M,L"></div>
+        </div>
+        <div class="item"><div class="title">Tucson — 42% carburant</div><div class="meta">Bluelink · D-3</div></div>
+      </div>
+
+    </div>
+
+    <div class="note">Disposition et tailles 100% modulables — chaque carte se déplace et se redimensionne indépendamment.</div>
+  </div>
+
+<script>
+function setStyle(style, btn){
+  document.body.className = style;
+  document.querySelectorAll('.switcher button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// Build size toggles
+document.querySelectorAll('.size-toggle').forEach(toggle=>{
+  const card = toggle.closest('.card');
+  const sizes = toggle.dataset.sizes.split(',');
+  sizes.forEach(s=>{
+    const b = document.createElement('button');
+    b.textContent = s;
+    if(card.dataset.size === s) b.classList.add('active');
+    b.onclick = ()=>{
+      card.dataset.size = s;
+      toggle.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+    };
+    toggle.appendChild(b);
+  });
+});
+
+// Drag and drop reorder
+const grid = document.getElementById('grid');
+let dragEl = null;
+grid.addEventListener('dragstart', e=>{
+  if(e.target.classList.contains('card')){
+    dragEl = e.target;
+    e.target.classList.add('dragging');
+  }
+});
+grid.addEventListener('dragend', e=>{
+  if(e.target.classList.contains('card')) e.target.classList.remove('dragging');
+  document.querySelectorAll('.card').forEach(c=>c.classList.remove('drag-over'));
+});
+grid.addEventListener('dragover', e=>{
+  e.preventDefault();
+  const target = e.target.closest('.card');
+  if(target && target !== dragEl){
+    document.querySelectorAll('.card').forEach(c=>c.classList.remove('drag-over'));
+    target.classList.add('drag-over');
+  }
+});
+grid.addEventListener('drop', e=>{
+  e.preventDefault();
+  const target = e.target.closest('.card');
+  if(target && dragEl && target !== dragEl){
+    const cards = [...grid.children];
+    const dragIdx = cards.indexOf(dragEl);
+    const targetIdx = cards.indexOf(target);
+    if(dragIdx < targetIdx) target.after(dragEl);
+    else target.before(dragEl);
+  }
+  document.querySelectorAll('.card').forEach(c=>c.classList.remove('drag-over'));
+});
+</script>
+</body>
+</html>
