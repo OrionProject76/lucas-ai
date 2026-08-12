@@ -323,6 +323,13 @@ créer) quand ce chantier sera réellement planifié — pas avant.
 | **Avatar QPainter V3** | 🟡 Partiel. Le rendu a été restauré et fiabilisé (voir §6), les modes sont câblés sur le comportement réel. Une refonte esthétique complète reste possible si Cyril la souhaite. |
 | **STT** | ⛔ Bloqué par le matériel — moteur écrit, voir ci-dessous. |
 
+⚠️ **Périmètre de l'avatar élargi le 07/08/2026** : `cowork_workspace/REFERENCE_VISUELLE_AVATAR.md`
+§1 ter définit désormais ce que « terminé » inclut pour cette phase — fenêtres
+flottantes/panneaux reliés (`IDEAS.md` #17, #16) comprises, actées comme exigence
+de l'interface v1, pas comme enrichissement optionnel. Ne change ni l'ordre ni le
+contenu du tableau ci-dessus : la brique s'ajoute au périmètre déjà en cours, elle
+ne le précède ni ne le contourne.
+
 #### 🟡 Vision v1.0 = OCR seul. Le VLM est suspendu, pas abandonné.
 
 **Décision de Cyril, 01/08/2026.** `VLM_ENABLED = False` dans `config.py`.
@@ -7338,6 +7345,2404 @@ prochain incident sera lisible — c'était l'objectif, et il est atteint.
 
 Et elle a produit un résultat non prévu, qui vaut plus que la trace
 elle-même : la falsification du pari du 02/08 sur le rendu (ci-dessus).
+
+### 🟢 Watchdog VRAM — fait le 07/08/2026
+
+**Prérequis bloquant avant toute nouvelle brique visuelle Godot** (mesh
+définitif, shader, HUD — voir `cowork_workspace/REFERENCE_VISUELLE_AVATAR.md`
+§1 bis, conflit n°2). Détail complet de la session, audit et mesures brutes :
+`cowork_workspace/SESSION_LOG_2026-08-07.md`.
+
+`modules/vram_watchdog.py` (142 lignes) poll la VRAM libre (`GPUtil`, déjà
+une dépendance du projet) toutes les 12 s. Sous le seuil configuré
+(`config.VRAM_WATCHDOG_THRESHOLD_MB`), il arrête `Lucas3D.exe` (`taskkill
+/F`, même méthode que `demos/arreter_lucas3d.bat` — pas de P/Invoke).
+Au-dessus, il journalise que le retour à Godot est possible mais ne relance
+**rien automatiquement** — un compagnon de bureau ne se relance pas seul
+sans Cyril devant l'écran. Chaque bascule est journalisée dans
+`system_events` (`memory/lucas_memory.db`), table déjà existante — aucun
+nouveau système de stockage.
+
+**⚠️ Le seuil par défaut (1 536 Mo) n'est PAS une valeur mesurée comme
+tenant la route — c'est la valeur suggérée par le brief de session, gardée
+telle quelle et documentée comme telle.** Mesure fraîche du 07/08 :
+`gpt-oss:20b` **seul chargé, Godot arrêté**, laisse déjà moins de marge
+(546-590 Mo) que ce seuil. Avec ce réglage, Godot ne pourrait quasiment
+jamais rester actif dans les conditions mesurées aujourd'hui — à trancher
+par Cyril, voir `SESSION_LOG_2026-08-07.md` §1.3.
+
+**Testé en conditions réelles, pas seulement en théorie** : 7 tests
+unitaires mockés (`test_vram_watchdog.py`, tous passent, 1453 tests au
+total sur le dépôt) + un test de charge forcée **réel** — `gpt-oss:20b`
+chargé, Godot relancé, VRAM libre mesurée à 570-590 Mo par le module
+lui-même, `check_once()` exécuté sans aucun mock : `Lucas3D.exe` réellement
+arrêté (vérifié absent via `tasklist`), événement `vram_watchdog_fallback`
+retrouvé dans la vraie base (`system_events`, id 616). Trajet retour testé
+aussi : modèle déchargé, VRAM remontée à 13 262 Mo libres, événement
+`vram_watchdog_restore` retrouvé en base (id 617).
+
+**Anomalie notée au passage** : `demos/arreter_lucas3d.bat` invoqué via
+`cmd.exe /c` depuis Git Bash échoue silencieusement (aucune erreur, mais
+n'arrête rien) ; le même script via PowerShell fonctionne correctement.
+Pas creusé plus loin, mais à retenir pour la prochaine session.
+
+### 🟢 Pont WebSocket Godot ↔ FastAPI — fait et vérifié le 07/08/2026
+
+`Lucas3D/scripts/websocket_client.gd` était toujours en `ws://` sans
+jeton depuis sa création (01/08), alors que le serveur est passé en
+HTTPS + authentification dès le 05-06/08 : l'avatar Godot ne recevait
+donc **rien de réel** du backend, quel que soit le mesh/shader/HUD qu'on
+y aurait mis. Détail complet, audit et mesures :
+`cowork_workspace/SESSION_LOG_2026-08-07_websocket.md`.
+
+**Audit avant correctif** : confirmé qu'aucune tentative de fix n'avait
+jamais existé (`git blame`/`git log` : un seul commit de contenu depuis
+la création). Confirmé que `wss://` est le bon choix — pas supposé : le
+serveur réellement actif (tâche planifiée `LucasAPIServer`, HTTPS via
+mkcert) ne répond qu'en HTTPS, `http://` ne répond rien. `API_TOKEN` est
+réellement configuré (43 caractères, vérifié sans l'afficher) — un
+commentaire de `api/server.py` affirmant le contraire (« SANS EFFET
+aujourd'hui ») était stale, corrigé au passage.
+
+**Correctif** : schéma `wss://`, jeton lu dans le même `.env` que
+`config.py` (aucun nouveau fichier de secret), transmis en sous-protocole
+`lucas-token.<jeton>` — même mécanisme que `static/js/websocket.js`,
+jamais dans l'URL. TLS épinglé sur la CA racine mkcert
+(`TLSOptions.client()`) : **épingler directement sur `data/cert.pem`
+semblait plus strict mais mbedTLS le refuse** (erreur -0x2700, testé et
+reproduit deux fois avant de trouver la bonne approche) — corrigé pour
+épingler sur la CA (`tools\mkcert.exe -CAROOT`), qui fonctionne.
+
+**Vérifié en conditions réelles, pas juste "le socket s'ouvre"** : test
+de bout en bout avec le serveur et Godot réellement lancés — un vrai
+message chat a déclenché un vrai `LucasCore.ask()`, et Godot a reçu et
+journalisé, horodaté, la séquence `thinking` → `speaking` → `idle` sur
+sa propre connexion. Serveur coupé en cours de route : Godot n'a pas
+crashé, a journalisé une déconnexion propre, s'est reconnecté seul et a
+rejoué le cycle complet avec succès. **Le binaire exporté
+(`build/Lucas3D.exe`) a été régénéré et revérifié** avec le même
+résultat — pas seulement les scripts sources.
+
+### 🟢 Latence de bascule `gpt-oss:20b` mesurée, et la direction du routage actée — 07/08/2026
+
+Fait suite à `cowork_workspace/reports/Dimensionnement_VRAM_Interface_LLM_2026-08-07.md`
+(mesures VRAM/qualité par palier) et à §5.44-5.45 ci-dessus (comparatif
+initial, bascule sur `gpt-oss:20b` seul en production).
+
+**5 essais réels de chargement à froid**, Ollama vérifié vide
+(`api/ps`) avant chacun, modèle déchargé (`keep_alive: 0`) entre chaque
+essai. Chronométrage via les champs natifs Ollama (`load_duration` +
+`prompt_eval_duration`, nanoseconde), pas une estimation :
+
+| Essai | 1er token utilisable |
+|---|---|
+| 1 | **10,78 s** |
+| 2 | 3,55 s |
+| 3 | 3,59 s |
+| 4 | 3,53 s |
+| 5 | 3,53 s |
+
+**Comportement net, pas du bruit** : le tout premier chargement (Ollama
+resté longtemps sans avoir chargé ce modèle) coûte ~10,8 s ; les
+suivants, une fois les poids passés dans le cache disque/OS, se
+stabilisent à **3,53-3,59 s** (écart de 0,06 s entre eux — très
+reproductible). Cause probable, cohérente avec le comportement Windows
+déjà observé ailleurs dans ce projet : lecture depuis le cache fichier
+plutôt que depuis le SSD à froid.
+
+**Lecture qualitative** : ~3,5 s de silence en pleine conversation est
+**perceptible et gênant, à la limite du disruptif** — ni imperceptible,
+ni franchement tolérable pour un assistant vocal/conversationnel. C'est
+d'ailleurs cohérent avec le motif déjà documenté en §5.44 qui avait fait
+écarter l'alternance automatique entre deux gros modèles (« 3,2 s de
+rechargement à chaque bascule », jugé disqualifiant pour un routeur qui
+alterne à chaque message). La différence ici : dans le mécanisme acté
+ci-dessous, l'escalade vers `gpt-oss:20b` n'aurait lieu que sur les
+requêtes identifiées comme complexes — occasionnellement, pas à chaque
+message — ce qui change la tolérance acceptable sans changer le chiffre
+mesuré.
+
+⚠️ **Point de vigilance pour la session de conception détaillée** : §5.45
+a déjà mesuré qu'`INTENT_MODEL` différent de `MODEL_NAME` coûte un
+rechargement par message (0,3 s quand les deux sont identiques, 3,5-13,3 s
+sinon). Le mécanisme d'escalade à concevoir devra explicitement dire ce
+que devient `INTENT_MODEL` une fois `qwen3:14b` par défaut — le
+laisser diverger reproduirait exactement le problème déjà réglé.
+
+**Routage multi-modèle — direction actée le 07/08/2026, phasée.**
+
+Décidé sur la base des mesures réelles du 07/08
+(`cowork_workspace/reports/Dimensionnement_VRAM_Interface_LLM_2026-08-07.md`) :
+`qwen3:14b` (9 486 Mo, 0/15 guichet, 0/15 vouvoiement, tient
+confortablement même au palier HUD complet) devient le **modèle par
+défaut pour l'usage quotidien**. `gpt-oss:20b` (12 549 Mo, marge fine
+parfois négative aux paliers 1-2) se charge **à la demande** pour les
+requêtes complexes.
+
+**Phase 1 (actée maintenant) — mécanisme hybride façon « advisor »
+(Option C).** `qwen3:14b` traite la requête en premier. S'il estime que
+la question dépasse sa portée, il le signale lui-même pour déclencher
+l'escalade vers `gpt-oss:20b` — pas de classification automatique de la
+complexité en amont pour l'instant. Design détaillé (comment `qwen3:14b`
+signale, seuil de déclenchement, latence de bascule acceptable compte
+tenu de la mesure ci-dessus) : **à faire dans une session dédiée
+ultérieure**, pas dans celle-ci.
+
+**Phase 2 (différée, pas abandonnée) — détection automatique de la
+complexité (Option A).** À reprendre explicitement quand l'usage réel de
+la Phase 1 aura montré la fréquence effective de bascule — pas en
+anticipant sans données d'usage.
+
+**Ce qui ne change pas** : le watchdog VRAM (`vram_watchdog.py`) gère
+déjà le repli d'interface (2D QPainter) pendant toute bascule de charge
+— aucun nouveau code d'interface requis pour ce chantier. Aucune
+bascule de modèle par défaut en session live sans validation explicite
+de Cyril sur le design complet de l'escalade, une fois celui-ci défini.
+
+**Rien d'implémenté dans cette session** : ni le mécanisme d'escalade,
+ni un changement de `config.MODEL_NAME` — `gpt-oss:20b` reste le modèle
+de production tel quel jusqu'à ce que la Phase 1 soit conçue et validée.
+
+## 5.68 Noyau minimal — Brique 3 : mémoire à 5 types (`remember`/`recall`/`forget`), 08/08/2026
+
+Première des 4 briques d'un brief de session complet (Cyril, 08/08/2026) :
+routeur hybride local/cloud, OS Controller, mémoire enrichie, avatar à
+7 états — ordre demandé Brique 3 → 2 → 1 → 4, plan détaillé validé par
+Cyril après exploration du code réel (pas du code supposé) et 4 points
+de clarification tranchés explicitement (clé cloud via `keyring`,
+confirmation Qt threadsafe, table mémoire dédiée avec provenance
+vérifiable, 7 états d'avatar).
+
+**Décision d'architecture** : nouvelle table `memories`, **pas** une
+colonne `memory_type` sur `conversations`/`system_events`. Ces deux
+tables sont le transcript brut du chat (30+ appelants, forme figée par
+toute la suite de tests) — un souvenir ("Cyril range ses factures dans
+D:\Factures") n'est pas un message. `source_type`/`source_id`
+remplacent un champ provenance en texte libre : la provenance doit
+rester vérifiable (retrouver la ligne source), jamais descriptive.
+
+`memory/memory_manager.py` : table `memories` (`memory_type`, `content`,
+`source_type`/`source_id`, confiance/importance/date/last_validated/
+expiration — mêmes colonnes que le socle #2bis du 04/08), index
+composite `(memory_type, expiration)`. `MEMORY_TYPES` (episodic/
+semantic/procedural/emotional/prospective) et `SOURCE_TYPES` en Python,
+jamais un `CHECK` SQL — même style que `router.py`/`automation_manager.py`.
+
+API ajoutée à `MemoryManager` (même fichier/classe, pas de module
+séparé — cohérent avec le reste du fichier, qui n'a jamais scindé par
+table) : `remember(memory_type, content, *, source_type, source_id,
+confidence, importance, expiration) -> int`, `recall(memory_type=None,
+*, limit, min_confidence, include_expired) -> list[dict]`,
+`forget(memory_id) -> bool`.
+
+**Backup avant migration — nouveau mécanisme, aucun n'existait avant
+ce soir.** `SCHEMA_VERSION` en constante de module, comparée à
+`app_state["schema_version"]` à l'instanciation. Base existante en
+retard → copie physique (`shutil.copy2`) vers
+`lucas_memory.db.bak-<horodatage>` **avant** toute migration,
+idempotent (ne se redéclenche pas au démarrage suivant). Testé contre
+une vraie base à l'ancien schéma (`memories` absente), pas supposé.
+
+**Régression trouvée en lançant la suite complète, pas seulement les
+nouveaux tests** : `test_app_state.py::test_writing_twice_replaces_...`
+comptait `SELECT COUNT(*) FROM app_state` en attendant 1 — supposait
+implicitement qu'aucune autre clé que celle du test n'existait jamais
+dans `app_state`. Le nouvel écrit systématique de `schema_version` à
+chaque ouverture casse cette hypothèse. Corrigé en filtrant sur
+`WHERE key = 'mode'` : le test vérifie la clause `ON CONFLICT` pour
+cette clé précise, pas le contenu total de la table — l'intention
+réelle du test, pas la formulation la plus étroite possible.
+
+**Suite complète rejouée après le correctif : 1467 passed, 0 failed**
+(29 tests dédiés dans `test_memory_manager.py`, dont round-trip
+fermeture/réouverture avec métadonnées complètes — couvre V6).
+`ruff check` propre, `mypy` propre (un `int | None` sur
+`cursor.lastrowid` après `INSERT`, corrigé par une assertion explicite
+plutôt qu'un `# type: ignore`).
+
+**Ce qui n'est pas fait dans cette étape** : aucune intégration
+automatique de `remember()`/`recall()` dans `core/lucas_core.py` — le
+brief ne spécifie aucun déclencheur précis, l'API est prête et testée
+mais pas branchée sur un comportement implicite non demandé.
+
+### 🔴 Incident réel découvert en cours de route — la vraie base de Cyril recevait des écritures de test
+
+En lançant la suite complète (pas seulement les nouveaux tests), un
+fichier `memory/lucas_memory.db.bak-20260808-153905` est apparu à côté
+de la vraie base — preuve que le nouveau mécanisme de backup
+(`_backup_if_migrating`) s'était déclenché sur `memory/lucas_memory.db`
+elle-même, pas sur une base de test.
+
+**Écarté d'abord, à tort** : le serveur live (`uvicorn api.server:app`,
+PID 35480, démarré la veille 07/08 15:18) a été soupçonné en premier —
+mais un process Python déjà démarré a son code figé en mémoire ; sans
+`--reload` (confirmé absent de sa ligne de commande), il ne pouvait pas
+exécuter le code écrit aujourd'hui. Vérifié avant de conclure, pas
+supposé.
+
+**Cause réelle, en deux couches** :
+
+1. **Trois fichiers de tests UI construisaient un vrai `MainWindow()`
+   sans isoler `LucasCore`** — `test_main_window_paths.py` (créé le
+   06/08/2026, 14 tests via la fixture `window` + 1 test isolé), et deux
+   tests pré-existants dans `test_avatar.py` et `test_ui_workers.py`.
+   Exactement le piège déjà documenté et corrigé UNE FOIS dans
+   `test_ui_workers.py::app_window` le 04/08/2026 — retombé dedans trois
+   fois de plus, faute d'avoir repris ce patron partout. Resté invisible
+   jusqu'ici parce qu'ouvrir une `MemoryManager()` sur un schéma déjà à
+   jour était un no-op silencieux ; le nouveau mécanisme de backup de
+   cette brique a rendu le problème visible pour la première fois.
+
+2. **Plus profond : `save_event_from_any_thread()` ignorait tout
+   monkeypatch de `DB_PATH`.** `MemoryManager.__init__(self, db_path:
+   Path = DB_PATH)` fige ce défaut À LA DÉFINITION de la fonction (même
+   piège que celui déjà documenté au 05/08/2026, §5.32, pour l'incident
+   des ~56 messages perdus) — `MemoryManager()` appelé nu, comme le
+   faisait cette fonction, ignore donc silencieusement tout
+   `monkeypatch.setattr(module, "DB_PATH", ...)` fait par un test. Le
+   TTSWorker de `ui/main_window.py` reçoit cette fonction en callback :
+   chaque lecture vocale déclenchée par un test écrivait donc un vrai
+   événement (`event_type="test"`, trouvé en base par empreinte de forme,
+   pas en affichant le contenu réel) sur la vraie base, quelle que soit
+   l'isolation posée côté `MainWindow`/`LucasCore`. Ce test existait déjà
+   avant cette session (`test_thread_safe_logger_reports_a_close_failure
+   _but_still_returns_true`) et écrivait sur la vraie base depuis sa
+   création, sans que son propre monkeypatch ne le protège jamais
+   réellement.
+
+**Corrigé** : `save_event_from_any_thread()` passe désormais
+`db_path=DB_PATH` explicitement (lu dans le CORPS de la fonction, donc à
+chaque appel — pas comme défaut de paramètre figé une fois pour toutes).
+Les 6 sites de construction UI non isolés isolent maintenant `LucasCore`
+**et** `memory_manager.DB_PATH` ensemble — l'un sans l'autre ne suffit
+pas, les deux couches devaient être fermées.
+
+**Vérifié par comptage de lignes avant/après (jamais par contenu)** :
+suite complète rejouée deux fois de suite après le correctif,
+`system_events` stable à 632 les deux fois (aucune écriture résiduelle) ;
+`conversations`, `action_log`, `app_state`, `memories` inchangés tout du
+long. Aucune perte de données constatée sur la vraie base.
+
+**Serveur live arrêté** (`taskkill /F /T /PID 31972`, à la demande
+explicite de Cyril) pour la suite de la session — pas la cause réelle de
+l'incident, mais Cyril a préféré ne pas le laisser tourner pendant que
+Briques 2/1 touchent des chemins plus sensibles (actions système,
+routage cloud). À relancer manuellement (`venv\Scripts\python.exe -m
+uvicorn api.server:app --host 0.0.0.0 --port 8000 --ssl-certfile
+data/cert.pem --ssl-keyfile data/key.pem`) quand Cyril le souhaite — pas
+relancé automatiquement, même principe que pour Lucas3D.exe.
+
+`.gitignore` : `*.db.bak-*` ajouté, pour qu'une sauvegarde automatique
+future ne finisse jamais versionnée par erreur.
+
+Prochaine étape : Brique 2 (OS Controller).
+
+## 5.69 Noyau minimal — Brique 2 : OS Controller, liste blanche, 08/08/2026
+
+Deuxième brique du brief du 08/08/2026 (§5.68 ci-dessus pour le contexte
+complet, l'ordre acté et les points de clarification déjà tranchés).
+
+`core/os_controller.py` (nouveau) : `OSController` — `move_file`,
+`rename_file`, `take_screenshot` (délègue à `VisionManager.capture_screen()`,
+aucun second chemin de capture), `get_volume`/`set_volume` (pycaw, mesuré
+réellement sur cette machine avant d'écrire le code — `AudioUtilities.
+GetSpeakers().EndpointVolume`, pas `.Activate()` comme le suggéraient
+d'anciens tutoriels, l'API a changé), `read_clipboard`/`write_clipboard`
+(`pyperclip`, pas `QApplication.clipboard()` : ce module doit fonctionner
+identiquement depuis l'UI PySide6 et depuis le pont mobile FastAPI, où
+aucune boucle Qt ne tourne).
+
+**Lancer une application reste dans `modules/automation_manager.py`** —
+`OSController` ne le redéfinit pas, `core/decision_engine.py` enregistre
+les deux générateurs séparément (`automation_manager_actions()` +
+`os_controller_actions()`, nouveau, même patron : généré à chaque appel,
+jamais recopié). `ILLUSTRATIVE_ACTIONS` réduit à `get_brightness`/
+`set_brightness` : le reste (volume, presse-papiers, capture) est devenu
+réel, retiré de la liste aspirationnelle.
+
+**Dossiers autorisés** (`config.ALLOWED_DIRECTORIES`) : Documents/Desktop/
+Downloads du profil utilisateur uniquement, jamais `C:\Windows` ni
+`Program Files` — refusé par construction (liste positive), pas par
+omission. Vérification par résolution de chemin (`Path.resolve()`,
+symlinks compris), jamais par préfixe de chaîne : `"Documents2"` commence
+comme `"Documents"` sans y être contenu, testé explicitement.
+
+**Écrasement de fichier = confirmation**, jamais automatique. Point de
+clarification tranché par Cyril avant ce plan : `QMessageBox.question()`
+minimale, cantonnée à ce module, **pas** les cartes d'approbation
+d'IDEAS.md #80 (toujours différées). Callable `confirm_destructive`
+injecté, refus par défaut sans lui — même garde que
+`DecisionEngine.confirm` : un mécanisme indisponible n'autorise jamais.
+
+**Pont de threading Qt (`ui/main_window.py::ConfirmationBridge`)** —
+précision explicite de Cyril avant ce plan : `OSController` tourne
+généralement hors du thread GUI (même contrainte que le streaming du
+chat), un `QMessageBox` ne peut s'afficher que sur ce thread.
+`MainWindow.confirm_destructive()` teste `QThread.currentThread() is
+QApplication.instance().thread()` — appel direct si déjà sur le thread
+GUI (un `BlockingQueuedConnection` vers son propre thread ferait un
+deadlock, documenté et évité), sinon `QMetaObject.invokeMethod(...,
+Qt.ConnectionType.BlockingQueuedConnection, Q_RETURN_ARG(bool),
+Q_ARG(str, message))`.
+
+**Vérifié en conditions réelles, pas seulement en théorie** : un script
+séparé a d'abord reproduit le mécanisme (QThread réel + `QMessageBox.
+question` mocké) pour confirmer que `worker.wait()` ne pompe PAS la file
+d'événements du thread appelant — un piège de deadlock silencieux, évité
+en pompant via `app.processEvents()` en boucle. Le test définitif
+(`test_confirm_destructive_from_a_background_thread_does_not_deadlock`,
+`test_main_window_paths.py`) exerce ensuite le VRAI pont depuis un VRAI
+thread distinct, pas une simulation de l'aiguillage.
+
+**Journal d'audit** : colonne `action_log.params` (JSON, migration
+additive via `_migrate_add_column`, `SCHEMA_VERSION` 2→3 — nouveau backup
+automatique déclenché comme en Brique 3). `save_action()`/
+`load_recent_actions()` étendus, rétrocompatibles (tout appelant existant
+continue sans modification, `params` reste `NULL`). Actions READ
+(`get_volume`, `read_clipboard`) jamais journalisées — cohérent avec
+`ActionCategory.READ` de `core/decision_engine.py`.
+
+**Non wiré dans le flux de chat** : comme `remember()`/`recall()` en
+Brique 3, `OSController` est construit et testé mais aucun déclencheur en
+langage naturel n'existe encore dans `core/lucas_core.py` — le brief n'en
+spécifiait aucun, et l'inventer aurait été de la portée non demandée.
+
+**35 tests dédiés** (`test_os_controller.py` : 22, extension de
+`test_decision_engine.py` : +3, `test_main_window_paths.py` : +3 pour le
+pont de confirmation, dont le test de thread réel), suite complète
+rejouée à 1490/1490. `ruff`/`mypy` (`just mypy`, `--ignore-missing-imports
+--check-untyped-defs`) propres sur tous les fichiers touchés.
+
+**Base réelle de Cyril vérifiée intacte après coup** (comptage de lignes
+uniquement, même discipline qu'en Brique 3) : `system_events` toujours à
+632, un seul fichier `.bak-*` (celui de la Brique 3), aucune nouvelle
+écriture.
+
+**⚠️ Vérification manuelle V5 non faite par Cyril** : la boîte de dialogue
+réelle n'a pas été cliquée par lui (session sans écran interactif) — ce
+qui est vérifié, c'est la plomberie complète (thread, blocage, retour de
+valeur) avec `QMessageBox.question` mocké. Le clic réel reste à faire par
+Cyril quand `OSController` sera câblé sur un vrai déclencheur.
+
+Nouvelles dépendances installées et ajoutées à `requirements.txt` :
+`pycaw`, `comtypes`, `pyperclip` (ce dernier déjà présent transitivement,
+rendu explicite).
+
+Prochaine étape : Brique 1 (routeur hybride local/cloud).
+
+## 5.70 Noyau minimal — Brique 1 : routeur hybride local/cloud (Anthropic), 08/08/2026
+
+Troisième brique du brief du 08/08/2026 (§5.68 pour le contexte complet).
+Chargé la skill `claude-api` avant d'écrire ce chantier — jamais deviné de
+nom de modèle ni de forme d'API.
+
+**`config.py`** : `OPENAI_API_KEY` (stub jamais utilisé, aucun appel
+OpenAI n'a jamais existé) remplacé par `ANTHROPIC_API_KEY`, lue via
+`keyring` (Gestionnaire d'identification Windows) — jamais `.env`, jamais
+en clair, décision explicite de Cyril tranchée avant ce plan.
+`ANTHROPIC_MODEL = "claude-opus-5"` (modèle par défaut imposé par la
+skill, aucune demande contraire de Cyril). `ANTHROPIC_EFFORT = "medium"` —
+écart volontaire par rapport au défaut "high" de l'API : le plafond
+mensuel (`CLOUD_BUDGET_EUR`, défaut 10€) rendrait "high"/"xhigh"
+disproportionné pour un usage domestique. Le thinking adaptatif reste
+actif (paramètre `thinking` omis = adaptatif par défaut sur claude-opus-5,
+vérifié dans la skill). Tarifs USD comparés directement à un plafond EUR,
+sans conversion — simplification assumée et documentée en commentaire,
+pas cachée.
+
+**`scripts/set_anthropic_key.py`** (nouveau) : seul moyen de peupler le
+Credential Manager — `getpass.getpass()`, jamais `input()` en clair.
+
+**`core/cloud_llm.py`** — réécrit de zéro (stub de 12 lignes, aucun appel
+réseau n'a jamais existé). `_to_anthropic_format()` sépare les blocs
+`role="system"` (plusieurs, intercalés — format Ollama utilisé partout
+ailleurs dans le projet) du reste, puisque l'API Anthropic exige un
+`system` unique hors du tableau `messages`. `stop_reason == "refusal"`
+vérifié AVANT de lire `response.content` — un refus des garde-fous
+Anthropic rend un HTTP 200 normal avec un contenu vide ou partiel,
+lire `content[0]` sans ce test aurait planté (piège documenté par la
+skill pour claude-opus-5). Chaque appel journalise son coût réel
+(`_record_usage()`) dans la nouvelle table `cloud_usage`.
+
+**`core/router.py`** : `cloud_is_available()` relit `ANTHROPIC_API_KEY`
+(renommage). `cloud_budget_available()` (nouveau) ajouté comme troisième
+condition de `route()`, après `cloud_is_available()` — ne peut que ramener
+vers le local, jamais l'inverse, même invariant que le test de
+disponibilité déjà en place. `cloud_budget_warning()` (nouveau) : signal
+séparé à 80 % du plafond, jamais consulté par `route()` elle-même —
+consommé par `core/lucas_core.py::ask()` via la console de flux
+existante (`on_activity`), pas mêlé à la logique de sécurité/coût.
+
+**`memory/memory_manager.py`** : table `cloud_usage` (une ligne par mois,
+`ON CONFLICT` incrémental — même patron que `set_state()`),
+`record_cloud_usage()`/`cloud_usage_this_month()`. `SCHEMA_VERSION` 3→4,
+nouveau backup automatique déclenché comme aux Briques 2/3.
+
+**🔴 Piège retrouvé en écrivant les tests, avant qu'il ne devienne un bug
+caché** : `cloud_budget_available()`, `cloud_budget_warning()` et
+`_record_usage()` appelaient d'abord `MemoryManager()` nu — exactement le
+défaut de paramètre figé qui a coûté la découverte du §5.68
+(`save_event_from_any_thread`). Corrigé avant commit, pas après coup :
+les trois passent désormais `db_path=memory_manager.DB_PATH` explicite,
+lu dans le corps de la fonction à chaque appel — un `monkeypatch` de
+`DB_PATH` dans un test fonctionne réellement.
+
+**`api/protocol.py`** : `chat()` gagne un paramètre `destination`
+optionnel, additif — absent du dict si non fourni, donc aucune casse
+côté Godot (test de non-régression explicite). `api/server.py` l'ajoute
+au JSON `/chat` (REST) et au message `chat` du WebSocket, via
+`getattr(lucas, "last_destination", "local")` — pas un accès direct :
+plusieurs doublures de test (`_FakeCore`, `_SilentCore`, deux `_FauxCore`)
+n'ont pas cet attribut, ajouté après elles.
+
+**⚠️ Le streaming du chat desktop (PySide6) ne passe jamais par le
+cloud** — vérifié avant de toucher `ui/main_window.py` : `LLMWorker`
+parle directement à Ollama via `LucasCore.prepare()`, "toujours local"
+par conception documentée (aucun streaming cloud n'existe). Le routage
+hybride ne s'exerce donc que sur `api/server.py` (REST + WebSocket —
+PWA mobile, Godot), pas sur le client desktop. Aucune bulle de chat
+PySide6 n'affiche donc la provenance — cohérent avec l'exclusion du
+brief (« Aucune refonte UI », « pas de modification PWA »), pas un
+oubli.
+
+**38 tests dédiés** (`test_cloud_llm.py` : 10, extension de
+`test_router.py` : +7, `test_memory_manager.py` : +3, extension de
+`test_couverture_residuelle.py` : réécriture des tests OPENAI_API_KEY,
+`test_protocol.py` : +1), suite complète à 1510/1510, `ruff`/`mypy`
+propres (un `# type: ignore[call-overload]` documenté : `converted` est
+un `list[dict]` générique, pas le `TypedDict` strict que mypy attend —
+forme runtime vérifiée par les tests, friction de typage pas un bug).
+
+**Base réelle de Cyril vérifiée intacte après coup** (comptage de lignes
+uniquement) : aucune nouvelle écriture, aucun nouveau `.bak-*`.
+
+**⚠️ V1 non vérifiée en conditions réelles** : aucune clé Anthropic
+n'était disponible dans cette session pour faire un vrai appel cloud —
+seul `test_cloud_llm.py` (mocké) prouve la plomberie. Cyril devra
+enregistrer sa clé (`scripts/set_anthropic_key.py`) et poser une vraie
+question complexe pour valider V1 en conditions réelles.
+
+Prochaine étape : Brique 4 (avatar QPainter, 7 états) — dernière brique,
+indépendante des trois précédentes.
+
+## 5.71 Noyau minimal — Brique 4 : avatar QPainter, 7 états, 08/08/2026
+
+Quatrième et dernière brique du brief du 08/08/2026 (§5.68). Indépendante
+des trois précédentes — aucune dépendance croisée, sauf le déclenchement
+de `THINKING_DEEP` par la Brique 1 (escalade cloud).
+
+**`ui/avatar_widget.py`** : `PRESENCE_STATES` passe de 5 à 7 —
+`THINKING_DEEP` (escalade cloud) et `OBSERVING` (présence soutenue,
+distincte de `WATCHING` qui reste une capture ponctuelle : balayage actif
++ point témoin clignotant, absents d'`OBSERVING` par construction — pas
+un oubli, la différence sémantique tranchée par Cyril avant ce plan).
+`IDLE` reste le repos implicite, hors des « 6 états » nommés du brief.
+Palettes/labels/couleur de témoin ajoutés pour les deux nouveaux états
+(`OBSERVING_COLOR`, ambre plus sourd que `WATCHING_COLOR` — une présence
+soutenue ne doit pas cligner comme une alerte).
+
+**Clignement non périodique** : `blink_timer_obj.start(3000)` fixe
+remplacé par un réarmement à intervalle aléatoire (2-6 s) à chaque
+déclenchement, dans `trigger_blink()` elle-même — testé réellement
+(`test_blink_interval_varies_between_triggers`, pas seulement lu dans le
+code).
+
+**`api/protocol.py`** : `PRESENCE_STATES` étendu en miroir
+(`STATE_THINKING_DEEP`, `STATE_OBSERVING`) — alignement avec
+`ui/avatar_widget.py` vérifié par un test dédié
+(`test_states_match_the_pyside_avatar`, déjà existant, a immédiatement
+détecté le désalignement avant correction). Filet de sécurité Godot
+(retombe sur `idle` pour un état inconnu) confirmé intact par un test de
+non-régression explicite.
+
+**🔴 Deux régressions trouvées en lançant la suite complète, corrigées
+avant commit** : `ui/main_window.py::_set_avatar_state()` n'avait pas de
+libellé de statut pour `OBSERVING` (`test_every_state_has_a_status_label`
+— test générique déjà existant, a suffi à l'attraper) ; `test_avatar.py`
+affirmait encore 5 états en dur. Les deux corrigées, pas contournées.
+
+**`demos/demo_avatar.py`** : n'a rien eu à changer pour afficher les 7
+états — la grille de boutons itère déjà dynamiquement sur
+`PRESENCE_STATES`. Confirme que le choix de conception initial (générique
+plutôt que 5 boutons codés en dur) a payé.
+
+**⚠️ Budget CPU (< 2 % en idle) mesuré RÉEL, pas supposé — et il ne
+tient pas.** `demos/demo_avatar_cpu.py` (nouveau, `psutil.cpu_percent()`
+sur 15 s réelles, avatar seul en IDLE) : **2,6-2,8 %**, au-dessus du
+budget annoncé au brief. Mesure faite sous `QT_QPA_PLATFORM=offscreen`
+(pas un vrai bureau — approximation, comme documenté dans le script) ;
+un rendu desktop réel pourrait différer dans un sens ou l'autre, non
+vérifié. Signalé tel quel plutôt que corrigé sous pression de terminer
+la session : optimiser le rendu (fréquence, respiration permanente,
+particules) est un chantier distinct, pas une correction triviale, et
+n'était pas dans le périmètre demandé par le brief au-delà de la mesure
+elle-même.
+
+**26 tests dédiés** (`test_avatar.py` : +19 incluant les tests
+OBSERVING/THINKING_DEEP et le clignement, `test_protocol.py` : +2,
+renommage de `test_there_are_exactly_five_presence_states`), suite
+complète à 1520/1520, `ruff`/`mypy` propres. Base réelle de Cyril
+vérifiée intacte après coup.
+
+**Les 4 briques du noyau minimal sont closes.** Récapitulatif des points
+laissés ouverts pour Cyril : V1 (routeur cloud) non vérifiée en
+conditions réelles faute de clé Anthropic disponible ; V5 (confirmation
+destructive OS Controller) — la boîte de dialogue réelle n'a pas été
+cliquée par lui ; le budget CPU de l'avatar dépasse la cible mesurée de
+0,6-0,8 point. Aucune des trois n'est un blocage — chacune est un test
+en conditions réelles qui attend Cyril devant l'écran, pas un défaut de
+conception.
+
+## 5.72 Revue a posteriori Briques 2/1 + règle ruff B006, 08/08/2026
+
+**Revue demandée par Cyril** sur 4 points précis des Briques 2/1
+(committées sous mode Auto, sans approbation diff par diff) : `move_file`
+vérifie-t-il `allowed_directories` sur source ET destination, le pont Qt
+fonctionne-t-il avec une vraie `QMessageBox` (pas mockée), `is_sensitive()`
+passe-t-il vraiment avant toute vérification de budget, le plafond
+déclenche-t-il vraiment la bascule à 100 % en conditions réalistes (pas
+seulement le test à 0,01€). **Rien d'anormal trouvé, aucun code modifié.**
+Détail complet, y compris un piège trouvé dans mon propre script de
+vérification (pas dans le code réel — une vraie `QMessageBox.exec()` ouvre
+sa propre boucle d'événements imbriquée, incompatible avec une boucle de
+pompage manuelle) : `cowork_workspace/reports/Verification_Briques_2_1_2026-08-08.md`.
+
+**`pyproject.toml`** (nouveau, demande séparée de Cyril) : le projet
+n'avait jamais eu de configuration ruff explicite — vérifié avant d'agir
+(`ruff check . --show-settings`), pas supposé : ruff 0.16.1 tourne par
+défaut sur ~394 règles, dont B006 (argument par défaut mutable,
+flake8-bugbear) déjà actif de fait. `extend-select = ["B006"]` ajouté
+pour le rendre explicite et durable, sans dépendre d'un défaut qui
+pourrait changer à une future mise à jour. `ruff check .` toujours propre
+après activation — aucune occurrence trouvée ailleurs dans le code.
+
+## 5.73 Workspace Luca's — E-1 uniquement (tableau de bord PC), 08/08/2026
+
+**Brief** : `cowork_workspace/BRIEF_WORKSPACE_E1.md`, périmètre strictement
+limité à E-1 du catalogue d'idéation (`IDEAS.md` `#102`) — rendre visible
+ce que Luca's fait déjà (rapports, demandes en attente, actions, objectifs
+en cours), zéro action déclenchable depuis la page, zéro VRAM/rendu 3D.
+E-2/E-3/F-1 et le reste du catalogue explicitement hors périmètre.
+
+**Décisions d'implémentation** (mode plan utilisé, brief laissait des
+choix ouverts) :
+- **Page dédiée** `static/workspace.html` plutôt qu'un tiroir de plus dans
+  le chat mobile — consultée depuis le PC, 4 sections structurées, pas la
+  UX téléphone existante. Servie automatiquement par le mount `/app/`
+  déjà en place (`StaticFiles(html=True)`), aucune nouvelle route de
+  fichiers nécessaire.
+- **Un seul endpoint agrégé** `GET /workspace/summary` (même patron que
+  `/finance/summary`), protégé par le même jeton que `/history`/
+  `/documents`/`/finance/summary` — noms de rapports et objectifs
+  (potentiellement financiers) sont sensibles.
+- **`modules/workspace_manager.py`** (nouveau) : 4 fonctions de lecture
+  seule — `list_reports()`/`list_pending_requests()` itèrent
+  `cowork_workspace/reports/`/`requests/` (chemins fixes, pas d'entrée
+  utilisateur, donc aucun risque de traversal), `list_recent_actions()`/
+  `list_objectives()` délèguent à `MemoryManager.load_recent_actions()`/
+  `.recall(memory_type="prospective")` — avec `db_path=memory_manager.
+  DB_PATH` explicite, même piège documenté que `core/router.py` (défaut
+  de paramètre figé à la définition de `__init__`, un monkeypatch de
+  `DB_PATH` dans un test ne l'atteint pas via `MemoryManager()` nu).
+- **Aucune donnée fabriquée** : les objectifs (mémoire `prospective`)
+  n'ont pas de champ « avancement » dans le schéma — affichage du
+  contenu texte brut, jamais un pourcentage inventé. La section actions
+  est étiquetée « Actions récentes » (pas « tâches à faire ») —
+  `action_log` trace des décisions déjà exécutées ou refusées, pas une
+  todo-list.
+- **XSS évité par construction** : `static/js/workspace.js` construit
+  chaque ligne via `createElement`/`textContent`, jamais `innerHTML` sur
+  une valeur dynamique (titre de rapport, contenu d'objectif, params
+  d'action) — trouvé et corrigé en relisant mon propre premier jet, avant
+  tout test.
+
+**Tests** : `test_workspace_manager.py` (nouveau, 11 tests — tri par date,
+exclusion `README.md`/`_DONE`, extraction de titre Markdown vs repli sur
+le nom de fichier, dossiers absents → listes vides, assemblage des 4
+sections) + 2 tests dans `test_server.py` (jeton requis, relai fidèle de
+`workspace_manager.summary()`). Suite complète : 1533 passed (1520 + 13),
+`ruff check .` propre, `mypy` sur les fichiers touchés sans nouvelle
+erreur (les 10 erreurs pré-existantes viennent de modules tiers sans
+rapport — `psutil`/`win32gui`/`faster_whisper`/`pytesseract`).
+
+**Vérification en conditions réelles, pas seulement en test unitaire** :
+- Redémarrage du serveur live (`LucasAPIServer`) nécessaire — `--reload`
+  n'est **pas** utilisé par cette tâche planifiée (contrairement à `just
+  serve`), une modification de `api/server.py` ne se recharge donc jamais
+  seule. ⚠️ **Piège rencontré** : `Stop-ScheduledTask`/`Start-ScheduledTask`
+  seuls n'ont RIEN arrêté — `start_server_hidden.vbs` lance la commande via
+  `objShell.Run(..., 0, False)`, qui détache complètement le process du
+  suivi du Planificateur de tâches (la tâche redevient "Ready" en quelques
+  millisecondes, alors que le vrai serveur continue de tourner en arrière-
+  plan). Deux tentatives de redémarrage via le Planificateur seul n'ont
+  donc rien changé — `/workspace/summary` répondait encore `404 Not
+  Found` sur le process qui tenait réellement le port 8000. Diagnostiqué
+  en retraçant l'arbre parent→enfant complet (`cmd.exe` → `venv\Scripts\
+  python.exe` → interpréteur réel, exactement le patron déjà documenté
+  dans `CLAUDE.md` "venv\Scripts\python.exe... toujours un parent, jamais
+  l'interpréteur lui-même") avant de cibler `taskkill /F /T` sur la racine
+  de CET arbre précis — jamais un PID isolé deviné depuis `tasklist`, qui
+  affichait 10 process `python.exe` sans rapport (Ollama, pytest, etc.).
+  Après cet arrêt propre + `Start-ScheduledTask`, le nouveau process
+  (PID différent, confirmé via `Get-NetTCPConnection`) sert bien la
+  nouvelle route.
+- Chargement réel via les outils navigateur Chrome de cette session :
+  `/app/workspace.html?token=...` affiche les vrais rapports de
+  `cowork_workspace/reports/` (titres extraits des `# ...` Markdown),
+  "Aucune demande en attente" (les deux demandes existantes sont déjà
+  `_DONE`), les vraies actions de `action_log` (`launch_notepad —
+  executed`, dates réelles), "Aucun objectif prospectif enregistré pour
+  l'instant" (`remember()` construit en Brique 3 mais jamais encore
+  appelé pour un objectif prospectif — honnête, pas un vide caché). Bouton
+  🖥️ ajouté dans `index.html`, testé en conditions réelles (clic → arrive
+  bien sur le Workspace, jeton déjà en `localStorage` réutilisé sans
+  ressaisie). Chat existant rechargé après : connexion WebSocket, avatar,
+  aucune erreur console — pas de régression.
+
+## 5.74 Correctif Workspace — cache Service Worker jamais bumpé, deux bugs remontés par Cyril, 08/08/2026
+
+**Signalés par Cyril, test réel sur ses deux appareils** : (1) bouton
+Workspace 🖥️ minuscule et mal positionné en haut à gauche sur mobile
+(Chrome Android, PWA), absent purement et simplement sur PC (Chrome,
+`/app/`) ; (2) le message « Luca's est connectée. » s'affichait deux fois
+à la suite au chargement sur mobile.
+
+**Cause identifiée** : `static/sw.js` cache l'app shell (`index.html`,
+`style.css`, tous les `.js` du chat) sous un nom de version
+(`CACHE_NAME`) qui ne change **que si le fichier `sw.js` lui-même
+change** — un navigateur ne réinstalle jamais un Service Worker dont le
+contenu est identique, même si les fichiers qu'il référence ont changé
+sur le serveur. §5.73 (bouton Workspace) a modifié `index.html` et
+`style.css` **sans bumper `CACHE_NAME`** — erreur d'oubli d'une règle que
+ce même fichier documente pourtant explicitement en commentaire depuis
+la v6 (« le nom change à chaque fois pour forcer un install() frais »).
+Conséquence : tout appareil ayant déjà visité `/app/` avant §5.73 (les
+deux appareils réels de Cyril, contrairement à mes tabs de test qui
+partaient d'un profil Chrome sans Service Worker préexistant, d'où
+l'absence du bug lors de ma propre vérification en fin de §5.73) a
+continué de servir l'ANCIEN `index.html`/`style.css` en cache — sans le
+bouton Workspace sur certains, avec une version antérieure et
+possiblement bogué de `app.js`/`websocket.js` sur d'autres, expliquant
+la double connexion. Les deux symptômes, bien que d'apparence différente,
+partagent la même cause racine.
+
+**Correctif** : `CACHE_NAME` bumpé `lucas-shell-v11` → `v12`. Le
+mécanisme d'`activate` (déjà en place, inchangé) supprime automatiquement
+l'ancien cache et réinstalle tout l'app shell depuis le réseau au
+prochain chargement — aucune action manuelle requise côté Cyril.
+
+**Vérifié en conditions réelles** (pas seulement relu) : re-testé avec un
+profil Chrome qui avait déjà enregistré le Service Worker v11 pendant la
+vérification de §5.73 — confirmé que la simple présence du nouveau
+`sw.js` sur le serveur suffit à déclencher automatiquement la mise à
+jour (`activeScripts`/`cacheNames` interrogés via
+`navigator.serviceWorker.getRegistrations()`/`caches.keys()` : bascule
+observée sur `lucas-shell-v12` sans action manuelle). Rendu vérifié à une
+largeur CSS réellement mobile (412px, via un `<iframe>` injecté — les
+outils de redimensionnement de fenêtre de cette session ne changent pas
+la largeur effective du viewport ici, contournement nécessaire pour un
+test fidèle) : les 4 icônes (bouclier/dossier/argent/Workspace) s'alignent
+correctement, même taille, un seul message « Luca's est connectée. »,
+clic sur l'icône Workspace → `workspace.html` s'ouvre et s'affiche
+correctement à cette largeur. Revérifié aussi à largeur desktop (1280px
+et 1568px) : un seul message, bouton présent et bien positionné, aucune
+erreur console.
+
+⚠️ **Leçon à retenir pour toute session future qui touche
+`index.html`/`style.css`/un `.js` de l'app shell** : bumper
+`CACHE_NAME` dans `static/sw.js` fait partie intégrante de la
+modification, pas une étape optionnelle après coup — l'oubli est
+silencieux (aucune erreur, aucun test automatisé ne le détecte, la suite
+pytest ne couvre pas le Service Worker) et ne se révèle qu'en conditions
+réelles, sur un appareil qui a déjà visité le site.
+
+## 5.75 Rafraîchissement visuel — glassmorphism + néon cyan (chat/avatar), 08/08/2026
+
+**Demandé par Cyril** après test réel sur ses deux appareils : effet verre
+(`backdrop-filter: blur()`) sur les panneaux existants (barre d'icônes,
+bulles de message, barre de saisie), palette néon cyan avec lueur
+(`box-shadow`) sur les bordures actives/focus/bulles — réutilisant la
+couleur déjà utilisée pour les yeux de l'avatar (`static/js/avatar.js`,
+`HALO_PALETTES.idle`, `rgb(0, 212, 255)`), pas une nouvelle couleur de
+marque. Portée explicitement limitée au chat/avatar (`static/index.html`
++ `static/css/style.css`) — le futur Workspace/dataviz garde un
+traitement plus sobre (verre seul, sans glow appuyé), pour ne pas nuire
+à la lisibilité de données denses.
+
+### Contraste vérifié AVANT d'assombrir/éclaircir quoi que ce soit
+
+Contrainte explicite et non négociable du brief : le glow ne doit jamais
+dégrader la lisibilité du texte. Calcul de luminance relative WCAG
+(formule officielle, script Python exécuté puis jeté — reproductible,
+voir le corps de cette section) sur les trois combinaisons texte/fond
+touchées par la baisse de l'alpha des fonds (nécessaire pour l'effet
+verre) :
+
+| Élément | Contraste avant | Contraste après | Minimum WCAG AA |
+|---|---|---|---|
+| Bulle Cyril (`--bubble-user`, 0.9 → 0.55) | 15.07:1 | 17.01:1 | 4.5:1 |
+| Bulle Luca's (`--bubble-lucas`, 0.55 → 0.35) | 15.34:1 | 17.04:1 | 4.5:1 |
+| Barre du bas/tiroirs (`--panel-bg`, 0.55 → 0.45) | 18.39:1 | 18.55:1 | 4.5:1 |
+
+Le texte (`--text: #e8fbff`) n'a reçu ni transparence ni `text-shadow` —
+seul le fond des conteneurs est flouté/translucide, le glow (`box-shadow`)
+reste sur la bordure, jamais sur le texte lui-même. Sur un fond quasi noir
+(`--bg: #00050a`), rendre un panneau plus transparent RAPPROCHE sa couleur
+composée du noir, ce qui AUGMENTE mécaniquement le contraste avec un texte
+clair — la vérification confirme que la palette choisie ne peut pas
+accidentellement dégrader la lisibilité, elle ne l'améliore jamais par
+hasard non plus (calcul fait avant d'écrire le CSS final, pas après coup
+pour se rassurer).
+
+### Focus clavier (accessibilité)
+
+`button.icon-btn:focus-visible` / `a.icon-btn:focus-visible` reçoivent un
+`outline` (pas seulement un `box-shadow`) — l'outline reste visible même
+en mode contraste élevé du système, où un `box-shadow` seul serait ignoré.
+`#text-input:focus` (pas `:focus-visible`) : un champ de saisie doit
+montrer son focus quel que soit le moyen d'y arriver (clic ou clavier),
+contrairement aux icônes où seule la navigation clavier justifie l'anneau
+renforcé.
+
+### Nouveaux tokens (`:root`, `static/css/style.css`)
+
+`--neon-cyan: #00d4ff` (identique aux yeux de l'avatar), `--glow-cyan`
+(discret, repos), `--glow-cyan-strong` (hover/active/focus-visible),
+`--glass-blur: blur(14px)` (remplace les `blur(6px)` déjà en place sur
+les tiroirs/popover de sécurité, pour une intensité cohérente partout).
+
+### Workspace (E-1) — traitement sobre, verre seulement
+
+`static/css/workspace.css` : `#workspace-header` et `.workspace-card`
+reçoivent `var(--glass-blur)`, **sans** glow. `#workspace-controls
+.icon-btn` annule explicitement le glow hérité de la règle partagée
+`.icon-btn` (`box-shadow: none`), garde un `outline` simple au focus
+clavier — accessibilité préservée, esthétique différenciée du chat.
+
+### ⚠️ Piège du Service Worker, retombé dedans puis corrigé avant de tester
+
+`style.css` fait partie de l'app shell précaché (`static/sw.js`,
+`SHELL_FILES`) — la modifier SANS bumper `CACHE_NAME` aurait reproduit
+exactement le bug de §5.74, cette fois avec MON PROPRE navigateur de test
+qui avait déjà `lucas-shell-v12` enregistré depuis la vérification
+précédente. Bumpé `v12` → `v13` **avant** de tester cette fois, pas
+après — leçon de §5.74 appliquée dès l'écriture plutôt que découverte à
+nouveau en conditions réelles.
+
+### Vérifié en conditions réelles, capture à l'appui
+
+Testé sur le même navigateur qui avait déjà `v12` en cache : confirmé
+via `navigator.serviceWorker.getRegistrations()`/`caches.keys()` que la
+bascule vers `v13` s'est faite automatiquement, sans action manuelle.
+Rendu vérifié à largeur desktop (1568px) ET à une largeur CSS réellement
+mobile (412px, via un `<iframe>` — le redimensionnement de fenêtre ne
+change pas le viewport effectif dans cet environnement, voir §5.74) : aux
+deux formats, glow visible mais discret au repos sur les icônes, glow net
+sur la bulle de bienvenue, un seul message « Luca's est connectée. »
+(confirme aussi que le correctif de §5.74 tient toujours), aucune erreur
+console. Focus clavier testé (`Tab`) : anneau visible sur l'icône ciblée.
+Workspace revérifié aux deux largeurs : verre visible, glow absent des
+icônes d'en-tête, conforme à la demande de sobriété.
+
+## 5.77 Style final du Workspace — "Terminal pro" + cartes modulaires persistées, 09/08/2026
+
+**Tranché par Cyril après comparatif sur maquette interactive**, en deux
+temps dans la même session : d'abord une piste violet néon (jamais
+committée, remplacée avant tout test réel — voir le paragraphe dédié
+plus bas), puis la décision finale, « Terminal pro » : ambre discret,
+police monospace, coins peu arrondis, glass léger — **plus** un système
+de cartes modulaires (glisser-déposer + 4 tailles), persisté côté
+serveur. Portée strictement limitée à E-1 : aucune des sections vues sur
+la maquette de démo (aperçu financier, rappels administratifs, véhicule
+— previews de E-2/B-4/D-3, pas encore construits) n'a été ajoutée — les
+4 sections réelles restent inchangées, seuls le style et la disposition
+changent.
+
+### Exploration violette — décidée puis remplacée avant tout commit
+
+Le message précédent de Cyril demandait un violet néon pour le
+Workspace (réutilisant le halo `THINKING` de l'avatar). Implémenté,
+vérifié en conditions réelles (desktop + 412px), contraste calculé — puis
+un second message a précisé le style final réellement voulu (« Terminal
+pro », ambre). Comme rien n'avait encore été committé, l'exploration
+violette a été **annulée** (`git checkout`, pas un commit suivi d'un
+revert) : aucune trace dans l'historique, cohérent avec la discipline du
+projet de ne jamais documenter comme « livré » ce qui a été remplacé
+avant toute vérification finale par l'utilisateur.
+
+### Palette ambre — dans la continuité de l'existant, pas une couleur totalement nouvelle
+
+`#f0a94e`, tranché par Cyril. Pas une reprise exacte comme le cyan du
+chat (`ROADMAP.md` §5.75) ou le violet écarté, mais dans la même famille
+que l'ambre déjà présent ailleurs dans l'app (halo `WATCHING` de
+l'avatar, badge d'activité, pastille d'alerte sécurité — tous proches de
+`#ff9600`) : cohérent avec le vocabulaire « mise en avant » déjà établi.
+
+### Contraste vérifié avant d'écrire le CSS final
+
+| Élément | Contraste texte/fond | Minimum WCAG AA |
+|---|---|---|
+| `--amber-panel-bg` (cartes, en-tête) | 17.72:1 | 4.5:1 |
+| Bouton de taille actif (texte quasi noir sur ambre plein) | 9.43:1 | 4.5:1 |
+
+Même méthode que §5.75/§5.76 (formule de luminance relative WCAG),
+calculée avant l'écriture du CSS, pas après coup.
+
+### Glow statique, jamais clignotant
+
+Aucun `@keyframes` ajouté dans `workspace.css` — même règle que le chat
+(§5.75) et l'exploration violette (§5.76). Seul `#mic-btn.recording`
+(rouge, sans rapport, dans `style.css`) anime encore un glow dans tout
+le CSS du projet, et seul l'avatar (hors périmètre) varie dynamiquement.
+
+### Cartes modulaires — glisser-déposer (Pointer Events) + 4 tailles, persistées côté serveur
+
+- **Backend** (`modules/workspace_manager.py`) : `get_layout()`/
+  `save_layout()` réutilisent la table `app_state` déjà existante
+  (`memory/memory_manager.py::set_state`/`get_state`) plutôt qu'une
+  nouvelle table SQLite — un JSON `{"order": [...], "sizes": {...}}`
+  sous une seule clé. Validation stricte : `order` doit être exactement
+  une permutation des 4 cartes connues, chaque taille doit être dans
+  `S`/`M`/`L`/`XL` — `InvalidLayout` sinon, jamais un enregistrement
+  partiel silencieux.
+- **API** : `GET`/`PUT /workspace/layout`, même garde de jeton que le
+  reste du Workspace. `PUT` invalide → 400 avec le détail de la
+  validation, pas 500.
+- **Frontend** (`static/js/workspace.js`) : glisser-déposer en **Pointer
+  Events**, pas l'API HTML5 Drag & Drop (support tactile peu fiable) —
+  un seul modèle pour souris/tactile/stylet, testé sur les deux
+  plateformes. Réordonnancement en direct pendant le glisser (le noeud
+  DOM de la carte suit le pointeur via `insertBefore`, distance
+  euclidienne au centre de chaque carte voisine — correct en une colonne
+  comme en plusieurs). Équivalent clavier minimal sur la poignée de
+  glisser (flèches) pour rester opérable sans souris/tactile — pas un
+  patron ARIA drag-and-drop complet, mais réellement utilisable.
+  Sauvegarde débouncée (250 ms) après chaque changement (glisser ou
+  taille).
+
+### 🔴 Bug réel trouvé et corrigé en testant — clic fantôme en fin de glisser
+
+Un premier test réel (glisser une carte, puis relire la disposition
+persistée) a montré une taille changée sur une carte que je n'avais pas
+touchée. Diagnostiqué, pas supposé : le réordonnancement en direct
+pendant le glisser déplace continuellement le contenu sous le
+pointeur — au moment du relâchement, l'élément qui se trouve **sous le
+point de dépôt** peut être différent de celui visé au départ (typique :
+un bouton de taille S/M/L/XL d'une carte voisine, qui a glissé sous le
+pointeur pendant le mouvement). Un clic de navigateur qui suit
+naturellement un `pointerup`/`mouseup` déclenche alors ce bouton — un
+faux changement de taille, jamais demandé.
+
+Reproduit de façon déterministe (`dispatchEvent` de la séquence
+`pointerdown`/`pointermove`/`pointerup` + `click` synthétique au point de
+dépôt, sans dépendre de coordonnées écran devinées) : confirmé que
+`document.elementFromPoint()` au point de dépôt retournait bien un
+`.workspace-size-btn` d'une carte voisine, et que sans correctif, sa
+taille changeait réellement. **Corrigé** : un indicateur `justDragged`,
+posé à la fin de tout glisser, intercepte et annule (capture phase) le
+tout premier `click` qui suit — sans empêcher un clic normal (non
+précédé d'un glisser) d'atteindre son bouton. Revérifié après correctif,
+avec exactement le même scénario reproduit : plus aucun changement de
+taille non désiré, le réordonnancement reste correct.
+
+⚠️ Pas seulement un artefact de test : un doigt qui se lève après un
+glisser tactile réel peut retomber sur un élément recomposé sous lui de
+la même manière — le correctif protège un vrai usage, pas seulement le
+harnais de vérification.
+
+### ⚠️ Piège de §5.74, retombé dedans une deuxième fois — routes API, pas fichiers statiques
+
+Contrairement à §5.76 (CSS seul, aucun bump nécessaire), cette passe
+modifie `api/server.py` (nouvelles routes `/workspace/layout`) — un
+changement Python, jamais rechargé par la tâche planifiée
+`LucasAPIServer` (pas de `--reload`, voir §5.74). Premier test réel
+après avoir écrit les routes : `GET /workspace/layout` répondait `404
+Not Found` sur le serveur live, alors que les tests automatisés
+passaient (ils instancient l'app FastAPI directement, sans passer par le
+process réel). Diagnostiqué et corrigé avec la même procédure que §5.74 :
+arbre parent→enfant retracé (`cmd.exe` → `venv\Scripts\python.exe` →
+interpréteur réel) avant `taskkill /F /T` sur la racine exacte de cet
+arbre, puis relance via la tâche planifiée — nouveau PID confirmé via
+`Get-NetTCPConnection`, route vérifiée active ensuite. Aucune régression
+de la leçon elle-même : c'est la distinction « fichier statique vs route
+Python » qui n'avait pas été assez explicitée après §5.74, pas la
+procédure de redémarrage qui a été oubliée.
+
+### Vérifié en conditions réelles, capture à l'appui
+
+Suite complète : 1544 passed (1533 + 11 nouveaux tests de disposition),
+`ruff check .` propre. Testé sur le serveur live redémarré, aux deux
+largeurs (desktop 1568px, mobile réelle 412px via `<iframe>`) : glisser
+une carte confirmé (réordonnancement visible immédiatement), changer sa
+taille confirmé (S/M/L/XL, glow actif sur le bouton sélectionné),
+**rechargement complet de la page** confirmé conserver la disposition —
+à la fois via l'interface et via une requête `curl` indépendante du
+navigateur (preuve que la persistance est bien côté serveur, pas
+localStorage). Aucune erreur console aux deux formats.
+
+## 5.78 Zone sandbox du Workspace (E-3) — isolation réelle vérifiée en sous-processus, 09/08/2026
+
+Brief : `cowork_workspace/BRIEF_WORKSPACE_E3_SANDBOX.md`. Objectif : donner à
+Luca's un endroit où proposer et exécuter du code (scripts, analyses, petits
+outils) en environnement isolé, visible et piloté par Cyril — cinquième
+carte du Workspace, même style "Terminal pro" que les quatre autres.
+
+### Étape préalable du brief (§3) — aucun mécanisme d'isolation n'existait
+
+Recherché avant d'écrire une ligne : `modules/automation_manager.py`,
+`core/os_controller.py`, `core/decision_engine.py`, et par mot-clé
+"sandbox"/"isolat" dans tout le projet. Le seul résultat pertinent était la
+RÈGLE elle-même (`VISION_LONG_TERME.md` §4, "Aucune exécution de code
+auto-généré hors sandbox"), jamais implémentée. `automation_manager.py` est
+une liste blanche de lancement d'applications, sans rapport avec exécuter du
+code arbitraire. Confirmé : rien à réutiliser, ce chantier part de zéro.
+
+### Cycle de vie — le code reste proposé jusqu'à décision explicite
+
+`pending → executed` (Cyril clique Exécuter) ou `pending → rejected` (Cyril
+clique Rejeter) — jamais l'inverse, jamais un troisième passage sur un id
+déjà tranché (`SandboxError`). `modules/sandbox_manager.py::submit()`
+n'exécute jamais rien lui-même, à la lettre du brief §5.
+
+### ⚠️ Isolation LOGICIELLE (niveau Python), pas une isolation OS — honnête sur la limite
+
+Pas de conteneur, pas de VM, pas d'AppContainer Windows, pas de compte
+restreint — RT-2 (`IDEAS.md`) interdit de présenter ça comme plus que ce que
+c'est. `modules/sandbox_runner.py` (exécuté dans le sous-processus, jamais
+modifiable par le code sandboxé lui-même) pose trois gardes réelles, avant
+tout `exec()` du code proposé :
+
+- **Réseau** : `socket.socket`/`socket.create_connection` remplacés par une
+  fonction qui lève `PermissionError` — coupe `socket` direct, `requests`,
+  `urllib`, `http.client` (tous construisent un `socket.socket` en interne).
+- **Fichiers** : `open`/`io.open`/`os.open` + toute la famille
+  `os.remove/unlink/rename/replace/mkdir/rmdir/chmod/truncate/listdir/scandir/
+  chdir/symlink/link` vérifient une résolution réelle du chemin (symlinks
+  compris, pas un préfixe de chaîne) contre `sandbox_workspace/` — accès
+  refusé sinon, lecture ET écriture. `pathlib.Path.unlink()`/`rename()`/
+  `mkdir()` délèguent à ces mêmes fonctions `os.*` au moment de l'appel
+  (jamais une copie figée à l'import), donc protégées aussi — vérifié par
+  test explicite, pas supposé.
+- **Processus** : `subprocess.Popen.__init__` + `os.system/popen/spawn*/
+  exec*/startfile` bloqués — ferme la porte de contournement la plus
+  directe (un script qui shell-out vers `curl.exe`/PowerShell rendrait les
+  deux gardes précédentes inutiles, un processus externe n'héritant d'aucun
+  patch posé dans ce process Python).
+
+**Ce que ça ne couvre PAS**, documenté en tête de `sandbox_runner.py` plutôt
+que caché : `ctypes`/un appel Win32 direct contournerait ces gardes, et
+`multiprocessing` sur Windows peut spawner sans passer par
+`subprocess.Popen`. Suffisant pour des scripts d'analyse/outils maladroits,
+pas une défense contre un adversaire qui écrit du code pour s'évader
+spécifiquement. Durcissement futur (compte Windows restreint, Windows
+Sandbox) : `IDEAS.md`, pas ouvert cette session.
+
+Timeout : `subprocess.Popen.communicate(timeout=...)`, et sur dépassement
+`taskkill /F /T /PID` sur le PID de tête — pas juste `proc.kill()` :
+`sys.executable` sur ce projet est le stub venvlauncher de `venv\Scripts\
+python.exe`, qui relance TOUJOURS l'interpréteur réel en process enfant
+(CLAUDE.md, leçon du 30/07/2026) ; tuer seulement la tête laisserait
+l'enfant tourner jusqu'au timeout suivant.
+
+### Persistance — table dédiée, pas une réutilisation d'`action_log`
+
+`memory/memory_manager.py` : table `sandbox_runs` (id, code, status, stdout,
+stderr, exit_code, timed_out, created_at, decided_at), SCHEMA_VERSION 4→5
+(déclenche la sauvegarde automatique habituelle — confirmée réellement
+créée : `memory/lucas_memory.db.bak-20260809-075510`). Distincte
+d'`action_log` : une proposition sandbox a un cycle de vie (mise à jour
+après coup), une ligne d'`action_log` est déjà terminée à l'écriture.
+
+### API — même garde de jeton que le reste du Workspace
+
+`POST /workspace/sandbox/submit`, `POST /workspace/sandbox/{id}/execute`,
+`POST /workspace/sandbox/{id}/reject` — 400 (pas 500) sur `SandboxError`
+(code vide, id inconnu, proposition déjà tranchée). `modules/
+workspace_manager.py::summary()` expose `sandbox_runs` (lecture de ce que
+`sandbox_manager` a déjà écrit — même distinction que `get_layout()`/
+`save_layout()`, pas une nouvelle brèche dans la lecture-seule du reste).
+`CARD_IDS` passe à 5 valeurs (`+ "sandbox"`).
+
+### Frontend — cinquième carte, même style, aucune nouvelle identité visuelle
+
+`static/workspace.html`/`workspace.js`/`workspace.css` : formulaire
+(textarea + "Proposer"), liste des propositions avec badge de statut
+(pending=ambre, executed=vert `--sandbox-ok` nouveau, rejected=`--error`
+déjà existant), boutons Exécuter/Rejeter sur le pending, sortie
+standard/erreurs affichées pour l'exécuté. `createElement`/`textContent`
+partout (jamais `innerHTML` sur du contenu dynamique), même discipline que
+le reste de `workspace.js`. `workspace.html`/`.js`/`.css` restent hors de
+`SHELL_FILES` (`static/sw.js`) — vérifié avant d'écrire, pas supposé (même
+constat que §5.76) : aucun bump de `CACHE_NAME` nécessaire.
+
+### Vérifié réellement, pas supposé
+
+- **30 nouveaux tests** (`test_sandbox_manager.py` : 21, dont les gardes
+  réseau/fichiers/processus/timeout en VRAI sous-processus, pas une
+  simulation ; `test_server.py` : 9 sur le câblage des routes) — suite
+  complète 1573 passed, `ruff check .` propre, `mypy .` propre (128
+  fichiers).
+- **Serveur réel redémarré** (arbre `venv\Scripts\python.exe` → interpréteur
+  réel retracé et tué avec `taskkill /F /T`, relancé via la tâche planifiée
+  `LucasAPIServer`) — migration de schéma confirmée (`schema_version` = 5
+  en base réelle), cycle submit→execute et submit→reject vérifié par `curl`
+  contre le serveur HTTPS réel, PAS un mock.
+- **Navigateur réel** (Claude in Chrome), aux deux largeurs : PC (1568px,
+  capture à l'appui) et mobile (412px via `<iframe>`, même méthode que
+  §5.77, capture à l'appui) — carte Sandbox affichée, glisser/redimensionner
+  hérité du mécanisme existant (aucune régression), formulaire "Proposer"
+  utilisé réellement (frappe clavier + clic, pas `fetch` direct), bouton
+  "Exécuter" cliqué réellement, résultat affiché correctement dans les deux
+  largeurs.
+
+⚠️ **Friction d'environnement rencontrée, sans rapport avec le code de ce
+chantier** — l'écran de Cyril est à l'échelle Windows 300 % (déjà connu,
+voir `cowork_workspace/ProjetWindows3D` avant son retrait). `resize_window`
+de l'extension Chrome, appelé avec une largeur en pixels physiques proche
+ou au-delà de `window.screen.availWidth` (1280 à cette échelle), a produit
+une fenêtre dégénérée (`outerWidth` ~157px) au lieu d'un redimensionnement
+ou d'une erreur claire — récupéré en fermant l'onglet et en ouvrant un
+onglet neuf plutôt qu'en persistant sur la fenêtre cassée. À réutiliser si
+un futur test navigateur sur cette machine se comporte bizarrement après un
+`resize_window` : fermer l'onglet, pas insister.
+
+### Pas encore fait
+
+- Aucune proposition automatique par Luca's elle-même (pas de LLM qui
+  écrit du code candidat) — cette session construit la zone d'exécution,
+  pas un générateur. Cohérent avec le brief : "s'il y en a" (§4).
+- Pas de suppression automatique des scripts `_proposition_*.py` après
+  exécution dans `sandbox_workspace/` — s'accumulent sur disque (gitignorés,
+  jamais versionnés). Purge à envisager si ça devient gênant en usage réel.
+- `ctypes`/`multiprocessing` non bloqués (voir plus haut) — accepté pour
+  cette version, pas oublié.
+
+## 5.79 Détecteur d'économies (B-2) — 6e carte du Workspace, un vrai bug trouvé sur données réelles, 09/08/2026
+
+Brief : `cowork_workspace/BRIEF_DETECTEUR_ECONOMIES_B2_1.md`. Objectif :
+repérer, depuis les relevés déjà importés (Finance CSV), trois motifs
+mécaniques utiles à la capitalisation retraite (Synthèse B) — charges
+récurrentes, hausses de tarif silencieuses, doublons probables — sans
+comparaison fournisseurs (hors périmètre, nécessiterait le web).
+
+### Étape préalable — schéma exploré avant d'écrire du code
+
+`modules/finance_manager.py` : chaque transaction est un dict `{date:
+datetime, libelle: str, montant: float (signé, négatif = dépense),
+categorie: str}`. Rien à changer côté import — cette session lit
+`FinanceManager.transactions`, n'y écrit jamais.
+
+### `modules/savings_detector.py` — agrégation déterministe pure, RT-3
+
+Aucun appel LLM, aucun réseau : uniquement du regroupement/comparaison sur
+des dicts déjà en mémoire. Trois détecteurs partagent un même helper de
+signature (`_core_label()` : `core/text_utils.normalize()` puis chiffres
+retirés) et un même critère de récurrence (`_find_recurring_groups()`,
+un seul endroit qui décide ce qui compte comme récurrent) :
+
+- **Charges récurrentes** : même signature + montant dans le même ordre
+  de grandeur (ratio 0,3×–3×) + intervalle régulier (mensuel : ≥2 écarts
+  25-35 j, soit 3 occurrences ; annuel : ≥1 écart 350-380 j, soit 2
+  occurrences — 3 occurrences annuelles demanderaient 3 ans d'historique).
+- **Hausses de tarif** : compare chaque occurrence à la précédente dans
+  un groupe déjà reconnu récurrent, seuil >5 % ET >1 € (évite un
+  arrondi).
+- **Doublons probables** : même signature, montant à ±0,01 €, écart ≤3
+  jours — **toujours** `status="a_verifier"` (brief §5, RT-2), jamais
+  affirmé. Un prélèvement mensuel normal n'entre jamais dans cette
+  fenêtre de 3 jours, donc aucun recouvrement avec la récurrence.
+
+### 🔴 Bug réel trouvé en validant sur le vrai historique de Cyril — retraits DAB
+
+Premier passage sur les vraies données (427 transactions, comptages
+agrégés uniquement — jamais le contenu affiché, voir plus bas) : 15
+"hausses de tarif" détectées, dont deux à +125 % et +122 % sur des
+libellés `CARTE X3422 RETRAIT DAB ... BRED SOTTEVILLE LES RO 00013732`.
+Diagnostiqué sans jamais afficher le libellé complet dans ce fichier au
+moment du diagnostic (seulement vu à l'écran, dans le Workspace, avec
+l'accord explicite de Cyril pour cette capture précise — voir plus bas) :
+un retrait DAB au même distributeur garde le même libellé une fois les
+chiffres retirés (date, heure ET montant sont tous numériques), donc
+tous les retraits à ce distributeur se groupent comme UNE charge
+récurrente — et une variation normale du montant retiré (Cyril choisit
+combien il retire, ce n'est pas un tarif) ressort comme une fausse
+"hausse de tarif" de +125 %.
+
+**Corrigé** : `_is_cash_withdrawal()` exclut tout libellé contenant
+"retrait"/"distributeur"/le mot "dab" — appliqué dans
+`_group_by_core_label()`, donc hérité par les trois détecteurs à la fois
+(un seul endroit décide, pas trois critères qui pourraient diverger).
+Après correctif sur les mêmes données réelles : 13 charges récurrentes
+(-1, le faux groupe DAB), 8 hausses de tarif (-7, toutes les fausses
+hausses sur retraits), 17 doublons inchangé (les retraits n'avaient
+jamais déclenché de doublon — écart normalement >3 jours). Régression
+ajoutée à `test_savings_detector.py` avec le motif exact reproduit
+(données 100 % fictives dans le test).
+
+⚠️ **Limite connue, acceptée sciemment** : une charge récurrente dans une
+catégorie à montant naturellement variable (ex. `Alimentation` — un plein
+de courses n'a pas de "tarif" fixe) peut ressortir en "hausse de tarif"
+si un mois coûte nettement plus qu'un autre au même magasin (vu sur les
+données réelles : Intermarché, +160 %). Les chiffres affichés restent
+vrais (le montant a réellement augmenté ce mois-là) ; c'est la catégorie
+"hausse de tarif" qui généralise un peu large pour ce cas précis. Pas
+corrigé cette session : un filtre par catégorie serait fragile (le
+catégoriseur ne distingue pas "abonnement salle" à prix fixe de "courses"
+à montant libre dans une même catégorie `Loisirs`/`Alimentation`), et le
+fait affiché n'est jamais faux, seulement son intitulé un peu trop
+général. Cyril voit le nom du marchand et la catégorie réels dans
+l'interface — recontextualise en un coup d'œil, ce que je ne peux pas
+faire moi-même (voir la règle sur l'affichage de données personnelles
+ci-dessous).
+
+### ⚠️ Méthode de validation — jamais le contenu réel affiché dans ce terminal
+
+Conforme à la règle CLAUDE.md ("jamais afficher le contenu réel d'un
+fichier de données personnelles, même en diagnostic") : la validation sur
+les 427 transactions réelles de Cyril s'est faite exclusivement par
+**comptages agrégés** (`len(...)`, `set(statuts)`) — jamais un libellé ni
+un montant individuel imprimé dans une sortie de commande. Le contenu
+réel n'a été vu qu'une fois, à l'écran, dans le navigateur, pour la
+capture PC/mobile exigée par le brief — et seulement après une question
+explicite à Cyril (« comment veux-tu que je vérifie l'affichage ? »), qui
+a choisi d'utiliser ses vraies données plutôt qu'un jeu de démo fictif.
+Ce choix lui appartenait ; il n'a pas été présumé.
+
+### Restitution Workspace — 6e carte, même style, aucune régression
+
+`modules/workspace_manager.py` : `CARD_IDS` passe à 6 (`+ "savings"`),
+`get_savings_analysis()` importe `load_directory` paresseusement (même
+motif qu'`api/server.py::finance_summary()` — permet aux tests de
+monkeypatcher `modules.finance_manager.load_directory` sans dépendre
+d'un défaut de paramètre déjà figé à l'import, piège documenté
+plusieurs fois dans ce projet). `summary()` expose `savings` — pas de
+nouvelle route API, le Workspace agrège tout via `/workspace/summary`
+comme pour la sandbox (§5.78).
+
+`static/workspace.html`/`.js`/`.css` : trois sous-listes dans une seule
+carte (Charges récurrentes / Hausses de tarif / Doublons à vérifier),
+badge ambre "À vérifier" (jamais `--error`, une ressemblance n'est pas un
+refus) sur les doublons uniquement. `createElement`/`textContent`
+partout. Hors de `SHELL_FILES` (`static/sw.js`) — aucun bump de
+`CACHE_NAME` nécessaire, même constat que §5.76/§5.78.
+
+### Vérifié réellement
+
+- **18 nouveaux tests** (`test_savings_detector.py`, données 100 %
+  fictives, y compris la régression retraits DAB) + adaptations de
+  `test_workspace_manager.py` (6e carte, `load_directory` monkeypatché
+  dans chaque test qui touche `summary()`, pour ne jamais lire le vrai
+  `data/finance/` pendant la suite) — suite complète 1592 passed, `ruff`
+  + `mypy` propres (132 fichiers).
+- **Serveur live redémarré** deux fois (une fois par version du code,
+  arbre `venv\Scripts\python.exe` → interpréteur réel retracé et tué,
+  relancé via `LucasAPIServer`) ; `/workspace/summary` vérifié par `curl`
+  avec `savings` dans les clés, comptages seulement.
+- **Navigateur réel**, PC et mobile (412px via `<iframe>`, même méthode
+  que §5.77/§5.78) : carte affichée, 6 cartes cohérentes visuellement,
+  glisser/redimensionner hérité sans régression, charges récurrentes
+  reconnaissables (Free Mobile, Amazon Music, assurance auto, crédit
+  auto — correspond au critère de validation du brief : "au moins les
+  charges récurrentes évidentes").
+
+Détail complet de la session : `cowork_workspace/SESSION_LOG_DETECTEUR_ECONOMIES_B2_2026-08-09.md`.
+
+### 🔴 Suite — revue par Cyril lui-même des 17 doublons, second bug réel trouvé et corrigé
+
+Cyril a demandé de regarder les 17 doublons directement dans le
+Workspace (pas seulement les comptages agrégés). Tentative par `curl` +
+impression du contenu dans ce terminal : **bloquée par le classifieur de
+sécurité de l'auto-mode** (affichage de données personnelles réelles en
+sortie de commande) — exactement la protection que la règle CLAUDE.md
+vise, elle a joué son rôle même face à une demande explicite. Revu à la
+place dans le navigateur (déjà autorisé pour la capture précédente).
+
+Deux paires "PRLV EUROPEEN ACC `<référence>` DE: SOGECAP" à -5,00 €,
+même jour chaque mois, mais avec un numéro de référence **différent** à
+chaque fois (ex. `4208756534` vs `4208756525`) — deux contrats distincts
+chez le même assureur, pas un doublon. `_core_label()` (chiffres
+retirés) les confondait en un seul groupe puisqu'il retire justement ce
+qui les distingue.
+
+**Corrigé, à la lettre de la demande de Cyril** — uniquement
+`detect_duplicate_charges()`, aucun changement sur `_group_by_core_label()`/
+`_find_recurring_groups()` (récurrence + hausses, qui ONT besoin du
+retrait des chiffres, cf. le fix DAB de §5.79) :
+
+- `_duplicate_key()` (nouveau) : libellé **complet** normalisé (minuscules/
+  accents seulement, `core/text_utils.normalize()`), chiffres/référence
+  conservés. Deux transactions ne matchent que si leur libellé est
+  identique à la casse/aux accents près.
+- `detect_duplicate_charges()` regroupe désormais sur cette clé, plus
+  `_group_by_core_label()`.
+
+**Revalidé sur les 427 vraies transactions, même méthode qu'avant**
+(comptages agrégés uniquement, jamais le contenu affiché dans ce
+terminal) : récurrentes 13 et hausses 8 **inchangées** (logique non
+touchée, confirmé) ; doublons **17 → 7** — les 10 faux positifs à
+référence différente (dont les deux paires SOGECAP) ont disparu, les 7
+restants partagent un libellé strictement identique entre les deux
+transactions.
+
+2 tests de régression ajoutés (`test_savings_detector.py`) : le motif
+SOGECAP exact (référence différente → jamais un doublon) et sa
+contrepartie (référence identique, même montant, même jour → reste
+détecté). Suite complète 1594 passed, `ruff`/`mypy` propres. Serveur
+live redémarré une 3e fois, `/workspace/summary` reconfirmé par `curl`
+(comptages : 13/8/7).
+
+## 5.80 Écran d'accueil mobile (F-1) — nouvelle vue, nav basse, un bug de Service Worker qui a mordu son propre auteur, 09/08/2026
+
+Brief : `cowork_workspace/BRIEF_ACCUEIL_MOBILE_F1.md`. Objectif : donner à
+l'écran d'accueil de la PWA mobile (jusque-là : orbe + saisie seuls, en
+réalité déjà enrichi de 5 boutons d'icônes top — activité/sécurité/
+documents/finances/Workspace, non mentionnés par le brief mais vérifiés
+avant de coder) le même niveau de richesse que le Workspace PC, sans
+nouveau backend.
+
+### Étape préalable — rien à construire côté serveur
+
+`/workspace/summary` (déjà utilisé par le Workspace PC) expose déjà
+`reports`/`pending_requests` — exactement ce que le brief demande pour la
+liste compacte. Zéro nouvelle route, zéro modification Python cette
+session (confirmé par `git diff` avant de committer : seuls des fichiers
+`static/*` ont changé).
+
+### Architecture retenue — l'accueil devient une vue à part entière
+
+Le Chat existant ("écran actuel", brief §3.3) reste construit à
+l'identique (`#chat-log`/`#input-bar`, désormais dans un wrapper
+`#chat-view` — aucun changement pour `chat.js`, qui ne référence ces
+éléments que par id). Nouveau `#home-view` (orbe partagé + liste), affiché
+par défaut ; bascule via `home.js` (`showHome()`/`showChat()`,
+`display:none`/`flex`). Le brief liste exactement 4 entrées de nav (Chat/
+Vision/Workspace/Réglages) — "Accueil" n'en fait volontairement pas
+partie : l'orbe (`#avatar-panel`, transformé en `<button>`, seul
+changement de balise, aucun changement visuel) devient le chemin de
+retour, puisqu'il reste visible dans les deux vues.
+
+Aucune nouvelle logique métier pour Vision/Réglages (brief §2) :
+- **Vision** : "Regarde mon écran" — formulation reprise telle quelle du
+  cas nominal de `test_intent.py` ("témoin — cas nominal") — pré-remplit
+  `#text-input` et appelle `inputForm.requestSubmit()`, réutilisant TOUT
+  le pipeline existant (chat.js → websocket → `core/intent.py` →
+  `core/router.py` → `vision_manager`). "Photo caméra" simule un clic sur
+  `#camera-btn` (déjà câblé, `camera.js`).
+- **Réglages** : 5 actions, chacune un clic simulé sur le bouton déjà
+  câblé ailleurs (`speak-toggle`, `security-badge`, `documents-toggle`,
+  `finance-toggle`, `activity-toggle`) — consolide des panneaux déjà
+  réels plutôt que d'inventer un écran de réglages qui n'existerait nulle
+  part ailleurs.
+
+Palette : ambre pour `#home-view`/`#mobile-nav` (cohérence Workspace,
+brief §3.4, tokens dupliqués depuis `workspace.css` — pages séparées,
+aucun mécanisme de CSS partagé entre elles). Cyan conservé pour les
+tiroirs Vision/Réglages : ils vivent à côté des tiroirs activité/
+documents/finances déjà cyan sur la MÊME page, les distinguer par couleur
+aurait cassé la cohérence des 5 tiroirs entre eux plutôt que de la
+renforcer — décision documentée en commentaire CSS, pas une improvisation
+esthétique.
+
+### 🔴 Bug réel trouvé en testant — clic transmis puis refermé aussitôt
+
+"Réglages → État de sécurité" : le popover s'ouvrait puis se refermait
+dans le même instant. Diagnostiqué, pas supposé : `security.js` ferme le
+popover sur tout clic hors de son bouton/popover, écouté sur `document`.
+Un `forwardClick()` synchrone déclenche `security-badge.click()` PENDANT
+la remontée (bubbling) du clic d'origine sur `#settings-security` — le
+popover s'ouvre, puis le clic d'origine continue sa remontée jusqu'à
+`document`, dont la cible (`#settings-security`) est bien hors du badge/
+popover : le gestionnaire "clic extérieur" le referme aussitôt, dans le
+MÊME tour d'événement.
+
+**Corrigé** : `forwardClick()` diffère le clic simulé via `setTimeout(fn, 0)`
+— laisse le clic d'origine terminer sa remontée avant que le clic simulé
+n'existe. Revérifié après correctif : popover ouvert et RESTE ouvert
+(`popoverOpen: true` confirmé par script). Les 4 autres renvois
+(documents, finances, activité, voix) fonctionnaient déjà sans ce
+problème par coïncidence de timing, mais `forwardClick()` corrige tous
+les appels d'un coup — un seul point, pas un correctif au cas par cas.
+
+### 🔴 Second bug réel, trouvé en corrigeant le premier — un Service Worker qui a mordu son propre auteur
+
+Après avoir corrigé `home.js` (ajout du `setTimeout`), le retest dans
+l'onglet de test échouait à nouveau, à l'identique. Diagnostiqué avant de
+douter du correctif : `fetch('/app/js/home.js', {cache:'no-store'})`
+renvoyait encore l'ANCIENNE version, alors que `curl` direct contre le
+serveur (sans navigateur) renvoyait bien la nouvelle — la différence ne
+pouvait venir que du navigateur. Cause réelle : un Service Worker (`sw.js`)
+était actif dans cet onglet, avec un cache `lucas-shell-v14` déjà
+peuplé — peuplé AVANT le correctif, puisque le bump `v14` avait eu lieu
+avant l'édition de `home.js` qui a suivi dans la même session. `sw.js`
+intercepte toute requête `/app/*` et sert le cache EN PRIORITÉ
+(`caches.match(event.request).then((cached) => cached || fetch(...))`) —
+une option `cache:"no-store"` posée côté page n'a aucun effet sur ce
+qui se passe DANS le Service Worker, qui reçoit la requête avant que
+cette option ne puisse jouer un rôle.
+
+**Corrigé** : re-bump `v14` → `v15`. **Leçon générale, pas limitée à cet
+incident** : toute édition d'un fichier déjà listé dans `SHELL_FILES`
+exige un nouveau bump, MÊME si un bump a déjà eu lieu plus tôt dans la
+même session pour une raison différente — le bump protège contre l'état
+du cache au moment de l'`install()`, pas contre les éditions qui
+suivraient. Onglet de test purgé manuellement
+(`serviceWorker.getRegistrations()` + `unregister()`, `caches.delete()`)
+pour continuer à tester sans attendre un cycle d'activation naturel.
+
+### Vérifié réellement
+
+- Aucun test Python nécessaire (zéro fichier `.py` modifié) — suite
+  complète revérifiée par prudence : 1594 passed, inchangé.
+- **Navigateur réel** (Claude in Chrome) : séquence complète testée via
+  scripts (clics réels + assertions sur l'état DOM, pas seulement visuel)
+  — bascule accueil ↔ chat, orbe cliquable, tiroir Vision (2 raccourcis),
+  tiroir Réglages (5 renvois, dont le popover sécurité après correctif),
+  "Capture d'écran" vérifié BOUT EN BOUT sur le vrai serveur : bascule
+  chat, message "Regarde mon écran" réellement envoyé, avatar passé à
+  "RÉFLÉCHIT" (le pipeline vision réel a été sollicité — réponse jamais
+  affichée ici, elle aurait décrit l'écran réel de Cyril à cet instant).
+- Captures à l'appui, largeur mobile réelle (412px via `<iframe>`, même
+  méthode que §5.77-79) : accueil (orbe + liste + nav), chat actif (aucune
+  régression visuelle), tiroir Réglages.
+- Aucune régression : `git diff --stat` confirme zéro fichier Workspace/
+  Sandbox touché ; Workspace PC et carte Sandbox rechargés et vérifiés à
+  l'écran sans changement.
+- Oubli préexistant corrigé au passage (pas dans le périmètre du brief,
+  trouvé en vérifiant `SHELL_FILES` avant d'y ajouter `home.js`, même
+  discipline que §5.76/§5.78) : `documents.js`/`finance.js` chargés par
+  `index.html` depuis leur introduction mais jamais précachés.
+
+### Pas encore fait
+
+- Le libellé "Réponses vocales" dans Réglages ne reflète pas l'état
+  actuel (activé/désactivé) — `voice_output.js` gère déjà cet état sur
+  `#speak-toggle` lui-même, pas encore répercuté sur la ligne Réglages.
+  Cosmétique, pas fonctionnel (le clic fait bien ce qu'il doit).
+- Pas de purge automatique de l'historique du navigateur pour le lien
+  d'appairage (`?token=...`) — limite déjà connue et documentée
+  (`app.js`, ROADMAP.md §5.33), sans rapport avec cette session.
+
+## 5.81 Compaction du Workspace PC — tenir sur un écran sans défiler, compromis mobile documenté, 09/08/2026
+
+Demande de Cyril : les 6 cartes doivent tenir dans la fenêtre visible sans
+défilement de PAGE (seul le défilement interne à chaque `.workspace-list`
+reste), en gardant la possibilité d'agrandir une carte précise.
+
+### Défaut S partout — Python, JS, HTML, et l'état réel de Cyril
+
+`modules/workspace_manager.py::_default_layout()` et le fallback JS
+(`static/js/workspace.js`, deux occurrences) passent de `"M"` à `"S"` ;
+`static/workspace.html` : les 6 `class="card-size-M"` → `card-size-S`.
+Une disposition réelle DÉJÀ enregistrée pour Cyril (Sandbox et Détecteur
+d'économies laissés en XL après des sessions de test précédentes)
+n'aurait pas reflété ce nouveau défaut — remise à plat explicitement
+(`workspace_manager.save_layout(CARD_IDS, {c: "S" for c in CARD_IDS})`),
+pas seulement le code changé sans effet visible pour lui.
+
+### Mesuré, pas deviné — l'écran cible réel est 1280×720, pas 1568×900
+
+Les sessions de test précédentes (§5.78-79) utilisaient une fenêtre de
+navigateur d'environ 1568 px de large, jamais remise en question. L'écran
+RÉEL de Cyril, déjà mesuré ailleurs (OLED 4K, Windows à 300 %), ne laisse
+que **1280×720 points logiques** — testé cette fois à cette résolution
+exacte via un `<iframe>` de taille fixée (même méthode que §5.77-80),
+plutôt que la fenêtre de navigateur de l'environnement de test, dont le
+dimensionnement s'est révélé peu fiable sur cet écran à plusieurs
+reprises (§5.78, §5.79, §5.80).
+
+Premier passage (S à 220px de liste, hérité de la valeur d'avant cette
+session) : **537px de débordement mesurés** (`grid.scrollHeight -
+grid.clientHeight`, pas une impression visuelle). Cause isolée par
+mesure des hauteurs de chaque carte, pas supposée : 4 cartes à liste
+unique tiennent sur une ligne (~169px chacune), mais la carte Détecteur
+d'économies (3 listes empilées — récurrentes/hausses/doublons, contre 1
+seule pour les autres cartes) atteignait 857px, étirant par
+`align-items: stretch` (flex par défaut) la carte Sandbox voisine à la
+même hauteur sur cette ligne.
+
+### Corrigé — deux réductions ciblées, mesurées jusqu'à zéro débordement
+
+- `.card-size-S .workspace-list` : 220px → 100px (règle générique,
+  s'applique à toutes les cartes à liste unique).
+- Nouvelle règle plus spécifique (3 classes, l'emporte sur la précédente
+  quel que soit l'ordre dans le fichier) :
+  `.card-size-S .workspace-savings-section .workspace-list { max-height: 64px }`
+  — sans elle, la carte à 3 listes aurait hérité de la même limite que
+  les cartes à liste unique et resterait 3× trop haute.
+- `#workspace-grid` : `overflow-y: auto` → `overflow: hidden` +
+  `min-height: 0` ajouté (indispensable : un flex-item ne se laisse pas
+  contraindre sous la hauteur naturelle de son contenu sans lui, rendant
+  `overflow: hidden` sans effet).
+
+**Revérifié après correctif, mêmes mesures** : `overflowPx: 0` exactement
+— 4 cartes simples à 169px (ligne 1), Sandbox et Détecteur d'économies à
+405px chacune, étirées à la même hauteur (ligne 2), total 588px dans
+659px disponibles (marge de 71px). M/L/XL (agrandissement volontaire,
+brief non touché ici) restent à leurs valeurs existantes.
+
+### Compromis mobile — documenté, pas un oubli
+
+À 412×915 (viewport S25 Ultra réel), les 6 cartes empilées en une seule
+colonne (règle déjà existante, `@media (max-width: 480px)`) demandent
+1345px de hauteur cumulée contre 854px disponibles — **491px de
+débordement**, mesuré. Contrairement au PC, aucune réduction
+supplémentaire de taille S n'aurait suffi sans rendre le contenu
+illisible (une carte à liste unique tient déjà à 64-100px, en-dessous il
+n'y a plus la place d'afficher un item complet).
+
+**Décision, à la lettre de la demande** : le défilement de page reste
+actif sur mobile, réactivé explicitement dans le bloc
+`@media (max-width: 480px)` déjà existant (`#workspace-grid { overflow-y:
+auto }`, qui écrase le `overflow: hidden` du PC à cette largeur). Rien
+n'est tronqué : toutes les cartes restent visibles et lisibles, au prix
+d'un défilement que le PC n'a plus.
+
+### Vérifié réellement
+
+- `test_workspace_manager.py` : 2 tests mis à jour (défaut attendu passe
+  de "M" à "S" partout) — suite complète 1594 passed, `ruff`/`mypy`
+  propres (aucun fichier `.py` supplémentaire touché au-delà du défaut).
+- **Mesures DOM réelles**, PC (1280×720, iframe) : `overflowPx: 0`, avant/
+  après comparé chiffre à chiffre, pas une impression visuelle seule.
+- **Mesures DOM réelles**, mobile (412×915, iframe) : `overflowPx: 491`,
+  confirmé attendu et accepté (compromis), `overflowYComputed: "auto"`
+  confirme que le défilement de secours est bien actif à cette largeur.
+- Captures à l'appui aux deux largeurs : PC (les 6 cartes visibles sans
+  défiler, chaque liste avec son propre ascenseur interne), mobile (page
+  défile, cartes lisibles, aucun chevauchement).
+- Disposition réelle de Cyril remise à "S" partout, confirmée par lecture
+  directe (`workspace_manager.get_layout()`) après écriture.
+
+## 5.82 Poste de Commandement IA (E-5) — registre réel, deux capacités qui ne sont PAS ce qu'on croyait, 09/08/2026
+
+Brief : `cowork_workspace/BRIEF_POSTE_COMMANDEMENT_IA_E5.md`. Objectif :
+un espace listant les capacités réellement actives de Luca's, avec leur
+statut — V1 réaliste explicitement cadrée par le brief lui-même : pas de
+téléchargement de plugin/connecteur, aucun mécanisme de ce genre
+n'existe. Lecture seule stricte.
+
+### Ambiguïté réelle tranchée avant de construire — page séparée, pas une 7e carte
+
+Le brief laissait le choix, à clarifier si ambigu (§4). Or la session
+précédente (§5.81) venait de compacter les 6 cartes du Workspace pour
+tenir exactement dans 1280×720 avec seulement 71px de marge — une 7e
+carte aurait rouvert cette compaction immédiatement (nouvelle ligne
+entière). Question posée explicitement à Cyril plutôt que supposée :
+**page séparée confirmée**, cohérente avec la façon dont `workspace.html`
+lui-même est déjà séparé du chat.
+
+### Étape préalable — exploration réelle, pas une liste supposée
+
+Croisé `core/lucas_core.py` (imports + appels `should_use_*`),
+`lucas_daemon.py`, `api/server.py`, avec l'audit de nettoyage du
+09/08/2026
+(`cowork_workspace/reports/Audit_Nettoyage_LucasAI_2026-08-09.md`) pour
+exclure ce qui y est identifié comme orphelin. **26 capacités
+confirmées**, réparties selon les 5 couches déjà documentées dans
+`CLAUDE.md` (+ Cœur, + Sécurité, absentes de la numérotation à 5 mais
+distinctes) — pas une catégorisation inventée pour ce module.
+
+### 🔴 Deux capacités listées dans le brief lui-même ne sont pas ce que le brief supposait
+
+Le brief citait "OS Controller" comme exemple de capacité à recenser,
+sans préjuger de son statut. L'exploration a trouvé mieux que "actif" ou
+"inactif" — un TROISIÈME statut, nécessaire pour rester honnête :
+
+- **`core/os_controller.py`** — recherché dans TOUT le dépôt (`grep` sur
+  l'import, pas une supposition) : aucune référence hors de son propre
+  test. Construit et testé (Brique 2, 08/08/2026), mais jamais appelé
+  par une route API ni un déclenchement chat — Cyril ne peut pas
+  l'utiliser aujourd'hui, quoi qu'en dise son statut de "module
+  existant". Nouveau statut `"construit, non branché"`, distinct
+  d'"actif" ET d'"inactif" (qui suppose un drapeau qu'on pourrait
+  rallumer — ici il n'y a rien à rallumer, il n'y a rien de branché).
+- **`modules/vram_watchdog.py`** — même trouvaille que l'audit de
+  nettoyage cité par le brief lui-même : code réel, testé, mais aucune
+  tâche planifiée ne le démarre. Statut `"manuel"`.
+
+Présenter ces deux comme "actif" aurait été une fausse promesse (RT-2) ;
+les cacher aurait contredit l'étape préalable du brief ("établir la
+liste réelle"). Un troisième et quatrième statut réglent les deux à la
+fois, honnêtement.
+
+### `modules/capability_registry.py` — deux natures de statut, jamais mélangées
+
+Pour les capacités portant un VRAI drapeau dans `config.py`
+(`VLM_ENABLED`, `REASONING_ENGINE_ENABLED`, `OCR_ENABLED`,
+`INTENT_CLASSIFIER_ENABLED`) : le statut est **calculé à l'appel**,
+jamais figé en texte — si Cyril change le drapeau, ce registre le
+reflète sans toucher à ce fichier. Pour le reste (câblé ou non de façon
+structurelle, pas un booléen) : statut figé à `VERIFIED_AT`
+("2026-08-09"), avec la même honnêteté que le tableau de modèles de
+`CLAUDE.md` sur ce que "figé" veut dire — un instantané vérifié, pas une
+garantie perpétuelle.
+
+### Frontend — page séparée, même palette, aucune nouvelle identité visuelle
+
+`static/command-center.html` + `static/js/command-center.js` — recharge
+`workspace.css` directement (tokens ambre déjà là, pas dupliqués une
+troisième fois) et réutilise `.workspace-item`/`.workspace-item-title`/
+`.workspace-item-meta` tels quels. Nouveau : regroupement par catégorie
+(`.command-center-category`) et badge de statut à 4 couleurs (vert=actif,
+gris=inactif, ambre=manuel/construit-non-branché — même ambre pour les
+deux, aucun des deux n'est un refus ni une certitude d'activité).
+`createElement`/`textContent` partout. Page qui défile normalement — pas
+de contrainte de hauteur façon §5.81, cette page n'a jamais eu l'exigence
+"tout sur un écran" du Workspace.
+
+Icône `🧭` ajoutée à `#workspace-controls` (`static/workspace.html`),
+même position que les contrôles existants — pas de nouveau mécanisme de
+navigation.
+
+### Vérifié réellement
+
+- **11 nouveaux tests** (`test_capability_registry.py`, 9 — dont la
+  garde contre `stt_manager` et la vérification que OS Controller/VRAM
+  Watchdog ne sortent jamais "actif" ; `test_server.py`, 2 sur la route)
+  — suite complète 1605 passed, `ruff`/`mypy` propres (134 fichiers).
+- Serveur live redémarré, `/capabilities` vérifié par `curl` : 26
+  entrées, 7 catégories, 4 statuts distincts vus en réel.
+- **Navigateur réel**, PC (1280×720) et mobile (412px), même méthode
+  qu'aux sessions précédentes : page lisible aux deux largeurs, badges
+  de statut vérifiés par requête DOM directe (les 4 statuts non-actifs
+  portent la bonne classe CSS). Icône Workspace → Poste de Commandement
+  confirmée par lecture directe du DOM (`href`, `title`).
+- Aucune régression : Workspace PC rechargé après l'ajout de l'icône,
+  toujours 6 cartes compactes (§5.81) sans changement.
+
+Détail complet de la session :
+`cowork_workspace/SESSION_LOG_POSTE_COMMANDEMENT_E5_2026-08-09.md`.
+
+### Suite — renommé "Bureau de l'IA", et un vrai défaut de lisibilité corrigé
+
+Cyril a renommé "Poste de Commandement IA" en **"Bureau de l'IA"** (nom
+affiché uniquement — fichiers, routes, identifiants de code inchangés ;
+même logique que le renommage Orion→Luca's : le nom visible change, pas
+la structure technique). Mis à jour : `<title>`/`<h1>` de
+`command-center.html`, l'attribut `title` de l'icône dans
+`workspace.html`, et les commentaires d'en-tête des fichiers concernés.
+
+**Corrigé au même moment** — remarque explicite de Cyril, reçue avant
+que le contenu de la page ne soit terminé mais traitée à son arrivée :
+"manuel" (VRAM Watchdog) et "construit, non branché" (OS Controller)
+portaient le **même badge ambre**, alors que ce sont deux réalités
+différentes — "manuel" est une vraie mécanique qui marche, "construit,
+non branché" n'a AUCUN chemin de déclenchement aujourd'hui. Nouveau
+token `--status-unwired` (violet doux, `#a78bfa`) — seule teinte encore
+libre dans `workspace.css` (vert/ambre/gris/rouge déjà pris,
+cyan réservé au chat) — réservé à ce seul badge. Revérifié en navigateur
+réel : les 3 statuts non-actifs (inactif/manuel/construit-non-branché)
+sont désormais visuellement distincts au premier coup d'œil, pas
+seulement dans le texte de description.
+
+## 5.83 Mode conversation mains libres (mobile) — VAD réel, un vrai bug de course avatar trouvé, 09/08/2026
+
+Brief : `cowork_workspace/BRIEF_MODE_VOCAL_CONTINU_MOBILE.md`. Objectif :
+une conversation vocale sans reclic à chaque tour de parole sur mobile —
+écoute → détection automatique de fin de phrase → transcription → envoi
+→ réponse vocale → retour à l'écoute, activable/désactivable
+explicitement par Cyril, jamais un état par défaut.
+
+### Distinction posée par le brief, vérifiée à chaque étape
+
+"Ce n'est PAS de la perception continue" (`VISION_LONG_TERME.md` §4.2) :
+le micro n'est ouvert qu'entre un clic d'activation et un clic (ou une
+inactivité, ou un passage en arrière-plan) de désactivation — jamais
+avant, jamais après. `conversation_mode.js` coupe le flux dans les TROIS
+cas (arrêt manuel, inactivité, `visibilitychange` si l'onglet est masqué
+— même garde-fou que `audio.js`).
+
+### Étape préalable obligatoire (brief §3) — aucun VAD trouvé, un candidat écarté à raison
+
+Recherche `grep` sur "VAD" dans tout le dépôt : aucune implémentation.
+Le seul mécanisme voisin est le barge-in de `voice_output.js`
+(`AnalyserNode`/RMS), **désactivé par défaut** et conçu pour un usage
+différent (détecter Cyril qui interrompt Luca's pendant qu'elle parle,
+pas détecter le début/la fin d'une phrase pendant l'écoute) — repris
+comme TECHNIQUE (même calcul RMS), pas comme code partagé, dans un
+nouveau fichier dédié : `static/js/vad.js`
+(`VoiceActivityDetector`).
+
+Pipeline STT existant confirmé inchangé : `audio.js` (push-to-talk,
+capture/encode/envoie), `websocket.js` (`sendAudio`, déjà avec un
+paramètre `speak`), `api/protocol.py`/`api/server.py` (le message
+`"audio"` transcrit, vérifie `transcript.is_confident` — rejette les
+hallucinations Whisper sur silence pur — puis appelle `LucasCore.ask()`
+comme n'importe quel message texte). **Aucun changement serveur
+nécessaire** : le mode conversation ne fait qu'appeler `sendAudio(...,
+speak=true)` automatiquement au lieu d'un clic, sur un pipeline qui
+existait déjà en entier.
+
+### Construit
+
+- **`static/js/vad.js`** (nouveau) — `VoiceActivityDetector` : un seul
+  `AudioContext`/`AnalyserNode` créé au `start()` et gardé vivant toute
+  la session (jamais recréé par tour, `pause()`/`resume()` suspendent
+  juste la boucle `requestAnimationFrame`). Seuil `SPEECH_RMS_THRESHOLD
+  = 0.02` (nettement plus bas que le barge-in, 0.09 — signal direct du
+  micro, pas une voix rejouée par un haut-parleur), 3 trames consécutives
+  pour démarrer un tour, 1,5 s de silence continu pour le clore, garde-fou
+  30 s max par tour.
+- **`static/js/conversation_mode.js`** (nouveau) — `ConversationMode` :
+  orchestrateur du cycle complet. Un seul bouton (`#conv-mode-toggle`,
+  🔁) sert à la fois d'activation ET d'arrêt immédiat (brief §4) — décision
+  documentée plutôt qu'un second bouton : il ne disparaît jamais tant que
+  la page est ouverte, un second clic en pleine activité arrête sur-le-champ.
+  Minuteur d'inactivité **60 s** (aucune parole détectée pendant l'écoute
+  → extinction automatique) et délai de grâce **6 s** après le texte de
+  réponse avant de reprendre l'écoute si aucun audio de synthèse n'arrive
+  (contenu sensible routé Piper indisponible → "rien n'est prononcé",
+  la réponse texte suffit alors à clore le tour). Ces deux durées sont
+  des points de départ raisonnés, non mesurés en conditions réelles
+  (cette machine n'a pas de micro, voir plus bas) — mêmes réserves que
+  `BARGE_IN_RMS_THRESHOLD` en son temps.
+- **Tour-à-tour strict, volontairement** : le VAD est mis en pause
+  pendant qu'un tour est traité/répondu, jamais de barge-in dans ce mode
+  — évite d'affronter le risque de rebouclage (micro qui recapte la
+  propre voix de Luca's) déjà documenté comme non résolu pour le
+  barge-in existant, plutôt que de le reproduire une deuxième fois.
+- **`voice_output.js`** — nouveau callback `onPlaybackEnded`, posé en
+  écouteur INCONDITIONNEL sur `this.player` (pas dans
+  `_startBargeInWatch()`, qui ne s'exécute jamais tant que le barge-in
+  reste désactivé) : seul signal fiable de "réponse vocale terminée"
+  pour reprendre l'écoute.
+- **`index.html`/`style.css`** — bouton `#conv-mode-toggle` dans la
+  rangée d'icônes existante (5e position, `left: 196px`, même gabarit
+  38×38 que ses voisins). Trois états visuels distincts : cyan par défaut,
+  **vert** (`--success-green`, dupliqué de `--sandbox-ok` de
+  `workspace.css`, même raison que `--amber-neon` — pas de mécanisme CSS
+  partagé entre les deux pages) quand le mode écoute, **rouge pulsant**
+  (réutilise `mic-pulse`, déjà existant pour `#mic-btn.recording`) pendant
+  la capture d'un tour. Le micro push-to-talk (`#mic-btn`) est désactivé
+  visuellement et fonctionnellement pendant que le mode est actif (évite
+  deux flux micro concurrents) — la caméra et le chat texte restent
+  intacts (brief §7, "aucune régression").
+- **`chat.js`** — nouvelle méthode `addSystemNotice()` (bulle neutre,
+  distincte de `.bubble.error`) pour annoncer l'activation/désactivation
+  du mode sans les faire passer pour un problème.
+
+### 🔴 Bug réel trouvé en testant le cycle complet — course entre "écoute" et "idle" serveur
+
+Après un tour raté (transcription peu fiable), le serveur envoie dans
+l'ordre : `activity`, `error`, puis `avatar_state(idle)`
+(`api/server.py`, ~l.765-779). `conversationMode.notifyError()` remet
+l'avatar en "écoute" DÈS l'arrivée du message `error` — mais le message
+`avatar_state(idle)` qui suit, quelques instants plus tard, écrasait
+cette reprise sans condition (`onAvatarState: (state) => avatar.setState(state)`,
+`app.js`, appliqué à CHAQUE message reçu). Résultat observé en test réel :
+l'avatar affichait "prête" alors que le micro écoutait réellement encore
+— pas un problème fonctionnel (le VAD tournait bel et bien), mais un
+affichage trompeur qui aurait fait croire à Cyril que le mode s'était
+arrêté tout seul.
+
+**Corrigé** : `app.js` filtre désormais un seul cas précis — `avatar_state("idle")`
+reçu du serveur **pendant que le mode conversation est actif** n'est
+jamais appliqué (le mode ne connaît pas d'état "idle" tant qu'il tourne :
+il redevient "écoute" lui-même via `notifyLucasReplied()`/
+`notifyPlaybackEnded()`/`notifyError()`). Aucun changement côté serveur —
+ce `avatar_state(idle)` reste le bon comportement pour le flux push-to-talk
+normal, seul le CLIENT en mode conversation avait besoin de l'ignorer.
+
+### Vérifié réellement — sans microphone sur cette machine (CLAUDE.md, Priorités S1)
+
+Aucun micro physique disponible ici pour tester avec une vraie voix — même
+contrainte, déjà documentée, qui a laissé le barge-in désactivé et non
+calibré. Méthode retenue pour ne pas se contenter d'une simulation JS pure :
+un flux audio **synthétique mais réel** (oscillateur Web Audio →
+`MediaStreamDestination`), injecté à la place de `getUserMedia()`, pour
+exercer le VRAI code de `vad.js` (`AnalyserNode`/RMS) et le VRAI
+`MediaRecorder` de bout en bout, pas une simulation d'événements.
+
+- **Détection réelle confirmée** : RMS mesuré à 0,42-0,43 avec le ton de
+  test (largement au-dessus du seuil 0,02), `.capturing` posé/retiré au
+  bon moment, `MediaRecorder` produit un blob réel (~530 Ko encodés en
+  base64) envoyé via `sendAudio(..., speak=true)`.
+- **Contrainte d'environnement découverte en testant** : l'onglet piloté
+  par l'automatisation navigateur est signalé `document.hidden = true`
+  par Chrome, qui gèle/throttle `requestAnimationFrame` pour les onglets
+  non visibles (comportement standard, pas un bug de `vad.js`) — un
+  correctif de `requestAnimationFrame`/`cancelAnimationFrame` a été posé
+  UNIQUEMENT dans l'onglet de test pour valider l'algorithme malgré cette
+  contrainte du harnais d'automatisation. Sur le vrai téléphone, l'app
+  est au premier plan pendant l'usage (le mode s'arrête de toute façon si
+  elle passe en arrière-plan) — cette contrainte ne s'applique pas à
+  l'usage réel.
+- **Chemin d'erreur** (transcription peu fiable) : `notifyError()` reprend
+  l'écoute, avatar reste "écoute" après le correctif ci-dessus, mode
+  toujours actif.
+- **Chemin de succès** (délai de grâce + fin de lecture) : testé
+  directement sur la vraie classe `ConversationMode` avec des objets de
+  test (avatar/socket/voiceOutput factices) plutôt qu'une transcription
+  chanceuse sur un ton pur — `notifyPlaybackEnded()` reprend
+  immédiatement sans attendre les 6 s ; sans lui, la reprise intervient
+  après exactement 6 000 ms (mesuré : ~6-7 s avec la marge du test).
+- **Minuteur d'inactivité** : capturé par espionnage de `setTimeout`,
+  confirmé à exactement 60 000 ms — et déclenché ORGANIQUEMENT une fois
+  en cours de session (le mode s'est éteint tout seul avec le bon message
+  "aucune parole détectée" après un long silence pendant le débogage),
+  preuve supplémentaire en conditions réelles.
+- **Régression** : chat texte envoyé avec succès pendant que le mode
+  était actif, bouton caméra jamais désactivé.
+- **Mobile 412px** (technique d'injection d'iframe déjà établie) : bouton
+  visible et correctement positionné dans la rangée d'icônes, sans
+  chevauchement ; capture d'écran zoomée confirmant l'anneau vert distinct
+  du cyan par défaut ; label d'avatar "ÉCOUTE" visible en conditions
+  réelles pendant l'activité du mode.
+
+**Non mesuré, honnêtement** : l'impact batterie réel (brief §6) — aucun
+moyen de le mesurer sans le vrai S25 Ultra ; le coût théorique (flux micro
+permanent + boucle `requestAnimationFrame` + encodages base64 périodiques
+par tour) est documenté ici, la mesure réelle reste à faire par Cyril en
+usage. Les seuils RMS/durées (0,02 / 1,5 s / 60 s / 6 s) sont des points
+de départ raisonnés, ajustables, non calibrés sur le vrai appareil — même
+statut que `BARGE_IN_RMS_THRESHOLD`.
+
+`static/sw.js` : `CACHE_NAME` v15→v16 (nouveaux fichiers +
+modifications), puis v16→v17 dans la même session après le correctif de
+la course avatar (même leçon que v14→v15 : re-bump à chaque édition).
+
+Détail complet de la session :
+`cowork_workspace/SESSION_LOG_MODE_VOCAL_CONTINU_2026-08-09.md`.
+
+## 5.84 Workspace mobile — clic fantôme qui avalait le tap suivant, bug réel confirmé et corrigé, 10/08/2026
+
+Cyril signale (S25 Ultra) : "dans la plupart des cas je ne peux pas
+cliquer ni ouvrir de fenêtre dans le Workspace". Diagnostic demandé
+explicitement AVANT tout correctif — pas de supposition.
+
+### Diagnostic — deux pistes vérifiées, une confirmée par reproduction
+
+Exploré en parallèle : le mode Daemon ("le Daemon ne fonctionne pas
+encore") — voir §5.85 pour ce volet, traité séparément.
+
+Pour le Workspace : `elementFromPoint` sur chaque contrôle interactif à
+412px (boutons de taille, poignées, sandbox, liens d'en-tête) ne montrait
+AUCUN chevauchement/overlay — chaque zone tactile atterrit bien sur le
+bon élément. Le scroll interne de `#workspace-grid` fonctionne
+mécaniquement (`overflow-y: auto` appliqué, `scrollTop` réagit). Donc pas
+un problème de superposition ni de CSS de défilement.
+
+**Cause réelle, reproduite avec de vrais `PointerEvent`/`MouseEvent`** :
+dans `static/js/workspace.js`, le garde-fou "clic fantôme après un
+glisser" (posé le 09/08/2026, §5.77) s'armait sur TOUT contact avec une
+poignée de glisser (`.workspace-drag-handle`), y compris un simple **tap
+immobile sans le moindre déplacement** — puis avalait le **tout prochain
+clic, n'importe où sur la page**, aussi tard qu'il survienne (jusqu'au
+clic suivant, sans lien avec la poignée). Reproduction : tap immobile sur
+la poignée de "Rapports produits", puis clic sur le bouton de taille "M"
+(élément totalement différent) → le second clic était silencieusement
+annulé, aucune erreur, aucun retour visuel.
+
+Sur un vrai écran tactile, les poignées (28×28px) sont collées aux 4
+boutons de taille dans un en-tête de carte compact à 412px de large — un
+effleurement accidentel de la poignée en visant un bouton voisin est
+plausible, et suffit à déclencher ce bug. Explique "dans la plupart des
+cas" : une fois la poignée effleurée par mégarde, le tap suivant, n'importe
+où, ne fait plus rien jusqu'au clic d'après.
+
+**"Ouvrir une fenêtre"** : aucun mécanisme de fenêtre/modale n'existe nulle
+part dans le frontend (`grep` sur `window.open`/`<dialog>`/équivalent,
+aucune occurrence) — les rapports/demandes affichés sont du texte simple,
+jamais cliquables. Le plus probable est que Cyril décrit le même symptôme
+autrement (un tap qui ne fait rien) — non confirmé séparément, à vérifier
+avec lui si le correctif ci-dessous ne suffit pas.
+
+### Corrigé
+
+`initDragAndDrop()` exige maintenant un déplacement réel (≥ 6px, seuil
+anti-tremblement) avant d'armer `justDragged` et de déclencher la
+sauvegarde de disposition. Un tap immobile ne modifie plus rien au-delà
+du clic lui-même — un vrai glisser continue d'avaler le clic fantôme
+suivant, comportement inchangé pour l'usage prévu.
+
+**Vérifié réellement** (mêmes `PointerEvent`/`MouseEvent` de
+reproduction) :
+- Tap immobile sur une poignée → clic suivant sur un bouton de taille
+  fonctionne (`cardSizeAfterTap` change bien).
+- Vrai glisser (déplacement > 6px) → le clic fantôme qui suit reste bien
+  avalé (protection préservée).
+- Aucune erreur console, `workspace.js` n'est pas dans `SHELL_FILES` du
+  Service Worker (jamais mis en cache) — pas de bump `CACHE_NAME`
+  nécessaire pour ce fichier.
+
+**Non vérifiable depuis cette machine** : le rendu sur un vrai doigt/écran
+tactile Android — la reproduction utilise de vrais événements DOM, pas un
+vrai geste physique.
+
+## 5.85 Mode conversation — trois ajustements sur retour d'usage réel (S25 Ultra), 10/08/2026
+
+Premier vrai usage du mode conversation (§5.83) par Cyril sur son
+téléphone — trois retours concrets, traités dans l'ordre demandé.
+
+### 1. Seuil de détection micro trop élevé
+
+`SPEECH_RMS_THRESHOLD` de `vad.js` : 0,02 → 0,008. Piste la plus probable
+(pas certaine, mais cohérente avec un précédent déjà documenté) : Chrome/
+Android désactive l'AGC (`autoGainControl`) quand `echoCancellation` est
+demandé — exactement le même symptôme déjà diagnostiqué pour le micro
+push-to-talk (`audio.js`, 05/08/2026). `conversation_mode.js` demande les
+deux réglages pour les mêmes raisons de qualité de dictée — le seuil
+s'adapte au signal plutôt que l'inverse, sur demande explicite de Cyril
+("abaisse le seuil", pas "change les contraintes micro").
+
+**Vérifié réellement** (flux audio synthétique, même méthode que §5.83) :
+un ton à amplitude 0,02 (RMS ≈ 0,0141 — sous l'ancien seuil, au-dessus du
+nouveau) ne déclenchait PAS `.capturing` avec l'ancien seuil ; déclenche
+correctement avec le nouveau. Simule "parler normalement" plutôt que
+"parler fort", exactement le symptôme rapporté.
+
+### 2. Volume de sortie TTS trop faible
+
+Nouveau contrôle de volume (`-`/`+`, pas de curseur — plus fiable au
+toucher) dans le tiroir Réglages, agissant sur `voiceOutput.player.volume`
+— indépendant du volume système du téléphone. Pas de slider : un tap
+imprécis sur un curseur est plus pénalisant sur mobile qu'un bouton
+discret, et les paliers de 10 % suffisent pour ce réglage.
+
+- `voice_output.js` : `setVolume()`/`getVolume()`, persisté
+  (`lucas_speak_volume`, localStorage), appliqué dès la construction
+  (défaut 100 %, comme aujourd'hui).
+- `index.html`/`app.js` : rangée "🔊 Volume voix" dans `#settings-list`.
+
+**Vérifié réellement** (navigateur, pas de synthèse audible possible sans
+micro/haut-parleur adapté sur cette machine — seule la mécanique est
+testée) : deux clics "-" → 80 %, un clic "+" → 90 %, plancher à 0 %,
+plafond à 100 %, persistance confirmée après un rechargement complet de
+page (70 % → reload → 70 % toujours affiché). Capture d'écran mobile
+(412px) : rangée lisible, cohérente avec le reste du tiroir.
+
+### 3. Minuteur de 60s remplacé par une commande vocale d'arrêt
+
+Le minuteur devient un **filet de sécurité** (5 min), plus le mécanisme
+principal — Cyril dit "stop"/"arrête-toi"/etc., le mode s'arrête
+immédiatement, sans attendre un silence.
+
+- **`core/voice_commands.py`** (nouveau) — `is_stop_command(text)` :
+  comparaison déterministe sur texte normalisé (`core/text_utils.normalize`,
+  même outil que `core/router.is_sensitive`), pas un appel LLM. Liste de
+  12 phrases (stop, arrête-toi, tu peux t'éteindre, coupe le micro,
+  termine la conversation...), retrait d'un préambule court en tête
+  ("Luca's, stop", "OK stop") avant comparaison EXACTE — jamais une
+  recherche de sous-chaîne, pour ne pas confondre "stop" en commande avec
+  le même mot dans une phrase ordinaire ("qu'est-ce qui a stoppé le
+  service ?"). 25 tests (`test_voice_commands.py`).
+- **`api/protocol.py`** — `voice_command(action)` (nouveau type de
+  message `{type: "voice_command", action}`) et
+  `read_conversation_mode_flag(data)`, même patron que `read_speak_flag`.
+- **`api/server.py`** — dans le handler `"audio"`, après la vérification
+  de confiance de la transcription : si `conversation_mode` est vrai ET
+  `is_stop_command(message)`, la commande est interceptée — `voice_command("stop")`
+  envoyé, **`LucasCore.ask()` jamais appelé**, le tour ne devient jamais
+  une question posée au modèle. Filtré explicitement par le drapeau
+  client : dire "stop" en push-to-talk classique reste un message normal,
+  aucune action cachée déclenchée par une phrase qu'on n'a pas demandé à
+  surveiller dans ce contexte.
+- **Côté client** — `websocket.js` : `sendAudio()` accepte un 3e
+  paramètre (`conversation_mode`), dispatch du nouveau type
+  `"voice_command"` vers `onVoiceCommand`. `conversation_mode.js` :
+  `notifyVoiceCommand("stop")` arrête le mode ; `SAFETY_TIMEOUT_MS = 300000`
+  (5 min) remplace `IDLE_TIMEOUT_MS` comme filet plutôt que mécanisme
+  principal — renommage complet (`_armSafetyTimer`/`_clearSafetyTimer`),
+  message de notice distinct selon la raison de l'arrêt (manuel / commande
+  vocale / inactivité prolongée).
+
+**Vérifié réellement** :
+- Serveur : 2 tests d'intégration WebSocket réels (`test_server.py`,
+  `TestClient` Starlette, pas un mock du transport — seul le moteur STT
+  est doublé) — la transcription "stop" avec `conversation_mode: true`
+  déclenche `voice_command("stop")` et **n'appelle jamais**
+  `LucasCore.ask()` ; le même mot SANS le drapeau reste un message normal
+  effectivement transmis à Luca's.
+- Client : `LucasSocket._dispatch()` route bien `"voice_command"` vers
+  `onVoiceCommand` (instance réelle, testée isolément) ;
+  `ConversationMode.notifyVoiceCommand("stop")` arrête réellement le mode
+  et ignore l'appel si le mode n'est pas actif ou si l'action n'est pas
+  "stop" (vocabulaire futur sans faux déclenchement) ; `sendAudio()`
+  confirmé taguer `conversation_mode: true` uniquement quand explicitement
+  demandé (3 scénarios réels : mode conversation, push-to-talk avec voix,
+  push-to-talk sans voix — un seul des trois porte le drapeau).
+- Suite complète : 1637 passed (+33 depuis §5.83), `ruff`/`mypy` propres.
+
+**Non vérifiable depuis cette machine, honnêtement** : la reconnaissance
+d'une VRAIE commande vocale prononcée par Cyril — `is_stop_command()` est
+testé à fond sur du texte, mais seul un vrai micro/vraie voix peut
+confirmer que Whisper transcrit "stop" fidèlement en conditions réelles
+(bruit ambiant, débit de parole, accent). Cette machine n'a pas de micro
+(CLAUDE.md, Priorités S1) — reste le seul test que Cyril doit faire
+lui-même, comme pour la calibration du seuil RMS.
+
+## 5.86 Style oral pour les réponses parlées (speak=true) — un vrai threading manquant, deux vraies leçons de méthode, 10/08/2026
+
+Cyril signale que la voix de Luca sonne trop littéraire — des phrases
+écrites pour être lues, pas pour être dites.
+
+### Étape préalable (demandée explicitement) — `speak` n'était threadé nulle part
+
+Recherche dans `core/lucas_core.py` : **aucune occurrence de `speak`**.
+`LucasCore.ask()` n'a jamais eu ce paramètre — `speak` n'existait que
+côté `api/server.py`, lu une seule fois (`protocol.read_speak_flag`)
+**APRÈS** que `lucas.ask()` ait déjà produit la réponse, uniquement pour
+décider de lancer la synthèse TTS sur le texte déjà généré. Aucune
+distinction "sera parlé / sera juste affiché" n'existait dans le prompt —
+l'hypothèse de départ du brief (peut-être déjà threadé) ne tenait pas.
+
+### Décision prise — une seule génération sert les deux usages
+
+Ambiguïté posée explicitement par la demande ("dis-moi ce qui te semble
+le plus cohérent si c'est ambigu"), tranchée sans plan complet (pas une
+des 4 conditions de CLAUDE.md — décision UX réversible, pas une
+architecture engageante) : **la même génération sert le texte affiché ET
+la voix**, pas un second appel séparé pour une version "orale". Générer
+deux réponses doublerait le coût/temps de chaque tour vocal pour un gain
+incertain. Conséquence acceptée et documentée (`config.py`) : en mode
+conversation, où `speak` est toujours vrai, la bulle de chat affichée
+suit donc, elle aussi, le style oral — cohérent avec l'esprit du mode
+(une conversation parlée, pas un chat qui accessoirement parle).
+
+### Construit
+
+- **`config.py`** — `ORAL_STYLE_INSTRUCTION` : phrases courtes, une idée
+  à la fois, contractions naturelles, éviter connecteurs formels
+  ("néanmoins", "par ailleurs"...), **pas de liste à puces ni de
+  markdown** ("une voix ne les lit pas").
+- **`core/lucas_core.py`** — `speak: bool = False` ajouté à `ask()` et
+  `_build_messages()`, threadé jusqu'au bout. Le bloc est ajouté juste
+  après `presence_context` (même priorité), et RÉPÉTÉ au point de
+  ré-ancrage (juste avant la question) quand un historique existe — même
+  raisonnement déjà validé pour le tutoiement (§5.29/5.32) : une règle de
+  style qui lutte contre le fil de la conversation a besoin d'être
+  répétée près de la question, pas seulement en tête de prompt.
+- **`api/server.py`** — `speak_wanted` lu UNE FOIS, avant l'appel à
+  `lucas.ask()` (pour adapter le prompt) ET réutilisé plus bas pour
+  déclencher la synthèse (au lieu de deux lectures séparées du même
+  drapeau).
+- **5 tests** (`test_oral_style_prompt.py`) + 2 tests serveur
+  (threading réel du drapeau jusqu'à `LucasCore.ask()`) + mise à jour de
+  3 doublures de `ask()` dans `test_server.py`/`test_server_intent_mutants.py`
+  qui ne connaissaient pas le nouveau paramètre (régression trouvée par
+  la suite complète, pas par un test isolé — 37 échecs `TypeError` avant
+  correctif, 1644 passed après).
+
+### Vérifié sur de VRAIES réponses générées, pas juste "le prompt contient l'instruction"
+
+Trois questions réelles, comparées `speak=False` vs `speak=True`, via un
+client WebSocket Python direct contre le serveur réel (le mode
+conversation seul n'aurait pas permis de comparer les deux côte à côte) :
+
+- **Résumé des capacités** — différence la plus nette : `speak=False`
+  produit une liste à puces (6 items) ; `speak=True` la même information
+  en phrases enchaînées, aucune puce, aucun markdown — l'instruction
+  explicite ("une voix ne lit pas les listes") suivie à la lettre.
+- **Explication de Whisper** — `speak=False` : un paragraphe dense,
+  plusieurs idées par phrase. `speak=True` : découpé en 4-5 phrases
+  courtes, une idée par ligne, structure "Chaque bout est... Le modèle
+  utilise... Un décodeur prédit..." — nettement plus séquentiel, plus
+  proche de comment on explique à voix haute.
+- **Avis sur un mot d'éveil** — `speak=True` utilise des connecteurs
+  oraux réels ("mais", "donc") et une contraction familière ("Faut
+  juste vérifier...") absents de la version écrite.
+
+**Verdict honnête** : amélioration réelle et mesurable sur la
+STRUCTURE (phrases courtes, zéro liste/markdown, connecteurs plus
+naturels) — le modèle local (gpt-oss:20b) suit ces consignes-là de façon
+fiable sur les 3 essais. Le vocabulaire reste par endroits technique/écrit
+quand le sujet l'est ("représentations numériques", "audio-texte
+multilingues") : la consigne de STRUCTURE est mieux respectée que la
+consigne de REGISTRE — cohérent avec ce que CLAUDE.md documente déjà
+ailleurs sur ce modèle (suit moins fidèlement une instruction de style
+fine qu'un modèle cloud). Pas présenté comme "réglé" : un ajustement du
+prompt pourrait affiner encore le registre, non tenté ici (hors périmètre
+de cette demande).
+
+### 🔴 Deux leçons de méthode trouvées en testant, pas supposées
+
+1. **Un modèle bombardé de questions sans rapport en quelques secondes se
+   confond.** Trois questions tirées à ~2-3 s d'intervalle ont produit une
+   réponse à la question B qui était en réalité un quasi-doublon de la
+   réponse à la question A (répété deux fois de suite) — trouvé en
+   relisant les réponses, pas supposé. Corrigé pour le test en espaçant
+   les questions de 5 s ; la question a alors reçu une vraie réponse
+   cohérente. Sans rapport avec le style oral — un symptôme du rythme de
+   test, pas du prompt — mais réel, donc documenté plutôt que caché.
+2. **Chaque message de test envoyé via le VRAI WebSocket est enregistré
+   dans la VRAIE mémoire de Cyril** (`LucasCore()` sauvegarde dans
+   `memory/lucas_memory.db`, sans distinction test/production — c'est le
+   comportement normal du serveur, aucun raccourci de test n'existe).
+   22 puis 4 lignes de test (questions Whisper/mot d'éveil/capacités) se
+   sont ainsi retrouvées dans son historique réel. **Nettoyées
+   immédiatement** après vérification précise des ID concernés (pas une
+   suppression à l'aveugle : chaque ligne supprimée a été confrontée au
+   texte exact envoyé, la conversation réelle de Cyril juste avant
+   — "salut" / "Comment ça se passe ?", 16h07 — n'a pas été touchée).
+   Leçon pour la suite : un test de génération réelle contre le serveur
+   de production laisse une trace dans la vraie base — à nettoyer
+   systématiquement après coup, pas seulement quand ça se remarque.
+
+**Signalé à Cyril, pas juste corrigé en silence** : son téléphone était
+connecté et actif pendant une partie de ce test (requêtes visibles dans
+`data/logs/server_startup.log`, IP du pont mobile). Aucun redémarrage
+serveur n'a eu lieu pendant cette fenêtre — seule sa mémoire de
+conversation a été temporairement partagée avec mes questions de test,
+le temps de les identifier et de les retirer.
+
+Serveur redémarré une fois avant de commencer les tests réels (pour
+charger `speak` dans `core/lucas_core.py`), aucun autre redémarrage
+ensuite.
+
+## 5.87 Veille modèles — Ministral 3 8B (`ministral-3:8b`) écarté, un vrai problème de fiabilité trouvé, 10/08/2026
+
+Demande ponctuelle de Cyril (pas le cycle complet LLM+VLM de la règle
+12 — celui-là reste dû séparément si les 30 jours depuis la 1re veille
+sont écoulés). Tag vérifié (pas deviné) : "Mistral 3 8B" n'existe pas
+sous ce nom sur Ollama — le vrai tag est **`ministral-3:8b`** (famille
+Mistral AI "Ministral", 8,9 B, Q4_K_M, 6,0 Go), déjà présent sur cette
+machine (pull antérieur, jamais mesuré).
+
+**Mesures réelles** : VRAM 5,25-5,38 Go, ~130-136 tok/s — nettement plus
+léger et rapide que `qwen3:14b` (remesuré au passage : 8,98 Go, ~86
+tok/s) et que `gpt-oss:20b` (12,5 Go, production).
+
+**🔴 Écarté, pas sur la qualité du français mais sur la fiabilité** :
+les deux modèles (`ministral-3:8b` ET `qwen3:14b`), soumis au VRAI
+prompt de `_build_messages()` (système + contexte + `ORAL_STYLE_INSTRUCTION`
+du jour, §5.86), ont **halluciné des scénarios sans rapport avec la
+question posée**, dans les 3 tests sur 3. Cause partiellement identifiée :
+la fenêtre active réelle de Cyril (une recherche Google) a été prise
+pour LE sujet de la question par les deux modèles. Mais retirer le titre
+de fenêtre (contexte "cloud") ne suffit pas : les deux modèles confondent
+alors la LISTE DE LEURS CAPACITÉS (bloc du prompt système) avec une
+tâche déjà en cours, et inventent des fichiers/dossiers qui n'existent
+pas. `gpt-oss:20b` ne présente pas ce problème sur ce même prompt (toutes
+les campagnes précédentes, ROADMAP entier). Étape d'écoute par Cyril
+(qualité orale) volontairement PAS préparée : juger le style de phrases
+hallucinées n'aurait aucun sens.
+
+**Aucun changement de production.** `config.py::MODEL_NAME` reste
+`gpt-oss:20b`. `gpt-oss:20b` a été temporairement évincé de la VRAM
+pendant les mesures (16 Go au total, pas de place pour deux modèles à la
+fois) puis rechargé et vérifié actif immédiatement après — signalé à
+Cyril, dont le téléphone était connecté à ce moment.
+
+Rapport complet, daté :
+`cowork_workspace/reports/Comparatif_LLM_Ministral3_LucasAI_2026-08-10.md`
+(pistes proposées pour une prochaine session : isoler quel bloc du
+prompt fait dérailler ces modèles, bloc par bloc — non commencé, hors
+périmètre de cette demande).
+
+## 5.88 Daemon sécurité — tâche planifiée réellement fonctionnelle, un vrai bug de répertoire de travail trouvé, 10/08/2026
+
+Suite de §5.85 (daemon jamais installé de façon persistante). Cyril a
+créé la tâche `LucasDaemon` lui-même (droits de création refusés depuis
+cet environnement — lecture seule sur le Planificateur de tâches) avec
+la commande fournie :
+
+```
+schtasks /create /tn "LucasDaemon" /tr "\"C:\OrionAI\venv\Scripts\pythonw.exe\" lucas_daemon.py" /sc onlogon /rl limited /f
+```
+
+### 🔴 Bug réel dans la commande fournie — trouvé en vérifiant, pas supposé
+
+Premier lancement (`Start-ScheduledTask`) : `LastTaskResult = 2`, et
+**aucune nouvelle ligne dans `data/logs/daemon.log`** — le process n'a
+même pas atteint sa première instruction de log. Cause confirmée via
+`schtasks /query /tn LucasDaemon /xml` : l'action ne porte **aucun
+`<WorkingDirectory>`**, contrairement à la tâche `LucasAPIServer`
+existante. `schtasks /create` n'a pas d'option native pour fixer le
+répertoire de travail d'une action — la commande fournie plus haut dans
+cette session n'en tenait pas compte. Sans lui, `pythonw.exe` cherche
+l'argument relatif `lucas_daemon.py` dans le répertoire de travail par
+défaut du Planificateur de tâches (pas `C:\OrionAI`), et échoue avant
+même d'écrire une ligne de log.
+
+### Corrigé — même mécanisme que les 4 autres services
+
+Nouveau `start_daemon_hidden.vbs` (mêmes principes que
+`start_server_hidden.vbs`) : `cmd.exe /c cd /d C:\OrionAI && venv\Scripts\pythonw.exe lucas_daemon.py`,
+lancé fenêtre cachée. Pas de redirection de sortie ajoutée :
+`lucas_daemon.py` écrit déjà ses propres logs dans `data/logs/daemon.log`.
+
+Tâche recréée par Cyril pour pointer vers `wscript.exe
+"C:\OrionAI\start_daemon_hidden.vbs"` :
+
+```
+schtasks /delete /tn "LucasDaemon" /f
+schtasks /create /tn "LucasDaemon" /tr "wscript.exe \"C:\OrionAI\start_daemon_hidden.vbs\"" /sc onlogon /rl limited /f
+```
+
+**Vérifié réellement** : `LastTaskResult = 0`, deux process `pythonw.exe`
+visibles (le stub venvlauncher et son enfant réel, même relation
+parent-enfant que documentée pour l'API — voir addendum du 30/07/2026),
+`data/logs/daemon.log` montre une session fraîche complète ("Lucas
+Daemon initialisé", planning des 8 tâches programmées, "démarré").
+
+Détail complet dans la conversation — pas de fichier de session séparé
+pour ce point ponctuel.
+
+## 5.89 Accueil mobile enrichi — 3 compteurs réels, aucune nouvelle route, 10/08/2026
+
+Brief : `cowork_workspace/BRIEF_ENRICHISSEMENT_ACCUEIL_MOBILE.md`.
+L'accueil mobile (F-1, §5.80) était figé sur son contenu d'origine
+(dernier rapport + dernière demande + raccourci vision) alors que le
+Workspace PC s'est enrichi depuis (6 cartes, Bureau de l'IA).
+
+### Étape préalable — exploration de `/workspace/summary`
+
+`modules/workspace_manager.py::summary()` expose déjà tout le
+nécessaire : `reports`, `pending_requests`, `recent_actions`,
+`objectives`, `sandbox_runs`, `savings` (recurring_charges/
+price_increases/duplicates) — même route que le Workspace PC, **aucune
+route nouvelle créée**.
+
+### Ambiguïté posée par le brief lui-même ("à confirmer en mode plan")
+
+Le brief nommait 3 candidats sans trancher leur forme exacte. Proposé et
+confirmé par Cyril avant d'écrire le code : 3 badges compteurs (pas le
+détail complet), masqués à zéro (RT-2 — même discipline que les
+éléments déjà en place), menant au Workspace au clic :
+
+- **📝 Compteur de demandes en attente** — remplace l'ancien affichage
+  qui ne montrait que le titre de la plus récente ; un total dit plus en
+  une ligne que le titre d'une seule demande parmi plusieurs.
+- **💰 Compteur du détecteur d'économies** — total des trois catégories
+  (récurrentes + hausses + doublons), pas un badge par catégorie : le
+  détail reste dans le Workspace complet.
+- **🧪 Compteur de propositions sandbox en attente** — uniquement
+  `status === "pending"` ; exécutées/rejetées n'attendent plus de
+  décision, pas la peine d'encombrer l'accueil.
+
+### Construit
+
+- **`static/js/home.js`** — `pluralize()` (accord singulier/pluriel
+  minimal), `_render()` étendu avec les 3 compteurs, `hasItem` mis à jour
+  pour que le message d'état vide ("Rien de nouveau...") reste honnête
+  sur ce qu'il couvre désormais.
+- **`static/sw.js`** — `CACHE_NAME` v19→v20 (`home.js` modifié).
+- Aucun changement CSS : réutilise `.home-item`/`appendHomeLink()`
+  existants, aucune nouvelle classe.
+
+### Vérifié réellement
+
+- **Données réelles, pas simulées** : `/workspace/summary` interrogé en
+  direct (jeton du navigateur) — `pending_requests: 0`,
+  `savings: 28` (13 récurrentes + 8 hausses + 7 doublons),
+  `sandbox_pending: 0`. Le badge économies apparaît avec "28 signaux du
+  détecteur d'économies" ; les deux autres restent absents (comptes à
+  zéro) — comportement RT-2 confirmé en conditions réelles, pas juste
+  en théorie.
+- **Les 3 formes de pluriel** vérifiées via une instance réelle de
+  `Home` avec un résumé simulé (isolée, pas une deuxième
+  implémentation) : "2 demandes en attente", "1 signal du détecteur
+  d'économies", "1 proposition sandbox en attente" — accord singulier/
+  pluriel correct dans les deux sens.
+- **Mobile 412px** (technique d'injection d'iframe établie) : capture
+  d'écran confirmant une mise en page lisible, aucun débordement, marge
+  verticale confortable même avec 3 cartes + le raccourci vision.
+- **Régression** : bascule accueil ↔ chat toujours fonctionnelle, aucune
+  erreur console.
+
+Aucun fichier `SESSION_LOG` séparé — chantier compact, entièrement
+documenté ici.
+
+## 5.90 Daemon — mécanisme de démarrage sans faux positif antivirus, hypothèse du brief infirmée par une plus simple, 10/08/2026
+
+Brief : `cowork_workspace/BRIEF_DAEMON_SANS_FAUX_POSITIF.md`. Suite de
+§5.88 : Bitdefender a flagué la tâche `LucasDaemon`
+(`wscript.exe`+`.vbs` caché) comme « ligne de commande malveillante » /
+« application potentiellement malveillante ». Les deux exceptions
+ajoutées ont été retirées par Cyril par prudence — objectif : un
+mécanisme qui ne ressemble pas à un motif de persistance malveillante,
+sans dépendre d'une exception antivirus permanente.
+
+### Étape préalable — l'hypothèse du brief ne tenait pas, la vraie raison était ailleurs
+
+Le brief supposait que le `.vbs` servait à masquer la fenêtre de
+console qu'ouvrirait `python.exe`, et proposait `pythonw.exe` comme
+remplacement direct. **Vérifié faux** : `start_daemon_hidden.vbs`
+appelle déjà `venv\Scripts\pythonw.exe` (sans fenêtre par nature) — son
+en-tête et §5.88 documentent la vraie raison : `schtasks /create` n'a
+pas d'option native pour fixer le répertoire de travail d'une action.
+La première tentative de tâche (§5.88) passait `lucas_daemon.py` en
+argument **relatif** à `pythonw.exe`, qui le cherchait dans le
+répertoire de travail par défaut du Planificateur (pas `C:\OrionAI`) et
+échouait (`LastTaskResult=2`). Le `.vbs` fait `cd /d C:\OrionAI &&` avant
+de lancer `pythonw.exe` pour contourner ça — pas pour masquer une
+fenêtre qui n'existe déjà pas.
+
+### Solution plus simple que celle envisagée par le brief lui-même
+
+Vérifié dans `lucas_daemon.py` : le script n'a **aucune dépendance au
+répertoire de travail du process**. `LUCAS_ROOT = Path("C:/OrionAI")`
+est une constante absolue en tête de fichier, et les trois
+`subprocess.run` qu'il lance (`train_lora.py`, `index_documents.py`,
+pytest) utilisent tous des chemins construits depuis `LUCAS_ROOT` (le
+premier avec un chemin absolu direct, celui de pytest avec
+`cwd=str(LUCAS_ROOT)` explicite). Le seul problème réel était l'argument
+**relatif** passé à `pythonw.exe`, pas le `cwd` du process lui-même.
+
+Conséquence : pas besoin de `cd /d`, donc pas besoin de `cmd.exe`, donc
+pas besoin de `wscript.exe`+`.vbs` du tout. Une tâche planifiée peut
+appeler `pythonw.exe` directement avec le **chemin absolu** du script en
+argument :
+
+```
+schtasks /delete /tn "LucasDaemon" /f
+schtasks /create /tn "LucasDaemon" /tr "\"C:\OrionAI\venv\Scripts\pythonw.exe\" \"C:\OrionAI\lucas_daemon.py\"" /sc onlogon /rl limited /f
+```
+
+Motif final : `pythonw.exe "chemin absolu"` — aucun interpréteur de
+commande imbriqué (`cmd.exe`), aucun script `wscript.exe`+`.vbs`. Plus
+simple que l'alternative "direct avec `cd /d`" envisagée en repli par le
+brief lui-même (§4), et strictement plus simple que ce que le brief
+anticipait comme scénario principal.
+
+### Bloqué côté modification, exécuté par Cyril — validé en conditions réelles le 10/08/2026
+
+`schtasks /delete /tn "LucasDaemon" /f` lancé depuis cet environnement
+avait échoué (`Erreur : Accès refusé.`) — même restriction que la nuit
+du 03-04/08/2026. Sauvegarde de la définition XML faite avant la
+tentative (scratchpad de session, hors dépôt). Cyril a lancé lui-même
+les deux commandes de la section précédente, puis **redémarré
+réellement le PC** :
+
+- Nouvelle entrée dans `data/logs/daemon.log` à 19:54:45, immédiatement
+  après le redémarrage — déclencheur "à la connexion" confirmé.
+- **Aucune alerte Bitdefender**, testé **sans exception active** — objectif
+  premier de la session atteint.
+- Tâches horaires du daemon ("Tests automatiques") observées à 20:54:45
+  et 21:54:46 — fonctionnement continu confirmé, pas juste un
+  démarrage isolé.
+
+⚠️ **Effet de bord découvert en vérifiant** : `schtasks /query /v`
+affiche désormais `Dernier résultat: 267009` en fonctionnement normal,
+plus `0`. Ce n'est **pas une erreur** — `267009` (`0x41301`,
+`SCHED_S_TASK_RUNNING`) signifie "la tâche est en cours d'exécution".
+Avec l'ancien mécanisme, l'action de la tâche était `wscript.exe`, qui
+rendait la main immédiatement après avoir détaché le vrai daemon
+(`Run(..., 0, False)`) — le Planificateur perdait alors toute visibilité
+sur le process réel et affichait `0` en continu, qu'il tourne encore ou
+non. Avec `pythonw.exe` lancé directement, c'est lui qui EST l'action de
+la tâche : le Planificateur sait donc correctement que le daemon tourne
+toujours, tant qu'il tourne — signal plus fidèle qu'avant, mais à ne pas
+confondre avec un code d'échec au prochain diagnostic.
+
+`start_daemon_hidden.vbs` **supprimé** (méthode confirmée stable en
+conditions réelles, plus de raison de le garder — §6 du brief).
+
+### 4 autres services — audité un par un, aucun n'est le même cas que le Daemon
+
+Cyril a demandé d'appliquer le même correctif aux 4 autres services
+utilisant `wscript.exe`+`.vbs`, sauf dépendance réelle différente — à
+vérifier au cas par cas plutôt qu'à supposer. Vérification faite en
+lisant chaque `.vbs` et le script qu'il lance : **aucun des 4 n'est en
+fait le même cas que `lucas_daemon.py`**, chacun pour une raison
+technique distincte, propre à ce qu'il fait :
+
+- **`LucasOllamaServer`, `LucasVeilleModeles`, `LucasCoworkRequests`**
+  (`start_ollama_hidden.vbs`, `start_veille_modeles_hidden.vbs`,
+  `start_cowork_requests_hidden.vbs`) — lancent tous les trois
+  `powershell.exe -File "<chemin absolu>.ps1"`, sans aucun chemin
+  relatif (`ollama_server_runner.ps1`, `veille_modeles_runner.ps1` et
+  `cowork_request_runner.ps1` utilisent déjà `$Projet = "C:\OrionAI"`
+  en dur). **"pythonw.exe direct" ne s'applique pas** : il n'y a pas de
+  Python dans la chaîne de lancement, le problème n'a jamais été un
+  répertoire de travail. Le `.vbs` sert ici uniquement à masquer la
+  fenêtre PowerShell, ce que `pythonw.exe` fait nativement mais dont
+  l'équivalent PowerShell (`-WindowStyle Hidden`) est documenté comme
+  pouvant encore laisser un flash bref selon la version — une garantie
+  moins sûre que celle du Daemon, jamais vérifiée sur cette machine.
+- **`LucasAPIServer`** (`start_server_hidden.vbs`) — lance
+  `venv\Scripts\python.exe -m uvicorn api.server:app ... --ssl-certfile
+  data/cert.pem --ssl-keyfile data/key.pem >> data\logs\server_startup.log
+  2>&1`. Trois dépendances réelles au `cd /d` que le Daemon n'avait
+  pas : (1) `-m uvicorn` résout `api.server:app` via `sys.path[0]`, qui
+  vaut le répertoire de travail du process — contrairement au Daemon,
+  ce n'est pas juste l'argument passé à l'interpréteur qui est relatif ;
+  (2) `--ssl-certfile`/`--ssl-keyfile` sont des chemins relatifs ; (3)
+  la redirection `>>` exige un interpréteur de commande — `pythonw.exe`
+  seul ne sait pas rediriger sa sortie vers un fichier.
+
+**Aucun correctif appliqué à ces 4 services dans cette session.** Le
+motif reste un risque partagé, mais seul le Daemon a été réellement
+flagué par Bitdefender à ce jour — pas d'urgence à toucher des
+mécanismes qui fonctionnent, pour un gain préventif, avec un risque de
+casser un service dont Cyril dépend au quotidien (`LucasAPIServer` porte
+le pont mobile). Piste pour une session dédiée, si Cyril la valide :
+écrire un petit lanceur Python (`pythonw.exe` + chemin absolu, sur le
+modèle de `lucas_daemon.py` lui-même) pour `LucasAPIServer`, qui fixe
+son propre `sys.path`/répertoire de travail et redirige sa sortie en
+Python plutôt que par le shell ; et pour les 3 scripts PowerShell,
+vérifier réellement (pas supposer) si `-WindowStyle Hidden` reste sans
+flash visible sur cette machine avant de remplacer le `.vbs`.
+
+Session log : `cowork_workspace/SESSION_LOG_DAEMON_SANS_FAUX_POSITIF_2026-08-10.md`.
+
+## 5.91 Correctifs audit externe du 12/08/2026 — 5 points cosmétiques, rien de bloquant
+
+Un audit externe (environnement Linux, `rapport_audit_lucas_ai.md`) a confirmé
+un dépôt sain : 1633/1643 tests verts (les 11 échecs sont propres à Linux —
+modules Windows absents, pas des bugs), 98 % de couverture, aucun secret
+exposé. Cinq points mineurs relevés, tous corrigés dans cette session sauf le
+5e qui reste une proposition :
+
+1. **`README_INSTALL.md` ligne 209** — affirmait `memory/index_documents.py`
+   absent alors qu'il existe (`just index` fonctionne). Ligne corrigée,
+   déplacée vers le tableau des commandes fonctionnelles.
+2. **`cowork_workspace/` désynchronisé** — copies datées du 06-07/08,
+   originaux du 08-10/08. `just sync-docs` relancé, les 4 documents sont de
+   nouveau identiques à la racine. Voir proposition ci-dessous : ce même
+   écart avait déjà été corrigé une première fois en §5.37, et revient.
+3. **`test_index_mutants.py:365`** — un commentaire pédagogique citait
+   littéralement `` `# noqa` `` en exemple ; ruff le lisait comme une
+   tentative de directive et la rejetait (`Invalid # noqa directive`).
+   Un `# noqa: F401` explicite testé et écarté : bien formé, il devient
+   une vraie violation `RUF100` (directive inutilisée) faute de code à
+   suppresser sur cette ligne — pire que le warning initial au regard de
+   l'exigence "0 violation". Fix retenu : reformuler sans le `#` devant
+   `noqa`, qui empêche toute détection par ruff sans changer le sens de
+   la phrase.
+4. **`just train`/`just clean`** — ciblent des fichiers non écrits
+   (`training/train_lora.py`, `scripts/cleanup.py`), intentionnel (voir
+   §README_INSTALL.md). Les deux recettes affichent maintenant un message
+   explicite au lieu de l'erreur brute "fichier introuvable", sans qu'aucun
+   des deux scripts n'ait été construit (hors périmètre de cette session).
+5. **`LUCAS_ROOT = Path("C:/OrionAI")` en dur** (`lucas_daemon.py`) et
+   chemins Windows en dur (`automation_manager.py`) — limite déjà assumée
+   pour une machine unique, voir vérification ci-dessous.
+
+### Proposition : éviter la récurrence de la désynchronisation Cowork (non tranchée)
+
+§5.37 avait déjà traité cet écart une première fois et documenté pourquoi un
+hook Git (`pre-commit`/`post-commit`) est un mauvais choix : il échange une
+corvée visible (lancer `just sync-docs` à la main) contre une surprise
+invisible (arbre sale après un commit qu'on croyait propre, ou modification
+silencieuse de ce qui est validé). La commande explicite avait été préférée,
+recommandée "avant de solliciter Cowork". Le problème : elle s'oublie —
+l'écart est revenu une deuxième fois cinq jours plus tard.
+
+Deux pistes, ni l'une ni l'autre implémentée ici — décision à prendre par
+Cyril :
+
+- **Vérification en début de session** plutôt que sync automatique : un
+  script (`just check-docs` ?) qui compare les empreintes racine/Cowork et
+  affiche un avertissement (sans rien écraser) si elles divergent — garde le
+  principe "aucune écriture silencieuse" de §5.37 tout en rendant l'oubli
+  visible au bon moment, avant que Cowork ne travaille sur une copie
+  périmée.
+- **Rappel explicite dans les instructions de Claude Code** (`CLAUDE.md`,
+  section 6) : ajouter `just sync-docs` à la liste des vérifications de
+  début de session, aux côtés de la consultation d'`IDEAS.md`/`ROADMAP.md`
+  déjà en place — moins robuste qu'un script (dépend de ce que l'agent
+  pense à faire), mais zéro nouveau code.
+
+### Validation
+
+Suite complète (hors `integration`) : 1645 passed, 9 deselected — plus vert
+que sous Linux, les modules Windows exclus côté audit tournent normalement
+ici. `ruff check .` : All checks passed, plus aucun warning. `mypy` (mêmes
+exclusions que `just mypy`) : seules 3 erreurs pré-existantes dans
+`test_vram_watchdog.py`, non touchées par cette session, hors périmètre.
+
+Session log : `cowork_workspace/SESSION_LOG_CORRECTIFS_AUDIT_EXTERNE_2026-08-12.md`.
 
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 

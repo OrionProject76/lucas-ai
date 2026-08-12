@@ -362,8 +362,10 @@ def test_a_supplied_ocr_engine_is_the_one_used(monkeypatch, tmp_path) -> None:
         #
         # ⚠️ Un commentaire ne doit JAMAIS commencer par les mots d'une
         # directive : écrit en tête de ligne, mypy le lit comme un
-        # « type: ignore » mal formé. Même piège que le `# noqa` de ruff,
-        # rencontré deux fois aujourd'hui.
+        # « type: ignore » mal formé. Même piège que la directive noqa
+        # de ruff (le seul "#" est celui de ce commentaire, pas un second
+        # devant "noqa" — sinon ruff la lit comme une vraie directive mal
+        # formée), rencontré deux fois aujourd'hui.
         idx._read_pdf(faux_pdf, ocr_engine=_MoteurFourni())  # type: ignore[arg-type]
 
 

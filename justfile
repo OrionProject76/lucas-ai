@@ -237,7 +237,7 @@ git-feature name:
 
 # Entraînement LoRA manuel
 train:
-    python training/train_lora.py --data data/conversations/
+    if (Test-Path training/train_lora.py) { python training/train_lora.py --data data/conversations/ } else { Write-Host "training/train_lora.py n'existe pas encore -- pas implémenté, voir README_INSTALL.md (tableau des commandes just cassées)." -ForegroundColor Yellow }
 
 # Indexation RAG manuelle
 index:
@@ -245,7 +245,7 @@ index:
 
 # Cleanup manuel
 clean:
-    python scripts/cleanup.py
+    if (Test-Path scripts/cleanup.py) { python scripts/cleanup.py } else { Write-Host "scripts/cleanup.py n'existe pas encore -- pas implémenté, voir README_INSTALL.md (tableau des commandes just cassées)." -ForegroundColor Yellow }
 
 # Oublier le dernier échange (question + réponse)
 # À utiliser quand Luca's vient de répondre à côté : sans ça, elle voit sa

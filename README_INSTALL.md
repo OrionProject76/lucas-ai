@@ -201,16 +201,16 @@ nssm start LucasDaemon
 | `just git-commit "msg"` | `git add .` puis commit |
 | `just git-push` | Push sur `main` |
 | `just git-feature nom` | Crée la branche `feature/nom` |
+| `just index` | Indexe les documents via `memory/index_documents.py` |
 
 **⚠️ Encore cassées — leur cible n'existe pas :**
 
 | Commande | Problème |
 |---|---|
-| `just index` | `memory/index_documents.py` absent |
 | `just clean` | `scripts/cleanup.py` absent |
 | `just train` | `training/train_lora.py` absent |
 
-Ces trois-là décrivent l'arborescence visée dans `CLAUDE.md`, pas celle
+Ces deux-là décrivent l'arborescence visée dans `CLAUDE.md`, pas celle
 d'aujourd'hui. Elles fonctionneront quand les modules correspondants
 seront écrits.
 

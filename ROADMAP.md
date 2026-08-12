@@ -9676,6 +9676,74 @@ flash visible sur cette machine avant de remplacer le `.vbs`.
 
 Session log : `cowork_workspace/SESSION_LOG_DAEMON_SANS_FAUX_POSITIF_2026-08-10.md`.
 
+## 5.91 Correctifs audit externe du 12/08/2026 — 5 points cosmétiques, rien de bloquant
+
+Un audit externe (environnement Linux, `rapport_audit_lucas_ai.md`) a confirmé
+un dépôt sain : 1633/1643 tests verts (les 11 échecs sont propres à Linux —
+modules Windows absents, pas des bugs), 98 % de couverture, aucun secret
+exposé. Cinq points mineurs relevés, tous corrigés dans cette session sauf le
+5e qui reste une proposition :
+
+1. **`README_INSTALL.md` ligne 209** — affirmait `memory/index_documents.py`
+   absent alors qu'il existe (`just index` fonctionne). Ligne corrigée,
+   déplacée vers le tableau des commandes fonctionnelles.
+2. **`cowork_workspace/` désynchronisé** — copies datées du 06-07/08,
+   originaux du 08-10/08. `just sync-docs` relancé, les 4 documents sont de
+   nouveau identiques à la racine. Voir proposition ci-dessous : ce même
+   écart avait déjà été corrigé une première fois en §5.37, et revient.
+3. **`test_index_mutants.py:365`** — un commentaire pédagogique citait
+   littéralement `` `# noqa` `` en exemple ; ruff le lisait comme une
+   tentative de directive et la rejetait (`Invalid # noqa directive`).
+   Un `# noqa: F401` explicite testé et écarté : bien formé, il devient
+   une vraie violation `RUF100` (directive inutilisée) faute de code à
+   suppresser sur cette ligne — pire que le warning initial au regard de
+   l'exigence "0 violation". Fix retenu : reformuler sans le `#` devant
+   `noqa`, qui empêche toute détection par ruff sans changer le sens de
+   la phrase.
+4. **`just train`/`just clean`** — ciblent des fichiers non écrits
+   (`training/train_lora.py`, `scripts/cleanup.py`), intentionnel (voir
+   §README_INSTALL.md). Les deux recettes affichent maintenant un message
+   explicite au lieu de l'erreur brute "fichier introuvable", sans qu'aucun
+   des deux scripts n'ait été construit (hors périmètre de cette session).
+5. **`LUCAS_ROOT = Path("C:/OrionAI")` en dur** (`lucas_daemon.py`) et
+   chemins Windows en dur (`automation_manager.py`) — limite déjà assumée
+   pour une machine unique, voir vérification ci-dessous.
+
+### Proposition : éviter la récurrence de la désynchronisation Cowork (non tranchée)
+
+§5.37 avait déjà traité cet écart une première fois et documenté pourquoi un
+hook Git (`pre-commit`/`post-commit`) est un mauvais choix : il échange une
+corvée visible (lancer `just sync-docs` à la main) contre une surprise
+invisible (arbre sale après un commit qu'on croyait propre, ou modification
+silencieuse de ce qui est validé). La commande explicite avait été préférée,
+recommandée "avant de solliciter Cowork". Le problème : elle s'oublie —
+l'écart est revenu une deuxième fois cinq jours plus tard.
+
+Deux pistes, ni l'une ni l'autre implémentée ici — décision à prendre par
+Cyril :
+
+- **Vérification en début de session** plutôt que sync automatique : un
+  script (`just check-docs` ?) qui compare les empreintes racine/Cowork et
+  affiche un avertissement (sans rien écraser) si elles divergent — garde le
+  principe "aucune écriture silencieuse" de §5.37 tout en rendant l'oubli
+  visible au bon moment, avant que Cowork ne travaille sur une copie
+  périmée.
+- **Rappel explicite dans les instructions de Claude Code** (`CLAUDE.md`,
+  section 6) : ajouter `just sync-docs` à la liste des vérifications de
+  début de session, aux côtés de la consultation d'`IDEAS.md`/`ROADMAP.md`
+  déjà en place — moins robuste qu'un script (dépend de ce que l'agent
+  pense à faire), mais zéro nouveau code.
+
+### Validation
+
+Suite complète (hors `integration`) : 1645 passed, 9 deselected — plus vert
+que sous Linux, les modules Windows exclus côté audit tournent normalement
+ici. `ruff check .` : All checks passed, plus aucun warning. `mypy` (mêmes
+exclusions que `just mypy`) : seules 3 erreurs pré-existantes dans
+`test_vram_watchdog.py`, non touchées par cette session, hors périmètre.
+
+Session log : `cowork_workspace/SESSION_LOG_CORRECTIFS_AUDIT_EXTERNE_2026-08-12.md`.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —
