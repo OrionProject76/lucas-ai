@@ -519,8 +519,20 @@ class LucasDaemon:
         schedule.every().day.at("04:00").do(self.nightly_cleanup)
 
         # Tâches régulières
-        schedule.every(30).seconds.do(self.capture_screenshot)
-        schedule.every(5).minutes.do(self.log_emotion)
+        #
+        # ⚠️ capture_screenshot (écran, 30s) et log_emotion (webcam, 5min)
+        # DÉSACTIVÉES le 12/08/2026 (ROADMAP.md §5.92) : ces deux tâches
+        # tournaient depuis le tout premier commit du dépôt, jamais
+        # journalisées dans ROADMAP.md, et constituent de la perception
+        # continue au sens de VISION_LONG_TERME.md §4.2 (« Perception
+        # continue — non activée [...] à n'activer que par décision
+        # explicite, jamais par glissement progressif »). Découvert en
+        # diagnostiquant un signalement de Cyril sur une capture d'écran
+        # récurrente — sans lien avec le bouton mobile qu'il soupçonnait.
+        # Les méthodes restent définies plus bas : réactivation possible
+        # en une ligne, mais seulement sur décision explicite de Cyril.
+        # schedule.every(30).seconds.do(self.capture_screenshot)
+        # schedule.every(5).minutes.do(self.log_emotion)
         schedule.every().hour.do(self.run_tests)
 
         # Surveillance sécurité. Deux cadences : le runtime est peu coûteux,
@@ -535,8 +547,7 @@ class LucasDaemon:
         log("   • 02h00 : Entraînement LoRA")
         log("   • 03h00 : Indexation RAG")
         log("   • 04h00 : Cleanup nocturne")
-        log("   • Toutes les 30s : Screenshot")
-        log("   • Toutes les 5min : Log émotion")
+        log("   • Screenshot / Log émotion : désactivés (perception continue, voir ROADMAP.md §5.92)")
         log("   • Toutes les 5min : Sécurité — process et réseau")
         log("   • Toutes les 15min : Sécurité — fichiers (rançongiciel)")
         log("   • Toutes les heures : Tests auto")

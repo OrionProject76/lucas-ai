@@ -111,16 +111,20 @@
         </div>
 
         <!-- Tiroir Vision (F-1) : "accès direct aux modes de capture" (brief
-             §3.3) -- 2 raccourcis, chacun réutilise une capacité déjà
-             câblée (chat.js/router.py pour l'écran, camera.js pour la
-             caméra), aucune nouvelle route ni logique métier. -->
+             §3.3) -- réutilise une capacité déjà câblée (camera.js), aucune
+             nouvelle route ni logique métier.
+             Raccourci "Capture d'écran" retiré le 12/08/2026 (ROADMAP.md
+             §5.92, cowork_workspace/BRIEF_RETRAIT_CAPTURE_ECRAN_MOBILE.md) :
+             la cause du déclenchement récurrent signalé par Cyril n'était
+             pas ce raccourci mais lucas_daemon.py (capture toutes les 30s,
+             sans rapport avec le mobile) -- retiré quand même, la lecture
+             d'écran mobile reste hors de portée d'une PWA (D-7). -->
         <div id="vision-drawer">
             <div id="vision-drawer-header">
                 <span>Vision</span>
                 <button type="button" id="vision-close" class="icon-btn" title="Fermer">✕</button>
             </div>
             <div id="vision-list">
-                <button type="button" class="vision-action" id="vision-screen">🖥️ Capture d'écran</button>
                 <button type="button" class="vision-action" id="vision-camera">📷 Photo caméra</button>
             </div>
         </div>

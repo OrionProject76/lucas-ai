@@ -9744,6 +9744,99 @@ exclusions que `just mypy`) : seules 3 erreurs pré-existantes dans
 
 Session log : `cowork_workspace/SESSION_LOG_CORRECTIFS_AUDIT_EXTERNE_2026-08-12.md`.
 
+## 5.92 Retrait du raccourci "Capture d'écran" mobile — la vraie cause était ailleurs, 12/08/2026
+
+Brief : `cowork_workspace/BRIEF_RETRAIT_CAPTURE_ECRAN_MOBILE.md`. Cyril signalait
+une capture d'écran mobile récurrente et gênante ("ça se déclenche tout seul,
+en boucle"), attribuée au tiroir Vision de l'accueil mobile (F-1).
+
+### Diagnostic — priorité du brief, avant tout retrait
+
+Chemin déclenché par le raccourci mobile audité en entier
+(`home.js::captureScreen()` → soumission chat → `core/router.py::should_use_vision()`
+→ `core/lucas_core.py::_describe_screen()` → `modules/vision_manager.py`) : un
+clic envoie un seul message, aucune duplication d'écouteur, aucun minuteur.
+**Ce chemin n'est pas la cause.**
+
+La vraie cause : `lucas_daemon.py` planifiait `schedule.every(30).seconds.do(self.capture_screenshot)`
+et `schedule.every(5).minutes.do(self.log_emotion)` (webcam,
+`cv2.VideoCapture(0)`) — présent depuis le tout premier commit du dépôt
+("feat: ajoute le code source du projet au dépôt"), jamais journalisé dans
+ce fichier. C'est la fonctionnalité "Time Travel" cataloguée dans `IDEAS.md`
+sous "🎮 Modules fun & wow" (backlog, non priorisé) — mais déjà codée et
+active dans le daemon réel, tournant en tâche planifiée Windows persistante
+sur la machine de Cyril.
+
+Ceci contredit directement une décision déjà actée (`VISION_LONG_TERME.md`
+§4.2) : « Perception continue — non activée [...] à n'activer que par
+décision explicite, jamais par glissement progressif. » Confirmé en
+conditions réelles : `data/logs/daemon.log` montrait des captures toutes les
+30s jusqu'à 00:42:41 le 13/08 (~330 Ko chacune), `log_emotion` (webcam)
+active toutes les 5 minutes.
+
+Signalé à Cyril avant toute action (sujet de confidentialité, pas un simple
+bug) — décision : désactiver les deux immédiatement, ROADMAP inclus dans le
+signalement.
+
+### Correctif
+
+- `lucas_daemon.py::setup_schedule()` — les deux `schedule.every(...).do(...)`
+  commentés, méthodes conservées (réactivation possible en une ligne, mais
+  seulement sur décision explicite future). Log de démarrage mis à jour en
+  conséquence.
+- Daemon arrêté puis redémarré (tâche planifiée `LucasDaemon`) pour charger
+  le correctif en mémoire — **vérifié réellement** : plus aucun fichier créé
+  dans `data/screenshots/` pendant les 6 minutes suivantes, contre un
+  toutes les 30s avant correctif.
+
+### ⚠️ Trouvé en cours de route, non résolu — daemon dupliqué en permanence
+
+En redémarrant le daemon officiel (tâche planifiée, `venv\Scripts\pythonw.exe`),
+un second processus `lucas_daemon.py` apparaît systématiquement dans la même
+seconde, lancé via le Python **système**
+(`AppData\Local\Programs\Python\Python312\pythonw.exe`) et non via la tâche
+planifiée elle-même — reproduit 3 fois de suite. Tuer ce second processus
+fait planter le premier (cause non identifiée : aucun `subprocess.Popen`/
+`multiprocessing` dans `lucas_daemon.py` ne référence le script lui-même).
+Même symptôme observé sur `LucasAPIServer` (uvicorn) — deux instances
+tournent en parallèle (venv + système) — donc probablement systémique, pas
+spécifique au daemon. **Non résolu ici** : hors périmètre du brief, et
+risque réel de casser un service dont Cyril dépend en le déboguant à
+l'aveugle sans visibilité sur la vraie cause. Piste pour une session dédiée.
+
+### Retrait du raccourci mobile (fait quand même)
+
+Malgré la vraie cause trouvée ailleurs, le raccourci retiré comme demandé —
+la lecture d'écran mobile réelle reste hors de portée d'une PWA (D-7,
+reporté) :
+
+- `static/index.html` — bouton `#vision-screen` retiré du tiroir Vision,
+  `#vision-camera` conservé à l'identique.
+- `static/js/home.js` — `captureScreen()`, `_appendVisionShortcut()` et le
+  handler `#vision-screen` retirés ; `appendHomeAction()` (devenu inutilisé)
+  et `this.textInput`/`this.inputForm` (idem) retirés avec.
+- Pipeline serveur (`core/router.py::should_use_vision`,
+  `core/lucas_core.py::_describe_screen`) vérifié partagé avant tout retrait
+  (RT-2) — sert à toute question texte/vocale mentionnant l'écran, pas
+  seulement à ce raccourci : rien à nettoyer côté serveur.
+- `static/sw.js` : `CACHE_NAME` v20 → v21 (`index.html` et `home.js`
+  modifiés, tous deux dans `SHELL_FILES`).
+
+### Validation
+
+Suite complète : 1645 passed, 9 deselected. `ruff check .` : All checks
+passed.
+
+**Non vérifiable depuis cette machine, honnêtement** : pas de test réel à
+412px avec capture à l'appui — l'extension Chrome (`claude-in-chrome`)
+n'était pas connectée dans cet environnement au moment de la session.
+Vérification faite par relecture du HTML/JS modifié et recherche de toute
+référence résiduelle (`captureScreen`, `vision-screen`, `appendHomeAction` —
+aucune trouvée) plutôt que par capture visuelle. À confirmer par Cyril sur
+le vrai téléphone avant de considérer ce point clos.
+
+Session log : `cowork_workspace/SESSION_LOG_RETRAIT_CAPTURE_ECRAN_MOBILE_2026-08-12.md`.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

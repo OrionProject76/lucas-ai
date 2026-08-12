@@ -89,32 +89,6 @@ window.Lucas = window.Lucas || {};
         container.appendChild(item);
     }
 
-    function appendHomeAction(container, icon, titleText, metaText, onClick) {
-        const item = document.createElement("button");
-        item.type = "button";
-        item.className = "home-item home-item-action";
-
-        const iconEl = document.createElement("span");
-        iconEl.className = "home-item-icon";
-        iconEl.textContent = icon;
-        item.appendChild(iconEl);
-
-        const text = document.createElement("span");
-        text.className = "home-item-text";
-        const title = document.createElement("span");
-        title.className = "home-item-title";
-        title.textContent = titleText;
-        text.appendChild(title);
-        const meta = document.createElement("span");
-        meta.className = "home-item-meta";
-        meta.textContent = metaText;
-        text.appendChild(meta);
-        item.appendChild(text);
-
-        item.addEventListener("click", onClick);
-        container.appendChild(item);
-    }
-
     class Home {
         constructor() {
             this.homeView = document.getElementById("home-view");
@@ -122,8 +96,6 @@ window.Lucas = window.Lucas || {};
             this.listEl = document.getElementById("home-list");
             this.avatarPanel = document.getElementById("avatar-panel");
             this.navChat = document.getElementById("nav-chat");
-            this.textInput = document.getElementById("text-input");
-            this.inputForm = document.getElementById("input-bar");
 
             this.avatarPanel.addEventListener("click", () => this.showHome());
             this.navChat.addEventListener("click", () => this.showChat());
@@ -148,18 +120,6 @@ window.Lucas = window.Lucas || {};
             this.navChat.classList.remove("active");
         }
 
-        // Raccourci vision (brief §3.2/§3.3) : bascule sur le chat,
-        // pré-remplit et envoie la question canonique ("regarde mon
-        // écran" — même formulation que le cas nominal de
-        // test_intent.py) — réutilise TOUT le pipeline existant (chat.js
-        // -> websocket -> core/intent.py -> core/router.py ->
-        // vision_manager). Aucune nouvelle route.
-        captureScreen() {
-            this.showChat();
-            this.textInput.value = "Regarde mon écran";
-            this.inputForm.requestSubmit();
-        }
-
         // ── Liste compacte (brief §3.2) ──────────────────────────────────
 
         async load() {
@@ -174,7 +134,6 @@ window.Lucas = window.Lucas || {};
                     this.listEl,
                     "Aperçu indisponible (connexion ou jeton invalide) — le chat reste utilisable."
                 );
-                this._appendVisionShortcut();
             }
         }
 
@@ -237,15 +196,6 @@ window.Lucas = window.Lucas || {};
             if (!hasItem) {
                 renderEmpty(this.listEl, "Rien de nouveau côté rapports, demandes ou alertes.");
             }
-
-            this._appendVisionShortcut();
-        }
-
-        _appendVisionShortcut() {
-            appendHomeAction(
-                this.listEl, "🖥️", "Capture d'écran", "Raccourci direct — mode vision",
-                () => this.captureScreen()
-            );
         }
 
         // ── Tiroir Vision (brief §3.3) ────────────────────────────────────
@@ -257,10 +207,6 @@ window.Lucas = window.Lucas || {};
             });
             document.getElementById("vision-close").addEventListener("click", () => {
                 drawer.classList.remove("open");
-            });
-            document.getElementById("vision-screen").addEventListener("click", () => {
-                drawer.classList.remove("open");
-                this.captureScreen();
             });
             document.getElementById("vision-camera").addEventListener("click", () => {
                 drawer.classList.remove("open");
