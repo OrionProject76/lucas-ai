@@ -83,6 +83,12 @@ Suivi des échéances récurrentes (déclaration trimestrielle prime d'activité
 ### B-5 — Assistant courses/repas économique
 Croise les promotions (via B-3/futur suivi de prix) avec des recettes simples et rapides, pensées pour des repas après un service physique — pas de cuisine élaborée. Objectif : réduire gaspillage et facture alimentaire, au service du même objectif que B-2.
 
+### B-6 — Suggestions d'activités gratuites le week-end, localisées
+Digest hebdomadaire "quoi faire gratuitement près de chez toi ce week-end" (expositions gratuites, marchés, événements municipaux) via le module Web existant. Petit plaisir sans impact sur le budget.
+
+### B-7 — Inventaire léger des garanties/factures
+Version ciblée de la veille administrative : Luca's retient "achat X, garantie jusqu'au Y" pour les achats significatifs (issus des mails déjà lus via C-1), et le ressort si l'appareil tombe en panne dans la période. Évite de payer une réparation qui aurait été couverte.
+
 ---
 
 ## GROUPE C — GESTION DE LA VIE NUMÉRIQUE
@@ -105,6 +111,9 @@ Via parsing des mails Amazon (confirmation, expédition, livraison), PAS d'autom
 ### C-5 — Suivi CPF + formations financées
 Consultation du solde du Compte Personnel de Formation (système public gratuit, moncompteformation.gouv.fr) et recherche des formations éligibles correspondant au projet de reconversion aide-soignant déjà catalogué (IDEAS #63). Zéro coût, exploite un droit déjà acquis.
 
+### C-6 — Assistant CV/lettre de motivation pour la reconversion
+Lié à C-5 : le moment venu, Luca's aide à rédiger et adapter CV/lettres de motivation selon les offres, en s'appuyant sur la connaissance du parcours de Cyril déjà présente en mémoire. Zéro coût, génération de texte pure.
+
 ---
 
 ## GROUPE D — DOMOTIQUE & ÉQUIPEMENTS
@@ -125,10 +134,26 @@ Via API de parkings structurés (données ouvertes de certaines villes, parkings
 ### D-5 — Enceinte(s) connectée(s)
 Marque à préciser par Cyril. Si Sonos : API HTTP locale (sortie vocale multi-pièces). Si Amazon Echo : écosystème fermé (déjà acté), sortie audio TTS simple possible selon modèle mais pas de captation.
 
-### D-6 — Webcam/micro PC (à venir) — MISE À JOUR DOC REQUISE
-⚠️ Cyril prévoit d'ajouter webcam + micro sur le PC. Cela **contredit** VISION_LONG_TERME.md §2 Pilier 3 qui dit "le PC n'a ni webcam ni micro — contrainte matérielle confirmée et définitive". À faire corriger dans VISION_LONG_TERME.md par Claude Code.
-- **Effet positif** : résout en partie la limite de diffusion WebSocket (IDEAS #79) — assis au PC, l'avatar peut entendre/répondre en direct sans dépendre du téléphone.
+### D-6 — Webcam/micro PC (à venir) — CORRECTION DÉJÀ FAITE (constaté périmé le 10/08/2026)
+⚠️ Cette entrée affirmait à tort une correction "requise" dans `VISION_LONG_TERME.md` — vérifié le 10/08/2026 via `IDEAS.md` : la correction (contradiction avec "le PC n'a ni webcam ni micro — contrainte matérielle confirmée et définitive") **était déjà faite le 05/08/2026**, trois jours avant la rédaction de cette synthèse. Rien à refaire ici, cette entrée était simplement périmée dès sa création.
+- **Effet positif conservé** : résout en partie la limite de diffusion WebSocket (IDEAS #79) — assis au PC, l'avatar peut entendre/répondre en direct sans dépendre du téléphone.
 - Activation reste gatée par §4.1/§4.2 (pas d'écoute ambiante permanente automatique).
+
+### D-7 — Application Android native Luca's (mot d'éveil local + assistant système + lecture d'écran)
+**Reformulé le 10/08/2026, périmètre initial (juste lecture d'écran) trop étroit — clarifié après échange avec Cyril sur son usage réel (voiture, mains libres, remplacer Gemini/Bixby).**
+
+Objectif final : une vraie application Android native qui remplace Gemini/Bixby comme assistant système, avec un mot d'éveil détecté **entièrement en local** (aucun son envoyé où que ce soit tant que le mot n'est pas reconnu — même famille technique que `openwakeword`, déjà utilisée par Hermes).
+
+Trois briques, à construire dans cet ordre :
+1. **Mot d'éveil local** — service Android au premier plan (notification permanente obligatoire, jamais masquée), modèle de détection embarqué, aucune dépendance à Google/Assistant. C'est la brique qui débloque l'usage voiture mains libres sans compromis de confidentialité.
+2. **Enregistrement comme assistant par défaut Android** — via le mécanisme système officiel (`VoiceInteractionService`), pour que Luca's remplace réellement Gemini/Bixby, pas seulement coexister à côté.
+3. **Lecture d'écran** (D-7 initial) — MediaProjection API, mode "capture d'écran" côté mobile.
+
+**Contraintes** :
+- Domaine technique différent du reste du projet (Kotlin/Android natif, pas web) — nécessite une vraie planification de session dédiée, pas une brique parmi d'autres.
+- Consommation batterie réelle et non négligeable pour l'écoute continue — à mesurer honnêtement une fois construit, pas minimisée à l'avance.
+- Activation reste consciente et réversible (§4.2) — Cyril active, jamais un défaut silencieux.
+- **Écarté explicitement** : faire transiter la voix par Google Assistant/Tasker avant Luca's (proposé puis rejeté le 10/08/2026 — contraire au local-first, et de toute façon ne résout pas le mains-libres puisque l'app ouverte n'écoute pas automatiquement).
 
 ---
 
@@ -139,7 +164,8 @@ Extension visuelle et fonctionnelle de `cowork_workspace/`. Tableau de bord affi
 - Lit les fichiers de `cowork_workspace/` + tables SQLite (mémoire, journal d'actions, objectifs).
 - Interface web classique, **zéro VRAM, zéro rendu 3D**.
 - Structure **modulaire et évolutive** : sections/fenêtres réorganisables, MAIS évolutions **pilotées par Cyril** (proposition → validation), pas d'auto-remodelage autonome de l'interface.
-- **Direction esthétique (précisée 08/08/2026)** : épuré, moderne, fonctionnel, intuitif — identité visuelle propre à Luca's/Cyril, pas un thème générique importé tel quel.
+- **Direction esthétique (finalisée 08/08/2026, après comparatif sur maquette)** : style "Terminal pro" — sobre, police monospace, glow ambre discret, coins peu arrondis, glass léger (blur ~6px). Remplace la piste violet envisagée un temps ; cohérent avec la description déjà posée pour E-2 ("terminal financier pro"), les deux volets partageront le même langage visuel. Palette : accent ambre (~#f0a94e), pas de nouvelle couleur de marque au-delà de celle-ci.
+- **Structure modulaire, validée par prototype interactif** : cartes déplaçables par glisser-déposer + 4 tailles (S/M/L/XL) par carte, indépendantes. La disposition choisie par Cyril doit être **persistée côté serveur** (pas seulement en local navigateur) pour survivre entre sessions et appareils.
 
 ### E-2 — Volet dataviz professionnel
 Graphiques et analyses de qualité pro (Chart.js/Plotly, rendu web léger, zéro VRAM) : portefeuille, projections d'investissement (B-1), dépenses (B-2), cours de marché (B-3).
@@ -153,6 +179,26 @@ Luca's peut écrire du code (scripts, analyses, petits outils) et l'exécuter **
 ### E-4 — Intégration d'outils au fil des besoins
 Modèle connecteurs/skills : chaque capacité s'ajoute comme module branchable quand le besoin est réel. Extensible sans retomber dans le multi-agents (règle 12) — outils appelés par Luca's, pas IA autonomes. Chaque ajout soumis à RT-4.
 
+**Annexe recherche (09/08/2026, notes fournies par Cyril) — écosystème agents IA, évalué avant tout catalogue brut :**
+
+| Outil/catégorie | Nature | Évaluation |
+|---|---|---|
+| **MCP (Model Context Protocol)** | Standard ouvert, créé par Anthropic | ✅ Piste la plus solide pour E-5 V2 — serveurs auto-hébergeables en local, pas de dépendance à un cloud tiers pour l'appel d'outil lui-même |
+| Composio | Service cloud tiers (1000+ apps, gère OAuth) | ⚠️ Ferait transiter les appels d'outils par une infra cloud tierce — à l'opposé du Zero-Trust local ; envisageable seulement pour des intégrations non sensibles, au cas par cas |
+| E2B / Daytona | Sandboxes cloud | ❌ Redondant avec E-3 (sandbox locale déjà construite et testée) — une sandbox cloud ferait sortir du code vers un tiers, régression de confidentialité |
+| Browserbase / Stagehand | Navigateurs headless pour agents (contournement CAPTCHA) | ⚠️ Contournement de CAPTCHA = souvent contraire aux CGU des sites ciblés ; cloud également |
+| Mem0 / Zep | Moteurs de mémoire long terme | ❌ Redondant avec la mémoire à 5 types déjà construite (Brique 3), locale, avec provenance |
+| **LangGraph / CrewAI / OpenAI Agents SDK** | Frameworks d'orchestration **multi-agents** | 🛑 C'est très exactement la Swarm Intelligence, règle 12 — territoire différé à une session supervisée dédiée, pas de l'intégration d'outils |
+| Registres MCP (Glama, PulseMCP, Smithery) | Répertoires d'outils prêts à l'emploi | ⚠️ Utile en principe pour E-5 V2, mais vecteur direct de risque chaîne d'approvisionnement (H-7) — un registre compromis pourrait injecter un outil malveillant. Jamais d'ajout automatique, toujours validation explicite avant intégration |
+| Dynamic Tool Discovery ("effet Windows Update") | Agent qui télécharge/exécute un schéma d'outil à la volée depuis un registre distant | 🛑 Même risque que ci-dessus, en pire — aucune revue humaine dans la boucle par construction. À ne jamais activer tel quel ; si un jour retenu, la validation Cyril doit rester obligatoire à chaque nouvel outil, pas seulement à la première connexion au registre |
+
+### E-5 — Poste de Commandement IA ("Bureau de l'IA")
+Nouvelle icône dans le Workspace menant à un module dédié aux capacités de Luca's elle-même — distinct des données/résultats déjà affichés (rapports, finances, etc.), celui-ci porte sur les outils/modules dont Luca's dispose.
+- **V1 réaliste (ce qui peut être construit maintenant)** : registre en lecture — liste des modules/capacités actuellement actifs (Finance CSV, OS Controller, Sandbox, Détecteur d'économies, etc.), avec statut.
+- **V2, hors périmètre tant que non construit** : téléchargement/installation de nouveaux connecteurs/skills/plugins — nécessite un mécanisme de chargement de plugin qui n'existe pas encore dans le projet. Ne pas construire une interface "télécharger" sans le moteur réel derrière — façade vide.
+- Le jour où V2 est construite : mêmes garde-fous que le reste (RT-4, confirmation, test sandbox avant intégration réelle) — installer un plugin est un vecteur d'attaque comme un autre.
+- Style Terminal Pro, cohérent avec le reste du Workspace.
+
 ---
 
 ## GROUPE F — INTERFACE & PRÉSENCE
@@ -162,6 +208,7 @@ La PWA existante, **sur smartphone spécifiquement**, devient l'interface façon
 - **Écarté** : le graphe 3D de bulles flottantes (lourd, incompatible avec la priorité "VRAM au cerveau"). Reste au catalogue comme "option lourde, plus tard".
 - **Confirmé (08/08/2026)** : uniquement le style visuel de la scène d'appel de la vidéo (cartes contextuelles façon "on the call now..."), jamais la fonction d'appel elle-même — reste annulée (A-3).
 - Sur PC : avatar fantôme minimal (présence bureau) + Workspace E-1. Sur smartphone : cette interface complète façon JARVIS. Deux appareils, deux rôles distincts, pas la même interface partout.
+- **Structure d'écran d'accueil précisée (09/08/2026, référence image fournie par Cyril)** : orbe d'état de l'avatar en haut (conservé tel quel, pas remplacé par un cadran décoratif générique) ; sous l'orbe, liste compacte d'éléments récents (dernier rapport, demande en attente, raccourci mode vision) réutilisant les données déjà exposées par `workspace_manager` — même backend que le Workspace PC, présentation mobile ; barre de navigation basse (Chat / Vision / Workspace / Réglages). Palette ambre "Terminal pro" déjà en place, cohérente avec la référence fournie.
 
 ### F-2 — TTS interchangeable (adaptateur)
 Module TTS conçu avec interface interchangeable. Par défaut : local (Piper/edge_tts, qualité correcte). Évolution possible vers TTS cloud premium (type ElevenLabs, voix "cinéma" comme la vidéo) = ajout d'un fichier adaptateur, pas une refonte. Décision de Cyril : rester local pour l'instant (option 2), avec porte ouverte sur cloud payant plus tard (évolution vers option 1). Rien payé tant que non basculé.
@@ -181,6 +228,9 @@ Le World Model logue déjà fenêtre active + processus. Résumé hebdomadaire (
 
 ### G-4 — Veille Innovation (généralisation de LucasVeilleModeles)
 Tâche planifiée régulière recherchant des nouveautés (modèles, techniques, bibliothèques, patterns d'agents, fonctions concurrentes). **Compile un rapport** dans `reports/` ou candidats dans `IDEAS.md`. Ne télécharge, n'installe, n'exécute **jamais** rien d'elle-même — chaque nouveauté passe par Cyril avant adoption. Remplace le "accès internet illimité" par un flux de veille supervisé (plus sûr, même bénéfice).
+
+### G-5 — Note vocale universelle "à moi-même"
+Un seul point d'entrée vocal ("note pour moi : ...") que Luca's route automatiquement vers le bon type de mémoire selon le contenu — tâche, idée, rappel, dépense à noter. Réduit la friction d'usage quotidien : pas besoin de savoir dans quel module ranger l'info, Cyril parle, Luca's range.
 
 ---
 
