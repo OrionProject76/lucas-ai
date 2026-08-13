@@ -41,11 +41,14 @@ window.Lucas = window.Lucas || {};
             this.targetEl.addEventListener("click", () => this.toggleTarget());
             this._render();
 
-            // L'état repris du localStorage doit être annoncé au serveur :
-            // sans ça, l'indicateur du PC resterait éteint alors que le
-            // téléphone se croit, lui, en mode capteur — un désaccord
-            // silencieux entre les deux écrans.
-            if (this.active) this._announce();
+            // ⚠️ L'annonce de l'état repris du localStorage se fait dans
+            // websocket.js, sur l'événement "open" — PAS ici (corrigé le
+            // 13/08/2026, ROADMAP.md §5.97). Elle était appelée à cet
+            // endroit précis, dans le même tick synchrone que
+            // `new LucasSocket()` : le socket était encore en CONNECTING,
+            // et _send() n'envoie que sur OPEN. Elle ne partait donc
+            // JAMAIS — le désaccord silencieux entre les deux écrans que
+            // cette ligne voulait éviter était en réalité permanent.
         }
 
         // Lu par audio.js / camera.js / conversation_mode.js au moment

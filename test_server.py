@@ -1938,6 +1938,66 @@ def test_the_toggle_is_relayed_both_ways(client) -> None:
     assert eteint["active"] is False
 
 
+def test_a_desktop_arriving_late_learns_the_mode_is_already_on(client) -> None:
+    """
+    Le symptôme réel du 13/08/2026 : l'indicateur « 📡 Capteurs mobiles »
+    ne s'allumait JAMAIS (ROADMAP.md §5.97).
+
+    `sensor_status` n'était diffusé qu'à la bascule du toggle. Une session
+    PC ouverte APRÈS cette bascule n'apprenait donc rien — et comme le
+    toggle est persistant côté téléphone, Cyril ne le rebasculait jamais.
+    L'ordre de ce test est l'ordre réel : téléphone d'abord, PC ensuite.
+    """
+    with client.websocket_connect("/ws") as phone:
+        phone.send_json({"type": "pc_sensor_mode", "active": True})
+
+        with client.websocket_connect("/ws") as pc:
+            pc.send_json({"type": "hello", "client": "lucas_desktop"})
+            statut = _next_of_type(pc, "sensor_status", limit=20)
+
+    assert statut["active"] is True
+
+
+def test_a_desktop_arriving_late_is_not_told_the_mode_is_on_when_it_is_off(
+    client,
+) -> None:
+    """L'inverse doit rester vrai : pas d'indicateur allumé sans raison."""
+    with client.websocket_connect("/ws") as phone:
+        phone.send_json({"type": "pc_sensor_mode", "active": True})
+        phone.send_json({"type": "pc_sensor_mode", "active": False})
+
+        with client.websocket_connect("/ws") as pc:
+            pc.send_json({"type": "hello", "client": "lucas_desktop"})
+            # Le "chat" de bienvenue suit immédiatement le hello : s'il
+            # arrive sans sensor_status avant lui, rien n'a été rejoué.
+            assert _next_of_type(pc, "chat", limit=10)
+
+
+def test_the_indicator_goes_out_when_the_phone_that_lit_it_leaves(client) -> None:
+    """
+    L'extinction doit rester aussi certaine que l'allumage (§5.93).
+
+    Rejouer l'état à chaque desktop crée le risque inverse du bug corrigé :
+    un indicateur qui reste allumé sur la foi d'une annonce périmée, alors
+    que le téléphone est parti. Un indicateur menteur est pire que pas
+    d'indicateur.
+    """
+    with client.websocket_connect("/ws") as pc:
+        pc.send_json({"type": "hello", "client": "lucas_desktop"})
+        _next_of_type(pc, "chat")
+
+        with client.websocket_connect("/ws") as phone:
+            phone.send_json({"type": "pc_sensor_mode", "active": True})
+            assert _next_of_type(pc, "sensor_status", limit=20)["active"] is True
+        # sortie du bloc = le téléphone se déconnecte
+        assert _next_of_type(pc, "sensor_status", limit=20)["active"] is False
+
+        # et un desktop qui arrive après ne doit plus rien apprendre
+        with client.websocket_connect("/ws") as tardif:
+            tardif.send_json({"type": "hello", "client": "lucas_desktop"})
+            assert _next_of_type(tardif, "chat", limit=10)
+
+
 def test_the_toggle_never_reaches_the_model(client, fake_core) -> None:
     """
     Une bascule d'interface n'est pas une question : elle ne doit jamais

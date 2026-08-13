@@ -87,6 +87,23 @@ window.Lucas = window.Lucas || {};
             this.socket.addEventListener("open", () => {
                 this.onConnectionChange(true);
                 this._send({ type: "hello", client: "lucas_pwa", version: "1.0" });
+                // ⚠️ Annonce du mode capteur ICI, pas au constructeur de
+                // PcSensor (corrigé le 13/08/2026, ROADMAP.md §5.97).
+                // pc_sensor.js appelait _announce() depuis son
+                // constructeur, exécuté dans le MÊME tick synchrone que
+                // `new LucasSocket()` : le socket était encore en
+                // CONNECTING, et _send() n'envoie que sur OPEN. L'annonce
+                // partait donc dans le vide à CHAQUE ouverture de la PWA —
+                // mesuré, 0 message émis. Comme le toggle est persistant,
+                // Cyril ne le rebasculait jamais, et l'indicateur du PC ne
+                // s'allumait jamais.
+                //
+                // Ici, c'est aussi ce qui réannonce l'état après une
+                // reconnexion — le cas du téléphone qui perd le réseau.
+                const sensor = window.Lucas.pcSensor;
+                if (sensor && sensor.isActive()) {
+                    this.sendPcSensorMode(true);
+                }
             });
 
             this.socket.addEventListener("message", (event) => {

@@ -10287,6 +10287,98 @@ Une fois A en place, retirer les trois lignes de B et **remesurer avec une
 réponse longue** — le recouvrement de 6,7 s ci-dessus est le témoin à voir
 disparaître.
 
+## 5.97 🔴 L'indicateur « 📡 Capteurs mobiles » ne s'allumait JAMAIS — deux pertes silencieuses, pas le certificat, 13/08/2026
+
+Signalé par Cyril : l'indicateur n'apparaît jamais dans la fenêtre desktop,
+toggle actif. Conclusion naturelle de sa part — l'appli PC ne se connecte
+donc pas — et point de vigilance identifié dès §5.93 : le certificat
+mkcert accepté par `QWebSocket`, jamais vérifié depuis la vraie fenêtre.
+
+### Le certificat est hors de cause — mesuré depuis la vraie fenêtre
+
+Instrumentation temporaire de `ui/sensor_bridge.py` (tous les signaux :
+`stateChanged`, `errorOccurred`, `sslErrors`, `peerVerifyError`), écrite
+dans un fichier et non sur stdout — l'app est lancée sans console
+attachée, un `print()` n'irait nulle part. Application lancée normalement,
+pas via un script de test :
+
+```
+connexion vers wss://127.0.0.1:8000/ws (jeton present)
+stateChanged: SocketState.ConnectingState
+stateChanged: SocketState.ConnectedState
+CONNECTE — sous-protocole retenu : 'lucas.v1'
+hello envoye
+recu type='avatar_state' / 'system' / 'security_status' / 'chat'
+```
+
+Aucune erreur TLS, aucun `peerVerifyError`, handshake accepté du premier
+coup. Le `chat` reçu est « Luca's est connectée. », que le serveur n'envoie
+que dans son bloc `hello` : **preuve directe que le hello a été traité** et
+que la fenêtre est bien dans `_desktop_clients`. Côté serveur, la même
+connexion apparaît en `[accepted]` + `connection open`.
+
+L'instrumentation a été **retirée** une fois la cause établie ; le fichier
+est revenu à l'identique.
+
+### Cause n°1 — l'annonce du mode partait dans le vide, à chaque ouverture
+
+`sensor_status` n'est diffusé qu'à la bascule du toggle. `pc_sensor.js`
+avait prévu le cas et annonçait l'état repris du `localStorage` depuis son
+**constructeur**, avec ce commentaire : « sans ça, l'indicateur du PC
+resterait éteint alors que le téléphone se croit en mode capteur ».
+
+Sauf que ce constructeur s'exécute dans le **même tick synchrone** que
+`new LucasSocket()` (`app.js`), lequel vient d'appeler `new WebSocket()` —
+donc `readyState === CONNECTING`. Or `_send()` n'envoie que sur `OPEN`.
+
+**Mesuré** en exécutant les vrais fichiers dans Node avec un `window`
+simulé : `readyState = 0`, **0 message envoyé**. L'annonce ne partait
+jamais, à aucune ouverture de la PWA. Et comme le toggle est persistant
+(`localStorage`), Cyril ne le rebasculait jamais — d'où « JAMAIS », très
+exactement.
+
+La ligne qui devait empêcher le désaccord entre les deux écrans le rendait
+donc permanent, sans que rien ne le signale. Troisième fois ce jour-là après
+§5.92 et §5.95, et la forme la plus pure : ici la garde était écrite,
+commentée, correcte dans son intention — et postée quinze millisecondes
+trop tôt.
+
+### Cause n°2 — un desktop qui arrive après n'apprend rien
+
+Même l'annonce réparée, il reste l'ordre réel d'usage : le téléphone est
+allumé en permanence, le PC démarre après. `sensor_status` est diffusé au
+moment de la bascule, à qui est là — un desktop qui se connecte une heure
+plus tard ne peut rien en savoir.
+
+### Corrigé — les deux volets, chacun couvrant un cas que l'autre ne couvre pas
+
+- **`static/js/websocket.js`** — l'annonce se fait sur l'événement `open`,
+  juste après le `hello` de la PWA. Répare aussi la reconnexion après une
+  perte de réseau. `pc_sensor.js` garde un commentaire à la place de
+  l'ancien appel, pour que personne ne le remette là.
+- **`api/server.py`** — `_pc_sensor_active` mémorise le dernier état
+  annoncé, rejoué à tout desktop qui s'annonce.
+- **Extinction préservée** (doctrine §5.93 : « l'extinction doit être aussi
+  certaine que l'allumage ») : `_pc_sensor_source` retient la connexion qui
+  a allumé le mode ; son départ éteint l'indicateur et l'état cesse d'être
+  rejoué. Rejouer un état sans ça aurait créé le bug inverse — un
+  indicateur allumé que plus personne ne porte, pire que pas d'indicateur.
+- `CACHE_NAME` v23 → **v24**.
+
+**Vérifié** : 3 tests d'intégration WebSocket ajoutés (`test_server.py`),
+dont l'ordre réel téléphone-puis-PC, le cas éteint, et l'extinction au
+départ du téléphone. Suite complète **1688 passed**, `ruff` propre. Volet
+PWA vérifié en exécutant le vrai `websocket.js` dans Node ; **contrôle
+inverse fait des deux côtés** — correctif retiré, le cas du bug tombe seul.
+
+### ⏳ Reste à confirmer par Cyril, en conditions réelles
+
+Tout ce qui précède est mesuré sur cette machine, mais **jamais depuis le
+vrai S25 Ultra**. À confirmer par un test simultané : appli PC lancée,
+Cyril parle au téléphone, toggle déjà actif — l'indicateur doit s'allumer
+dès l'ouverture de la fenêtre, et le tour doit apparaître dans le chat du
+PC. Tant que ce test n'a pas eu lieu, ce point reste ouvert, pas résolu.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

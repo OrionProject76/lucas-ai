@@ -98,6 +98,23 @@ _AUDIO_MIME_TYPES = {".mp3": "audio/mpeg", ".wav": "audio/wav"}
 # et l'ordre d'envoi entre plusieurs desktops n'a aucun sens à porter.
 _desktop_clients: set[WebSocket] = set()
 
+# Dernier état du mode capteur annoncé par le téléphone, et la connexion
+# qui l'a annoncé.
+#
+# ⚠️ Ajouté le 13/08/2026 (ROADMAP.md §5.97) sur un symptôme mesuré :
+# l'indicateur « 📡 Capteurs mobiles » du desktop ne s'allumait JAMAIS.
+# `sensor_status` n'était diffusé qu'à la bascule du toggle ; une session
+# PC ouverte APRÈS cette bascule ne pouvait donc rien apprendre — et
+# comme le toggle est persistant (localStorage), Cyril ne le rebascule
+# jamais. L'état est donc rejoué à chaque desktop qui s'annonce.
+#
+# La source est mémorisée avec l'état pour que l'extinction reste aussi
+# certaine que l'allumage (doctrine de §5.93) : si le téléphone qui a
+# annoncé le mode s'en va, l'indicateur s'éteint au lieu de rester
+# allumé sur la foi d'une annonce périmée.
+_pc_sensor_active: bool = False
+_pc_sensor_source: WebSocket | None = None
+
 
 async def _fanout_to_desktops(payload: dict) -> None:
     """
@@ -629,6 +646,12 @@ def _save_base64_image(image_base64: str) -> str:
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    # Déclaré ici, en tête : ces deux-là sont LUS plus haut (rejeu de
+    # l'état au hello d'un desktop) que l'endroit où ils sont ÉCRITS
+    # (bascule du toggle), et Python refuse un `global` postérieur à la
+    # première lecture dans la même fonction.
+    global _pc_sensor_active, _pc_sensor_source
+
     # Vérifié AVANT accept() : un jeton absent/invalide ferme la connexion
     # au niveau protocole (code 1008, violation de politique), sans jamais
     # l'ouvrir.
@@ -697,6 +720,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 elif data.get("client") == "lucas_desktop":
                     client_type = "desktop"
                     _desktop_clients.add(websocket)
+                    # L'état courant, tout de suite : cette session vient
+                    # d'arriver et a manqué la bascule du toggle, qui a pu
+                    # avoir lieu il y a des heures (voir _pc_sensor_active).
+                    if _pc_sensor_active:
+                        await websocket.send_json(protocol.sensor_status(True))
                 await websocket.send_json(
                     protocol.chat("Luca's est connectée.", from_luca=True)
                 )
@@ -707,9 +735,11 @@ async def websocket_endpoint(websocket: WebSocket):
             # conversation : il n'en est pas un, il ne doit jamais
             # atteindre LucasCore.
             if message_type == "pc_sensor_mode":
-                await _fanout_to_desktops(
-                    protocol.sensor_status(bool(data.get("active")))
-                )
+                _pc_sensor_active = bool(data.get("active"))
+                # La source n'est retenue que pour un mode ACTIF : c'est
+                # elle dont le départ devra éteindre l'indicateur.
+                _pc_sensor_source = websocket if _pc_sensor_active else None
+                await _fanout_to_desktops(protocol.sensor_status(_pc_sensor_active))
                 continue
 
             if message_type == "chat":
@@ -1057,6 +1087,16 @@ async def websocket_endpoint(websocket: WebSocket):
         # s'est annoncée "lucas_desktop", et _fanout_to_desktops() a pu
         # l'avoir déjà retirée en constatant sa mort.
         _desktop_clients.discard(websocket)
+
+        # Le téléphone qui portait le mode capteur s'en va : l'indicateur
+        # du PC s'éteint. Sans ça, l'état rejoué aux desktops suivants
+        # affirmerait un mode actif que plus personne ne porte — un
+        # indicateur menteur est pire que pas d'indicateur (§5.93 :
+        # « l'extinction doit être aussi certaine que l'allumage »).
+        if websocket is _pc_sensor_source:
+            _pc_sensor_active = False
+            _pc_sensor_source = None
+            await _fanout_to_desktops(protocol.sensor_status(False))
 
 
 # ── PWA mobile (pont mobile, Phase 4) ──────────────────────────────────
