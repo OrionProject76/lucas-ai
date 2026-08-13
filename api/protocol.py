@@ -209,6 +209,29 @@ def voice_command(action: str) -> dict:
     return {"type": "voice_command", "action": action, "source_agent": DEFAULT_SOURCE_AGENT}
 
 
+def turn_ignored(reason: str) -> dict:
+    """
+    Un tour capté en mode mains libres n'a pas été retenu, et pourquoi.
+
+    ⚠️ Ce message existe pour une raison précise (ROADMAP.md §5.98) : le
+    mode conversation attend TOUJOURS un signal de fin de tour pour
+    rouvrir le micro (`notifyLucasReplied`, `notifyPlaybackEnded`,
+    `notifyError` dans conversation_mode.js). Ignorer un tour en silence
+    laisserait le mode bloqué jusqu'au filet de sécurité de 5 minutes —
+    donc muet, sans que rien ne le dise.
+
+    Type distinct de "error" volontairement : avec une télévision allumée,
+    ces refus se comptent par dizaines. Les afficher en rouge ferait
+    passer un fonctionnement NORMAL — Luca's ignore ce qui ne lui est pas
+    adressé — pour une avalanche de pannes.
+    """
+    return {
+        "type": "turn_ignored",
+        "reason": reason,
+        "source_agent": DEFAULT_SOURCE_AGENT,
+    }
+
+
 # ── Pont capteurs téléphone → session PC (12/08/2026) ──────────────────
 #
 # Le téléphone sert de micro/appareil photo au Luca's du PC, le temps que

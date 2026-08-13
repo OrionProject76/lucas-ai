@@ -1998,6 +1998,131 @@ def test_the_indicator_goes_out_when_the_phone_that_lit_it_leaves(client) -> Non
             assert _next_of_type(tardif, "chat", limit=10)
 
 
+
+# ── Mode mains libres : à quoi Luca's accepte de répondre (13/08/2026) ──
+#
+# ROADMAP.md §5.98. Une conversation fantôme réelle : télévision allumée à
+# côté du téléphone, plusieurs tours tenus à la place de Cyril. Ce
+# n'étaient PAS des hallucinations — Whisper transcrivait fidèlement la
+# voix de la TV, à 0,977 de confiance. Les valeurs ci-dessous sont celles
+# mesurées sur cette machine, pas des chiffres choisis pour passer.
+
+
+def _tour_mains_libres(client, fake_stt, texte, langue="fr", confiance=0.99,
+                       no_speech=0.01, parole=2.0):
+    """Envoie un tour AVEC le drapeau conversation_mode, et collecte."""
+    from modules.stt_engine import TranscriptResult
+
+    double = fake_stt["_double"]
+    double.boom = None
+    double.transcribe_base64 = lambda audio_base64, suffix=".wav": TranscriptResult(
+        text=texte, language=langue, confidence=confiance, duration_seconds=3.0,
+        no_speech_prob=no_speech, speech_seconds=parole,
+    )
+    recus = []
+    with client.websocket_connect("/ws") as ws:
+        ws.send_json({"type": "hello", "client": "lucas_pwa", "version": "1.0"})
+        ws.send_json({
+            "type": "audio", "audio_base64": "ZmF1eC1hdWRpbw==",
+            "conversation_mode": True,
+        })
+        pertinents = ("error", "chat", "avatar_state", "activity", "turn_ignored",
+                      "voice_command")
+        for _ in range(30):
+            msg = ws.receive_json()
+            if msg.get("type") not in pertinents:
+                continue
+            recus.append(msg)
+            # `len(recus) > 1` : un avatar_state « idle » est poussé à la
+            # CONNEXION, avant tout traitement — s'arrêter dessus ferait
+            # sortir la boucle avant même l'envoi du tour.
+            if (
+                msg.get("type") == "avatar_state"
+                and msg.get("state") == "idle"
+                and len(recus) > 1
+            ):
+                break
+    return recus
+
+
+def test_the_television_no_longer_holds_the_conversation(client, fake_core, fake_stt) -> None:
+    """Le cas réel : « Thank you. Good night. », 0,977 de confiance."""
+    recus = _tour_mains_libres(
+        client, fake_stt, "Thank you. Good night.", langue="en", confiance=0.977,
+        no_speech=0.012,
+    )
+
+    assert [m for m in recus if m["type"] == "turn_ignored"]
+    assert fake_core.get("asked") is None, "la TV ne doit jamais atteindre le modèle"
+
+
+def test_french_television_is_ignored_too(client, fake_core, fake_stt) -> None:
+    """La langue ne suffit pas : une TV française parle français."""
+    recus = _tour_mains_libres(
+        client, fake_stt, "Et maintenant la météo de demain matin.", confiance=0.997,
+    )
+
+    assert [m for m in recus if m["type"] == "turn_ignored"]
+    assert fake_core.get("asked") is None
+
+
+def test_a_turn_addressed_to_luca_goes_through(client, fake_core, fake_stt) -> None:
+    """Et Cyril, lui, doit passer — sinon le correctif est une panne."""
+    _tour_mains_libres(client, fake_stt, "Luca, quelle heure est-il ?")
+
+    assert fake_core["asked"] == "quelle heure est-il ?", (
+        "le nom sert à décider qu'on écoute, il n'a rien à faire dans la question"
+    )
+
+
+def test_stop_is_heard_even_though_whisper_calls_it_english(
+    client, fake_core, fake_stt
+) -> None:
+    """
+    ⚠️ Garde-fou d'ORDRE, et il ne tient qu'à ça.
+
+    Mesuré sur cette machine : « stop » prononcé en français est transcrit
+    par Whisper avec `language='en'`. Si le filtre de langue passait avant
+    l'interception de la commande, le mécanisme d'arrêt PRINCIPAL du mode
+    conversation (§5.90) deviendrait inatteignable — exactement quand
+    Cyril en a le plus besoin, quand Luca's s'est emballée sur une autre
+    source. Ce test échouerait si les deux blocs étaient réordonnés.
+    """
+    recus = _tour_mains_libres(client, fake_stt, "stop", langue="en", confiance=0.903)
+
+    assert [m for m in recus if m["type"] == "voice_command"]
+    assert fake_core.get("asked") is None
+
+
+def test_calling_luca_without_saying_anything_is_not_a_question(
+    client, fake_core, fake_stt
+) -> None:
+    recus = _tour_mains_libres(client, fake_stt, "Luca ?")
+
+    assert [m for m in recus if m["type"] == "turn_ignored"]
+    assert fake_core.get("asked") is None
+
+
+def test_push_to_talk_needs_no_wake_word(client, fake_core, fake_stt) -> None:
+    """
+    Le micro classique est un geste délibéré : ce que Cyril enregistre en
+    appuyant lui est attribué sans discussion. Exiger le mot d'adressage
+    là serait absurde — et ces refus ne doivent JAMAIS fuiter hors du mode
+    mains libres.
+    """
+    _echange_audio(client, fake_stt, texte="quelle heure est-il")
+
+    assert fake_core["asked"] == "quelle heure est-il"
+
+
+def test_a_snippet_of_noise_never_becomes_a_turn(client, fake_core, fake_stt) -> None:
+    """Silence mesuré à 0,862 de non-parole — deux ordres de grandeur au-dessus."""
+    _tour_mains_libres(client, fake_stt, "You", langue="en", confiance=0.9,
+                       no_speech=0.862, parole=0.1)
+
+    assert fake_core.get("asked") is None
+
+
 def test_the_toggle_never_reaches_the_model(client, fake_core) -> None:
     """
     Une bascule d'interface n'est pas une question : elle ne doit jamais

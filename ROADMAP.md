@@ -10379,6 +10379,162 @@ Cyril parle au téléphone, toggle déjà actif — l'indicateur doit s'allumer
 dès l'ouverture de la fenêtre, et le tour doit apparaître dans le chat du
 PC. Tant que ce test n'a pas eu lieu, ce point reste ouvert, pas résolu.
 
+## 5.98 🔴 La télévision a tenu la conversation à la place de Cyril — et ce n'étaient pas des hallucinations, 13/08/2026
+
+Signalé en usage réel : en mode conversation mains libres, télévision
+allumée à proximité, Luca's a tenu plusieurs échanges avec elle-même.
+Phrases incohérentes traitées comme des questions de Cyril, dont une
+entière en anglais — « Thank you. Good night. »
+
+### L'hypothèse de départ était fausse, et c'est la mesure qui l'a montré
+
+L'hypothèse était : le micro reste ouvert, Whisper hallucine des phrases
+plausibles à partir du bruit, et sans seuil de confiance elles sont
+traitées comme de vraies requêtes.
+
+**Un seuil de confiance existait déjà** (`is_confident`, ≥ 0,6, appliqué
+depuis le 05/08 précisément contre les hallucinations sur silence). Et
+**ce n'étaient pas des hallucinations**. Mesuré sur cette machine, en
+resynthétisant les cas avec les voix Windows locales :
+
+| Échantillon | Confiance | Passait ? | Transcription |
+|---|---|---|---|
+| Silence pur | 0,305 | non | `'You'` |
+| Bruit de fond | 0,403 | non | `''` |
+| **Voix TV anglaise** | **0,977** | **OUI** | **`'Thank you. Good night.'`** |
+| Voix TV anglaise longue | 0,997 | OUI | `'And now, the weather forecast…'` |
+| Voix TV française | 0,997 | OUI | `'et maintenant la météo de demain…'` |
+
+La phrase exacte rapportée par Cyril est reproduite à l'identique. Whisper
+avait parfaitement fait son travail : il a transcrit fidèlement de la
+vraie parole — celle de la télé.
+
+### Pourquoi le seuil ne pouvait pas les arrêter
+
+`confidence` vaut `info.language_probability` : **la probabilité que la
+LANGUE détectée soit la bonne**. Rien sur la qualité de la transcription,
+rien sur la nature de la source. Le seuil de 0,6 n'écarte le silence
+(0,305) que parce que Whisper y hésite sur la langue, **par accident**.
+Devant une voix humaine intelligible, la langue est évidente : le score
+est élevé par construction.
+
+**Le correctif spontané — « monter le seuil » — ne pouvait pas marcher** :
+il faudrait dépasser 0,98 pour écarter la TV (0,977), alors que la voix de
+Cyril mesure 0,997. Les deux populations ne sont pas séparables sur cet
+axe. Écrit noir sur blanc parce que c'est le réflexe naturel, et qu'il
+aurait coûté une soirée pour rien.
+
+Le VAD ne pouvait pas davantage : `SPEECH_RMS_THRESHOLD = 0.008` est un
+seuil d'**énergie**. Il répond à « y a-t-il du son ? », jamais à « est-ce
+Cyril ? ».
+
+### ⚠️ Changement de comportement — Luca's ne répond plus qu'à ce qui lui est adressé
+
+**Décision de Cyril, pas un correctif mineur.** En mode mains libres, un
+tour n'est retenu que s'il commence par le mot d'adressage. C'est le seul
+volet qui traite la cause : aucun score de Whisper ne distingue deux voix
+humaines. Ce qui sépare la TV de Cyril n'est pas la qualité du signal,
+c'est **à qui la phrase était destinée**.
+
+**Le mot parlé est « Luca », pas « Luca's »** — plus naturel à dire à voix
+haute. Le nom affiché du produit reste « Luca's » partout ailleurs ; les
+deux ne sont pas le même objet. Variantes acceptées (`luca`, `lucas`,
+`luka`, `lukas`, `lucass`) parce que c'est Whisper qui écrit : « Luca » lui
+revient souvent « Lucas », le français ajoutant volontiers le s.
+
+**Ne s'applique QU'AU mode mains libres.** Le micro push-to-talk est un
+geste délibéré : ce que Cyril enregistre en appuyant lui est attribué sans
+discussion, et lui imposer d'énoncer un nom serait absurde. Seule l'écoute
+CONTINUE a besoin de savoir à qui la parole s'adressait.
+
+### Les trois autres volets
+
+- **A — langue** : en mains libres, `language == "fr"` exigé.
+- **B — non-parole et bribes** : `no_speech_prob ≤ 0,5` (mesuré : silence
+  0,862, parole 0,002 à 0,012 — seuil posé au milieu de deux ordres de
+  grandeur) et `speech_seconds ≥ 0,3`. Ce dernier est volontairement bas :
+  « stop » dure ~0,4 s et reste le mécanisme d'arrêt principal.
+- **E — journalisation** : chaque tour du mode, accepté ou refusé, écrit
+  langue, confiance, `no_speech_prob`, durée de parole et longueur du
+  texte (`conversation_turn`). Ajouté parce que ces données ont MANQUÉ le
+  soir même : les `activity` partaient au téléphone sans jamais être
+  écrites côté serveur — zéro ligne exploitable le lendemain. **Des
+  métriques, jamais le texte** : ce journal ne doit pas devenir une
+  transcription permanente de ce qui se dit autour du téléphone, soit
+  exactement la perception continue que refuse VISION_LONG_TERME.md §4.2.
+
+### 🔴 L'ordre des blocs est une garantie, pas une commodité
+
+`is_stop_command` est évalué **avant** le filtre de langue et le mot
+d'adressage. Ce n'est pas cosmétique : **mesuré, « stop » prononcé en
+français est transcrit par Whisper avec `language='en'`**. Le filtre de
+langue placé avant aurait rendu le mécanisme d'arrêt principal (§5.90)
+inatteignable — exactement quand Cyril en a le plus besoin, quand Luca's
+s'est emballée sur une source qui n'est pas lui. Un test échoue si les
+deux blocs sont réordonnés.
+
+### Un défaut à 0.0 qui aurait rendu le micro muet
+
+`no_speech_prob` et `speech_seconds` valaient d'abord `0.0` par défaut.
+Conséquence : tout appelant ne les renseignant pas voyait **tous** ses
+tours rejetés, micro muet sans un message — la panne silencieuse qu'on
+passe la journée à corriger ailleurs. Un test existant l'a arrêtée avant
+Cyril (« un enregistrement valide ne doit pas être avalé »). Les deux
+champs valent désormais `None` = **non mesuré**, qui se lit « on ne sait
+pas », jamais « c'est mauvais ». Un filtre ne doit pas dépendre d'une
+donnée absente pour se déclencher.
+
+Même raison pour `_fmt_metric()` : une métrique non mesurée s'écrit
+« n/d » dans le journal. Un 0,000 inventé se lirait comme une mesure —
+et c'est ce genre de chiffre de complaisance qui a rendu la soirée
+indiagnosticable.
+
+### Le message `turn_ignored`
+
+Ignorer un tour en silence aurait laissé le mode conversation bloqué
+jusqu'au filet de 5 minutes : il attend TOUJOURS un signal de fin de tour
+pour rouvrir le micro. D'où un type de message dédié, **distinct de
+`error`** : avec une télévision allumée, ces refus se comptent par
+dizaines, et ce sont des refus NORMAUX. Les peindre en rouge ferait passer
+le bon fonctionnement pour une avalanche de pannes.
+
+### Vérification — avant/après sur les mêmes échantillons
+
+Chaîne de décision réelle, huit échantillons audio, voix Windows locales :
+
+```
+echantillon            langue   conf  non-parole  parole   AVANT   APRES  motif
+silence pur                en  0.305       0.862   2.00s  rejete  rejete  confiance
+bruit de fond              nn  0.403       1.000   0.00s  rejete  rejete  confiance
+TV anglais                 en  0.977       0.012   2.00s   PASSE  rejete  langue
+TV anglais long            en  0.997       0.002   4.44s   PASSE  rejete  langue
+TV francais                fr  0.997       0.005   4.00s   PASSE  rejete  non adresse
+voix + 'Luca'              fr  0.983       0.006   2.00s   PASSE   PASSE  accepte
+voix sans adressage        fr  0.912       0.024   2.00s   PASSE  rejete  non adresse
+commande 'stop'            en  0.903       0.032   2.00s   PASSE   PASSE  commande d'arret
+```
+
+Les trois cas « TV » passaient avant et sont maintenant écartés ; la voix
+adressée passe toujours ; « stop » passe **malgré** une langue détectée
+`en`, ce qui valide l'ordre des blocs sur mesure plutôt que sur intention.
+
+**39 tests ajoutés** (mot d'adressage, seuils STT, intégration WebSocket du
+mode mains libres). Suite complète : **1727 passed**, `ruff` propre. Volet
+PWA vérifié en exécutant le vrai `websocket.js` dans Node.
+`CACHE_NAME` v24 → **v25**.
+
+### ⏳ Ce qui reste vrai malgré tout
+
+Une **télévision française** dont un personnage dirait « Luca » passerait
+encore. Seule une reconnaissance du locuteur (empreinte vocale) fermerait
+complètement la porte — lourde, hors périmètre v1, non ouverte. Le mot
+d'adressage ramène le risque d'une conversation fantôme complète à une
+coïncidence, au lieu d'un fonctionnement normal.
+
+**Non vérifié depuis le vrai S25 Ultra** : les échantillons sont des voix
+de synthèse Windows, pas la voix de Cyril ni le haut-parleur de sa télé.
+À confirmer en conditions réelles avant de considérer ce point clos.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

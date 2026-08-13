@@ -367,5 +367,62 @@ def test_module_imports_without_any_whisper_backend() -> None:
     assert STTEngine is not None
 
 
+# ── Les trois questions que le pipeline ne posait pas (13/08/2026) ──────
+#
+# ROADMAP.md §5.98. Chiffres réels mesurés sur cette machine, repris ici
+# comme valeurs de test : silence no_speech_prob 0,862 — parole 0,002 à
+# 0,012. Un test bâti sur des valeurs inventées n'aurait pas dit si les
+# seuils tiennent face à ce que produit vraiment Whisper.
+
+
+def test_speech_is_told_apart_from_silence() -> None:
+    silence = TranscriptResult("You", "en", 0.305, 3.0, no_speech_prob=0.862)
+    parole = TranscriptResult("bonjour", "fr", 0.997, 3.0, no_speech_prob=0.005)
+    assert not silence.is_speech
+    assert parole.is_speech
+
+
+def test_a_snippet_is_not_a_turn() -> None:
+    bribe = TranscriptResult("ah", "fr", 0.9, 3.0, no_speech_prob=0.01, speech_seconds=0.1)
+    tour = TranscriptResult("bonjour", "fr", 0.9, 3.0, no_speech_prob=0.01, speech_seconds=1.4)
+    assert not bribe.has_enough_speech
+    assert tour.has_enough_speech
+
+
+def test_stop_stays_long_enough_to_be_heard() -> None:
+    """« stop » dure ~0,4 s : le seuil ne doit pas rendre l'arrêt inaudible."""
+    stop = TranscriptResult("stop", "fr", 0.9, 1.0, no_speech_prob=0.01, speech_seconds=0.4)
+    assert stop.has_enough_speech
+
+
+def test_the_language_can_be_checked() -> None:
+    tv = TranscriptResult("Thank you. Good night.", "en", 0.977, 2.0, no_speech_prob=0.012)
+    cyril = TranscriptResult("quelle heure est-il", "fr", 0.997, 2.0, no_speech_prob=0.005)
+    assert not tv.is_language("fr")
+    assert cyril.is_language("fr")
+    # ⚠️ La TV passe le seuil de confiance HISTORIQUE sans difficulté :
+    # c'est tout le sujet de §5.98, et ce test l'ancre.
+    assert tv.is_confident
+
+
+def test_no_segment_means_no_speech_not_perfect_speech() -> None:
+    """
+    Défaut prudent DU BACKEND : aucun segment -> 1.0, jamais 0.0, qui
+    affirmerait exactement l'inverse de ce qu'on sait (« c'est de la
+    parole ») sur un extrait où Whisper n'a rien trouvé.
+    """
+    class _EmptyModel:
+        def transcribe(self, audio, language=None):
+            return [], SimpleNamespace(language="nn", language_probability=0.4, duration=3.0)
+
+    backend = stt_module._FasterWhisperBackend.__new__(stt_module._FasterWhisperBackend)
+    backend.model = _EmptyModel()
+
+    result = backend.transcribe("vide.wav")
+
+    assert result.no_speech_prob == 1.0
+    assert not result.is_speech
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

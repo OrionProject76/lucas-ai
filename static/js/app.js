@@ -107,6 +107,14 @@
             onVoiceCommand: (action) => {
                 if (conversationMode) conversationMode.notifyVoiceCommand(action);
             },
+            // Tour capté mais non retenu (langue, pas de mot d'adressage).
+            // PAS d'addError : avec une télévision allumée, ces refus se
+            // comptent par dizaines, et ce sont des refus NORMAUX — les
+            // peindre en rouge ferait passer le bon fonctionnement pour
+            // une panne. Le micro se rouvre, c'est le point essentiel.
+            onTurnIgnored: () => {
+                if (conversationMode) conversationMode.notifyTurnIgnored();
+            },
             onError: (detail) => {
                 chat.addError(detail);
                 if (conversationMode) conversationMode.notifyError();

@@ -30,10 +30,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from api import log_scrub, protocol
-from config import API_TOKEN
+from config import API_TOKEN, CONVERSATION_LANGUAGE, CONVERSATION_WAKE_WORDS
 from core.lucas_core import LucasCore
 from core.router import mentions_pc_explicitly, should_use_vision
-from core.voice_commands import is_stop_command
+from core.voice_commands import has_wake_word, is_stop_command, strip_wake_word
 from core.world_model import get_snapshot
 from memory.memory_manager import save_event_from_any_thread
 from modules.capability_registry import VERIFIED_AT as CAPABILITY_REGISTRY_VERIFIED_AT
@@ -134,6 +134,44 @@ async def _fanout_to_desktops(payload: dict) -> None:
         except Exception:  # noqa: BLE001 — voir docstring : une session PC
             # partie ne doit jamais interrompre le tour du téléphone.
             _desktop_clients.discard(client)
+
+
+def _fmt_metric(value: float | None, spec: str = ".2f", suffix: str = "") -> str:
+    """Formate une métrique STT, ou « n/d » si elle n'a pas été mesurée.
+
+    Un 0,000 inventé se lirait comme une mesure — et c'est exactement ce
+    genre de chiffre de complaisance qui a rendu la soirée du 13/08
+    indiagnosticable (ROADMAP.md §5.98).
+    """
+    if value is None:
+        return "n/d"
+    return f"{value:{spec}}{suffix}"
+
+
+def _log_conversation_turn(transcript, decision: str, reason: str) -> None:
+    """
+    Trace un tour du mode mains libres — accepté ou refusé — et pourquoi.
+
+    ⚠️ Ajouté le 13/08/2026 parce que ces données avaient MANQUÉ au moment
+    où elles auraient tout expliqué (ROADMAP.md §5.98) : après la
+    conversation fantôme tenue par la télévision, les scores réels étaient
+    introuvables. Les `activity` partent au téléphone par WebSocket sans
+    jamais être écrits côté serveur — zéro ligne exploitable le lendemain.
+
+    ⚠️ Des MÉTRIQUES, jamais le texte transcrit. Ce journal doit pouvoir
+    grossir sans devenir une transcription permanente de ce qui se dit
+    autour du téléphone de Cyril — c'est-à-dire exactement la perception
+    continue que VISION_LONG_TERME.md §4.2 refuse. La longueur du texte
+    suffit à distinguer une bribe d'une phrase.
+    """
+    save_event_from_any_thread(
+        "conversation_turn",
+        f"{decision} ({reason}) — langue={transcript.language} "
+        f"confiance={transcript.confidence:.3f} "
+        f"non_parole={_fmt_metric(transcript.no_speech_prob, '.3f')} "
+        f"parole={_fmt_metric(transcript.speech_seconds, '.2f', 's')} "
+        f"caracteres={len(transcript.text)}",
+    )
 
 
 def _read_audio_b64(path: str) -> str:
@@ -821,7 +859,20 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_json(protocol.avatar_state(protocol.STATE_IDLE))
                     continue
 
-                if not message.strip() or not transcript.is_confident:
+                # B. Ajouté le 13/08/2026 : `is_confident` ne protège que
+                # du silence (voir le bloc ci-dessous et modules/
+                # stt_engine.py). `is_speech` et `has_enough_speech`
+                # répondent aux deux autres questions que le pipeline ne
+                # posait pas — est-ce de la parole, et assez longue pour
+                # être un tour plutôt qu'une bribe.
+                if (
+                    not message.strip()
+                    or not transcript.is_confident
+                    or not transcript.is_speech
+                    or not transcript.has_enough_speech
+                ):
+                    if protocol.read_conversation_mode_flag(data):
+                        _log_conversation_turn(transcript, "rejete", "pas de parole exploitable")
                     # ⚠️ LE SILENCE QUI CORRESPOND AU BUG MICRO DE CYRIL
                     # (05/08/2026). Avant : retour à IDLE, sans un mot. Il
                     # appuyait sur le micro, parlait, et il ne se passait
@@ -854,8 +905,10 @@ async def websocket_endpoint(websocket: WebSocket):
                         protocol.activity(
                             "voice",
                             f"micro — {transcript.duration_seconds:.1f}s reçues, "
-                            f"confiance {transcript.confidence:.2f} : aucune parole "
-                            "reconnue",
+                            f"confiance {transcript.confidence:.2f}, "
+                            f"non-parole {_fmt_metric(transcript.no_speech_prob)}, "
+                            f"parole {_fmt_metric(transcript.speech_seconds, '.1f', 's')} : "
+                            "aucune parole reconnue",
                         )
                     )
                     await websocket.send_json(
@@ -875,7 +928,17 @@ async def websocket_endpoint(websocket: WebSocket):
                 # par une phrase qu'on n'a pas demandé à surveiller.
                 # Interceptée ICI, avant LucasCore.ask() — jamais envoyée
                 # au modèle comme une question.
-                if protocol.read_conversation_mode_flag(data) and is_stop_command(message):
+                #
+                # ⚠️ ET AVANT le mot d'adressage ci-dessous, jamais après.
+                # « stop » est le mécanisme d'arrêt PRINCIPAL du mode
+                # (§5.90) ; exiger « Luca's, stop » le rendrait
+                # inatteignable exactement quand Cyril en a le plus besoin —
+                # quand elle s'est emballée sur une source qui n'est pas
+                # lui. L'ordre de ces deux blocs est donc une garantie,
+                # pas une commodité.
+                conversation_mode = protocol.read_conversation_mode_flag(data)
+                if conversation_mode and is_stop_command(message):
+                    _log_conversation_turn(transcript, "accepte", "commande d'arret")
                     await websocket.send_json(
                         protocol.activity(
                             "voice", "commande vocale reconnue : arrêt du mode conversation"
@@ -884,6 +947,62 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_json(protocol.voice_command("stop"))
                     await websocket.send_json(protocol.avatar_state(protocol.STATE_IDLE))
                     continue
+
+                # ── Mains libres : à quoi Luca's accepte de répondre ──────
+                #
+                # ⚠️ Ces deux refus ne s'appliquent QU'EN mode conversation.
+                # Le micro push-to-talk est un geste délibéré de Cyril : ce
+                # qu'il enregistre en appuyant lui est attribué sans
+                # discussion, et lui imposer d'énoncer un mot d'adressage
+                # serait absurde. C'est l'écoute CONTINUE, et elle seule,
+                # qui a besoin de savoir à qui la parole s'adressait.
+                if conversation_mode:
+                    # A. La langue. « Thank you. Good night. » — vraie
+                    # phrase de la TV — est passée à 0,977 de confiance le
+                    # 13/08 : la langue était le seul signal qui la
+                    # séparait d'une phrase de Cyril (ROADMAP.md §5.98).
+                    if not transcript.is_language(CONVERSATION_LANGUAGE):
+                        _log_conversation_turn(transcript, "rejete", "langue")
+                        await websocket.send_json(
+                            protocol.turn_ignored(
+                                f"langue détectée : {transcript.language}"
+                            )
+                        )
+                        await websocket.send_json(
+                            protocol.avatar_state(protocol.STATE_IDLE)
+                        )
+                        continue
+
+                    # C. Le mot d'adressage. Aucun score de Whisper ne
+                    # distingue deux voix humaines — ce qui sépare la TV de
+                    # Cyril n'est pas la qualité du signal, c'est à qui la
+                    # phrase était destinée.
+                    if not has_wake_word(message, CONVERSATION_WAKE_WORDS):
+                        _log_conversation_turn(transcript, "rejete", "sans mot d'adressage")
+                        await websocket.send_json(
+                            protocol.turn_ignored("phrase non adressée à Luca")
+                        )
+                        await websocket.send_json(
+                            protocol.avatar_state(protocol.STATE_IDLE)
+                        )
+                        continue
+
+                    # Le nom est retiré avant d'atteindre le modèle : il a
+                    # servi à décider qu'on écoutait, il n'apporte rien à
+                    # la question elle-même.
+                    message = strip_wake_word(message, CONVERSATION_WAKE_WORDS)
+                    if not message.strip():
+                        # Appelée sans rien dire d'autre.
+                        _log_conversation_turn(transcript, "rejete", "adressage seul")
+                        await websocket.send_json(
+                            protocol.turn_ignored("appel sans question")
+                        )
+                        await websocket.send_json(
+                            protocol.avatar_state(protocol.STATE_IDLE)
+                        )
+                        continue
+
+                    _log_conversation_turn(transcript, "accepte", "adresse a Luca")
 
             else:
                 continue

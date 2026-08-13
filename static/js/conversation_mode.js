@@ -179,6 +179,18 @@ window.Lucas = window.Lucas || {};
             this._resumeListening();
         }
 
+        // Appelé par app.js quand le serveur a capté un tour mais ne l'a
+        // pas retenu — langue étrangère, phrase non adressée à Luca's
+        // (api/protocol.py, turn_ignored ; ROADMAP.md §5.98).
+        //
+        // ⚠️ Rouvrir le micro ici n'est pas un détail : sans ce signal, le
+        // mode resterait bloqué en attente jusqu'au filet de 5 minutes.
+        // C'est le cas NORMAL en présence d'une télévision, pas l'exception.
+        notifyTurnIgnored() {
+            if (!this.active || !this._awaitingResponse) return;
+            this._resumeListening();
+        }
+
         // Appelé par app.js sur toute erreur serveur (ex. parole non
         // reconnue, transcription peu fiable) pendant qu'un tour de ce
         // mode attend une réponse — sans ça, le mode resterait bloqué en

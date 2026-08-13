@@ -272,6 +272,55 @@ STT_MODEL_SIZE = "small"
 # le même extrait coûte plusieurs secondes de calcul pour rien.
 STT_CACHE_SIZE: int = 20
 
+# --- Mode conversation mains libres : à quoi Luca's accepte de répondre ---
+#
+# Posé le 13/08/2026 après une conversation fantôme réelle : la télévision
+# allumée à côté du téléphone a tenu plusieurs tours à la place de Cyril
+# (ROADMAP.md §5.98). Ce n'étaient pas des hallucinations — Whisper
+# transcrivait fidèlement la voix de la TV.
+#
+# Les trois seuils ci-dessous filtrent le bruit et les bribes. Ils ne
+# distinguent PAS deux voix humaines : c'est le mot d'adressage
+# (CONVERSATION_WAKE_WORDS) qui répond à « m'a-t-on parlé À MOI ».
+
+# Au-dessus, Whisper considère qu'il n'y a pas de parole. Mesuré sur cette
+# machine le 13/08/2026 : silence 0,862 — parole réelle 0,002 à 0,012. Le
+# seuil est posé au milieu de deux ordres de grandeur, volontairement loin
+# des deux bords : il ne se joue pas à la troisième décimale.
+STT_MAX_NO_SPEECH_PROB: float = 0.5
+
+# Durée cumulée de PAROLE (pas de l'enregistrement) en dessous de laquelle
+# un tour est une bribe. Bas à dessein : « stop » dure environ 0,4 s et
+# reste le mécanisme d'arrêt principal du mode conversation (§5.90) — un
+# seuil confortable pour filtrer le bruit le rendrait inaudible.
+STT_MIN_SPEECH_SECONDS: float = 0.3
+
+# Langue exigée en mode mains libres. « Thank you. Good night. », vraie
+# phrase de la TV, a été acceptée à 0,977 de confiance : la langue est le
+# seul signal qui la séparait d'une phrase de Cyril.
+CONVERSATION_LANGUAGE: str = "fr"
+
+# Mot d'adressage obligatoire en mode mains libres — changement de
+# COMPORTEMENT décidé par Cyril le 13/08/2026, pas un simple filtre.
+#
+# ⚠️ Le mot PARLÉ est « Luca », pas « Luca's » : choix de Cyril, plus
+# naturel à dire à voix haute. Le nom AFFICHÉ du produit reste « Luca's »
+# partout ailleurs (SYSTEM_PROMPT, titre de fenêtre, interface) — les deux
+# ne sont pas le même objet, et cette différence est voulue.
+#
+# Les variantes suivent parce que c'est Whisper qui écrit, pas Cyril :
+# « Luca » lui revient tantôt « Lucas » (le français ajoute volontiers le
+# s), tantôt « Luka » ou « Lukas ». Comparées après normalisation
+# (accents, casse, ponctuation) — la liste couvre ce que le modèle produit
+# réellement, pas toutes les graphies imaginables.
+CONVERSATION_WAKE_WORDS: tuple[str, ...] = (
+    "luca",     # la forme parlée de référence
+    "lucas",    # transcription la plus fréquente de « Luca » en français
+    "luka",
+    "lukas",
+    "lucass",
+)
+
 # --- API ---
 # ⚠️ Ouverte au réseau local le 02/08/2026, à la demande explicite de
 # Cyril, pour le premier test PWA depuis le S25 Ultra — voir ROADMAP.md

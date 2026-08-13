@@ -16,6 +16,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from core.text_utils import normalize
 
 # Préambules courants avant une commande ("Luca's, stop", "OK, arrête-toi")
@@ -66,3 +68,68 @@ def is_stop_command(text: str) -> bool:
     while words and words[0] in _LEADING_FILLERS:
         words.pop(0)
     return " ".join(words) in STOP_PHRASES
+
+
+# ── Mot d'adressage du mode mains libres (13/08/2026) ──────────────────
+#
+# ⚠️ Changement de COMPORTEMENT, pas un filtre de plus : en mode
+# conversation, Luca's ne répond plus à tout ce qu'elle entend, seulement
+# à ce qui lui est adressé. Décidé par Cyril après une conversation
+# fantôme réelle où la télévision a tenu plusieurs tours à sa place
+# (ROADMAP.md §5.98).
+#
+# Pourquoi ici et pas un seuil de plus : aucun score de Whisper ne
+# distingue deux voix humaines. La voix de la TV est mesurée à 0,977 de
+# confiance, celle de Cyril à 0,997 — le seuil qui exclurait l'une
+# exclurait l'autre. Ce qui les sépare n'est pas la qualité du signal,
+# c'est l'intention : l'une s'adresse à Luca's, l'autre non.
+#
+# Le mot est comparé après `normalize()` (accents, casse) et retrait de la
+# ponctuation : c'est Whisper qui écrit, et « Luca's » lui revient tantôt
+# « Lucas », tantôt « Luca », parfois « Lukas ».
+
+
+def _leading_words(text: str) -> list[str]:
+    """Mots normalisés du texte, ponctuation d'adressage absorbée."""
+    cleaned = normalize(text)
+    for sign in (",", ".", "!", "?", ":", ";", "'", "’"):
+        cleaned = cleaned.replace(sign, " ")
+    return cleaned.split()
+
+
+def has_wake_word(text: str, wake_words: Sequence[str]) -> bool:
+    """
+    Vrai si `text` COMMENCE par le mot d'adressage.
+
+    Uniquement en tête : « je parlais de Lucas à mon frère » ne doit pas
+    valider un tour. C'est la même exigence de position que
+    `is_stop_command`, pour la même raison — une recherche de
+    sous-chaîne transformerait toute mention du nom en interpellation.
+    """
+    words = _leading_words(text)
+    if not words:
+        return False
+    return words[0] in {normalize(w) for w in wake_words}
+
+
+def strip_wake_word(text: str, wake_words: Sequence[str]) -> str:
+    """
+    Retire le mot d'adressage en tête, en gardant le texte D'ORIGINE.
+
+    Travaille sur le texte brut plutôt que sur sa version normalisée : ce
+    qui part au modèle doit garder ses accents et sa ponctuation. Seul le
+    repérage se fait sur la forme normalisée.
+
+    Rendu vide si le tour ne contenait QUE le mot d'adressage — appeler
+    Luca's sans rien dire n'est pas une question, et l'appelant doit
+    pouvoir le voir.
+    """
+    if not has_wake_word(text, wake_words):
+        return text.strip()
+    # Le premier mot du texte brut correspond au mot d'adressage repéré :
+    # on le coupe là où il finit, puis on absorbe la ponctuation qui le
+    # sépare de la suite (« Luca's, quelle heure est-il ? »).
+    stripped = text.strip()
+    parts = stripped.split(maxsplit=1)
+    rest = parts[1] if len(parts) > 1 else ""
+    return rest.lstrip(" ,.!?:;'’")

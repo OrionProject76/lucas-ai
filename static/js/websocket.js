@@ -28,6 +28,7 @@ window.Lucas = window.Lucas || {};
             onSecurityStatus,
             onSpeech,
             onVoiceCommand,
+            onTurnIgnored,
             onError,
             onConnectionChange,
         }) {
@@ -40,6 +41,8 @@ window.Lucas = window.Lucas || {};
             // voice_command()) — distincte de "speech" (réponse SYNTHÉTISÉE) :
             // ce message ne transporte jamais d'audio, juste une action.
             this.onVoiceCommand = onVoiceCommand || (() => {});
+            // Tour capté mais non retenu en mode mains libres (13/08/2026).
+            this.onTurnIgnored = onTurnIgnored || (() => {});
             this.onError = onError;
             this.onConnectionChange = onConnectionChange || (() => {});
             this.socket = null;
@@ -155,6 +158,13 @@ window.Lucas = window.Lucas || {};
                     break;
                 case "voice_command":
                     this.onVoiceCommand(data.action || "");
+                    break;
+                case "turn_ignored":
+                    // Un tour capté n'a pas été retenu (langue, absence de
+                    // mot d'adressage…). Doit TOUJOURS être traité, même
+                    // sans rien afficher : c'est lui qui rouvre le micro.
+                    // Voir api/protocol.py, turn_ignored().
+                    this.onTurnIgnored(data.reason || "");
                     break;
                 case "error":
                     this.onError(data.detail || "erreur inconnue");

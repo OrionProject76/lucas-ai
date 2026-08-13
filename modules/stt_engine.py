@@ -38,7 +38,12 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from config import STT_CACHE_SIZE, STT_MODEL_SIZE
+from config import (
+    STT_CACHE_SIZE,
+    STT_MAX_NO_SPEECH_PROB,
+    STT_MIN_SPEECH_SECONDS,
+    STT_MODEL_SIZE,
+)
 
 SUPPORTED_LANGUAGES = ("fr", "en")
 
@@ -49,21 +54,85 @@ class STTUnavailable(Exception):
 
 @dataclass
 class TranscriptResult:
-    """Résultat d'une transcription."""
+    """Résultat d'une transcription.
+
+    ⚠️ `confidence` ne dit PAS ce que son nom laisse croire — précisé le
+    13/08/2026 après une mesure (ROADMAP.md §5.98). Avec le backend
+    faster-whisper, c'est `info.language_probability` : la probabilité que
+    la LANGUE détectée soit la bonne. Rien sur la qualité de la
+    transcription, rien sur la nature de la source.
+
+    Conséquence mesurée : une voix de télévision passe le seuil sans
+    difficulté (0,977 sur « Thank you. Good night. »), parce que sa langue
+    est parfaitement identifiable. Le seuil ne filtre le silence (0,305)
+    que parce que Whisper y hésite sur la langue, par accident.
+
+    `no_speech_prob` et `speech_seconds` sont donc exposés à côté : eux
+    répondent à « est-ce de la parole, et assez longue ? ». Aucun des
+    trois ne répond à « est-ce Cyril qui parle » — c'est le mot
+    d'adressage (core/voice_commands.py) qui s'en charge.
+    """
 
     text: str
     language: str
     confidence: float
     duration_seconds: float
     segments: list[dict] = field(default_factory=list)
+    # Moyenne des `no_speech_prob` de segment. Mesuré le 13/08/2026 :
+    # silence 0,862 — parole 0,002 à 0,012. Deux ordres de grandeur
+    # d'écart, d'où un seuil qui peut être posé loin des deux bords.
+    no_speech_prob: float | None = None
+    # Durée cumulée des segments de parole, distincte de
+    # `duration_seconds` (durée de l'enregistrement entier) : trois
+    # secondes d'audio dont 0,2 de parole sont une bribe, pas un tour.
+    speech_seconds: float | None = None
+
+    # ⚠️ `None` = NON MESURÉ, et se lit « on ne sait pas », jamais « c'est
+    # mauvais ». Ces deux champs valaient d'abord 0.0 par défaut : un
+    # backend qui ne les renseignerait pas aurait alors fait rejeter TOUS
+    # les tours, micro muet sans un message — la panne silencieuse qu'on
+    # passe ses journées à corriger ailleurs. Un test l'a montré avant
+    # qu'elle n'atteigne Cyril (test_server, « un enregistrement valide ne
+    # doit pas être avalé »). Les deux backends réels les renseignent
+    # toujours ; un filtre ne doit pas dépendre d'une donnée manquante
+    # pour se déclencher.
 
     @property
     def is_confident(self) -> bool:
         """
         Seuil bas assumé : Whisper est prudent sur du français bruité, et
         un seuil trop haut ferait ignorer des phrases correctes.
+
+        ⚠️ Ne protège que du silence, pas d'une source sonore tierce —
+        voir la docstring de la classe. Conservé tel quel : il élimine
+        réellement le silence, ce qu'aucun des deux autres critères ne
+        rend inutile.
         """
         return self.confidence >= 0.6
+
+    @property
+    def is_speech(self) -> bool:
+        """Vrai si Whisper a bien entendu de la parole, pas du bruit.
+
+        Vrai aussi quand la mesure est absente — voir la note ci-dessus.
+        """
+        if self.no_speech_prob is None:
+            return True
+        return self.no_speech_prob <= STT_MAX_NO_SPEECH_PROB
+
+    @property
+    def has_enough_speech(self) -> bool:
+        """Vrai si la parole dure assez pour être un tour, pas une bribe.
+
+        Vrai aussi quand la mesure est absente — voir la note ci-dessus.
+        """
+        if self.speech_seconds is None:
+            return True
+        return self.speech_seconds >= STT_MIN_SPEECH_SECONDS
+
+    def is_language(self, expected: str) -> bool:
+        """Vrai si la langue détectée est celle attendue (ex. « fr »)."""
+        return (self.language or "").lower() == expected.lower()
 
 
 class STTEngine:
@@ -222,16 +291,37 @@ class _FasterWhisperBackend:
 
     def transcribe(self, audio) -> TranscriptResult:
         segments, info = self.model.transcribe(audio, language=None)
-        collected = [
-            {"start": s.start, "end": s.end, "text": s.text} for s in segments
-        ]
+        # `no_speech_prob` est porté par CHAQUE segment, jamais globalement
+        # — d'où la moyenne. Relevé dans la MÊME passe que `collected` :
+        # `segments` est un générateur, il ne se relit pas deux fois.
+        #
+        # Gardé HORS de `collected` : la forme des dictionnaires de segment
+        # est un contrat déjà utilisé ailleurs, et cette métrique n'a
+        # d'intérêt qu'agrégée.
+        collected: list[dict] = []
+        probs: list[float] = []
+        for s in segments:
+            collected.append({"start": s.start, "end": s.end, "text": s.text})
+            prob = getattr(s, "no_speech_prob", None)
+            if prob is not None:
+                probs.append(float(prob))
         text = "".join(s["text"] for s in collected).strip()
+        # Aucun segment = rien à transcrire. 1.0 (« pas de parole ») plutôt
+        # que 0.0, qui affirmerait exactement l'inverse de ce qu'on sait.
+        no_speech = sum(probs) / len(probs) if probs else 1.0
+        speech = sum(
+            float(s["end"]) - float(s["start"])
+            for s in collected
+            if s["start"] is not None and s["end"] is not None
+        )
         return TranscriptResult(
             text=text,
             language=info.language,
             confidence=float(info.language_probability),
             duration_seconds=float(info.duration),
             segments=collected,
+            no_speech_prob=float(no_speech),
+            speech_seconds=float(speech),
         )
 
 
@@ -250,10 +340,19 @@ class _OpenAIWhisperBackend:
         ]
         confidence = 1.0 - (sum(probabilities) / len(probabilities)) if probabilities else 0.0
         duration = segments[-1].get("end", 0.0) if segments else 0.0
+        # Ce backend expose déjà `no_speech_prob` par segment — la même
+        # moyenne que ci-dessus, ici seulement réutilisée telle quelle au
+        # lieu d'être retournée sous forme inversée.
+        no_speech = sum(probabilities) / len(probabilities) if probabilities else 1.0
+        speech = sum(
+            float(s.get("end", 0.0)) - float(s.get("start", 0.0)) for s in segments
+        )
         return TranscriptResult(
             text=raw.get("text", "").strip(),
             language=raw.get("language", "??"),
             confidence=float(confidence),
             duration_seconds=float(duration),
             segments=segments,
+            no_speech_prob=float(no_speech),
+            speech_seconds=float(speech),
         )
