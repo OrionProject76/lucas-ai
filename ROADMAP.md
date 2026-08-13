@@ -9837,6 +9837,174 @@ le vrai téléphone avant de considérer ce point clos.
 
 Session log : `cowork_workspace/SESSION_LOG_RETRAIT_CAPTURE_ECRAN_MOBILE_2026-08-12.md`.
 
+## 5.93 Pont capteurs téléphone → session PC — le téléphone devient les yeux et les oreilles du PC, 12/08/2026
+
+Brief : `cowork_workspace/BRIEF_PONT_CAPTEURS_TELEPHONE_PC.md`. Le PC n'a ni
+micro ni webcam (D-6, matériel pas encore acheté) : en attendant, le
+téléphone sert de capteur, et le tour de conversation doit arriver dans la
+session desktop PySide6 au lieu de rester dans la boucle PWA.
+
+### Étape préalable obligatoire (brief §3) — réponse nette, à moitié rassurante
+
+**L'historique est DÉJÀ entièrement partagé** : base unique
+`memory/lucas_memory.db`, table `conversations`, `load_history()` fait un
+`SELECT role, message ... ORDER BY id` **sans aucun WHERE**. Desktop, PWA,
+Godot et le daemon écrivent tous dans le même fil. La distinction
+desktop/mobile n'existe qu'en transport (`client_type`, `api/server.py`) et
+**est perdue à l'écriture** — aucune colonne `session`, `client` ou `device`.
+
+**Mais le canal temps réel n'existait pas du tout**, et c'était là le vrai
+chantier :
+
+| Constat | Conséquence |
+|---|---|
+| Aucun registre de connexions, aucun broadcast — chaque WebSocket ne répondait qu'à son propre émetteur | Un message PWA ne pouvait structurellement jamais atteindre le desktop |
+| Écriture en base totalement silencieuse (aucun signal, callback, observateur) | Le seul « canal » entre clients était le fichier SQLite, relu au prochain démarrage |
+| `_load_history()` appelé **une seule fois**, à la construction de la fenêtre | Ce que Cyril disait au téléphone était déjà en base, mais invisible jusqu'à un redémarrage de l'app PC |
+| Le desktop appelle `LucasCore` en process, sans aucune connexion au serveur | Il n'était client de rien |
+
+Sondage de la base écarté : le serveur sait déjà exactement quand un tour se
+termine et sa réponse transite déjà par un WebSocket — un sondage aurait
+ajouté une source de vérité concurrente, avec sa latence propre, pour
+redécouvrir après coup ce que le serveur pouvait dire à l'instant même.
+
+### Décisions de Cyril prises en mode plan, avant toute ligne de code
+
+1. **Sortie voix au choix** (téléphone/PC) plutôt qu'un côté figé — le PC a
+   bien des enceintes utilisables, vérifié (Realtek/NVIDIA + `pygame.mixer`
+   déjà employé par `TTSWorker`), contrairement à ce que supposait le brief.
+2. **Capteurs seulement** (micro + appareil photo) : le texte tapé dans la
+   PWA reste une conversation mobile ordinaire, sinon le téléphone
+   cesserait d'être utilisable seul dès le mode allumé.
+3. **Certificat** : tranché à l'implémentation, sur mesure réelle.
+
+### Construit
+
+- **`api/protocol.py`** — `sensor_message(role, text, speak_here)`,
+  `sensor_status(active)`, `read_pc_sensor_flag()`, `read_tts_target()`.
+  Type distinct de `chat` volontairement : un client qui ne connaît pas
+  `sensor_message` l'ignore (websocket.js a un `default: break`, le match
+  de Godot n'a pas de branche par défaut), alors qu'un champ ajouté à
+  `chat` aurait fait afficher deux fois la même réponse partout.
+  **Seul le TEXTE voyage**, jamais l'audio : les deux processus sont sur la
+  même machine, le desktop a déjà son `VoiceManager`.
+- **`api/server.py`** — `_desktop_clients: set[WebSocket]`, **le premier
+  état partagé entre connexions de tout le fichier**. Alimenté par un
+  `hello` `client: "lucas_desktop"`, purgé dans le `finally` existant.
+  `_fanout_to_desktops()` protège chaque envoi séparément et retire la
+  connexion morte au passage — un desktop tombé ne doit pas voler son tour
+  de parole au téléphone.
+- **PWA** — `static/js/pc_sensor.js` (nouveau), deux réglages dans le
+  tiroir : le mode capteur, et la sortie voix qui n'apparaît que si le mode
+  est actif (un réglage sans effet visible serait trompeur). Les drapeaux
+  sont posés dans `websocket.js::_tagPcSensor()`, donc `audio.js`,
+  `camera.js` et `conversation_mode.js` n'ont **rien** à connaître du mode —
+  c'est ce qui garantit la non-régression. Absent de `sendChat()` par
+  construction. `CACHE_NAME` v21 → v22.
+- **Desktop** — `ui/sensor_bridge.py` (nouveau) : `QWebSocket` dédié,
+  jeton dans les sous-protocoles (jamais la query string, même doctrine que
+  la PWA), reconnexion toutes les 3 s si le serveur démarre après l'app.
+  Trois signaux Qt seulement — il ne décide de rien, `MainWindow` garde
+  toute la logique d'affichage. **Aucun appel à `LucasCore` ici** : le
+  serveur a déjà traité le tour et l'a déjà écrit en mémoire ; le retraiter
+  produirait une deuxième réponse et une deuxième ligne d'historique.
+
+### Certificat — tranché par la mesure, pas par prudence
+
+Le serveur écoute en HTTPS (certificat `mkcert`). **Vérifié réellement** :
+Python et Qt valident tous deux ce certificat via le magasin Windows, sans
+la moindre erreur TLS (`sslErrors` jamais émis, handshake accepté du
+premier coup). **Aucun assouplissement n'a donc été posé** — ni
+`ignoreSslErrors()`, ni écoute en clair, alors que les deux options étaient
+sur la table. Si la connexion échoue un jour en TLS, la bonne réponse sera
+de réinstaller la CA mkcert, jamais de désactiver la vérification.
+
+### 🔴 Bug réel évité par ruff — un `closeEvent` déjà existant
+
+La fermeture du pont avait d'abord été écrite dans un nouveau
+`closeEvent()`… alors que `MainWindow` en possédait déjà un (l.799).
+Python garde la DERNIÈRE définition : la mienne n'aurait jamais tourné, le
+socket et son timer de reconnexion auraient survécu à la fermeture de la
+fenêtre, silencieusement. Trouvé par `ruff` (F811) avant tout test —
+la fermeture est désormais intégrée au `closeEvent` existant.
+
+### Vérifié réellement
+
+- **23 nouveaux tests** (10 d'intégration WebSocket sur `TestClient`
+  Starlette — vrai transport, seuls STT/LucasCore doublés — et 13 sur le
+  protocole/la config). Suite complète : **1668 passed**, `ruff` propre,
+  `mypy` sans nouvelle erreur.
+- **Test réel de bout en bout**, contre un vrai serveur uvicorn lancé sur
+  un port séparé (8001/8002) pour ne pas toucher au service dont Cyril
+  dépend : vrai audio de parole synthétisé → **réellement transcrit par
+  Whisper** (« Bonjour Lucas, quelle heure est-il ? », confiance 0,99) →
+  vrai `LucasCore`/Ollama → réponse **« Il est deux heures huit du
+  matin. »** affichée dans la session PC via le vrai `SensorBridge` Qt.
+  Question puis réponse, dans l'ordre.
+- **Sortie PC vérifiée dans le même test** : `speak_here` reçu côté
+  desktop ET **aucun `speech` envoyé au téléphone** — c'était le vrai
+  risque du réglage, la réponse sortant des deux côtés à la fois.
+- **Toggle dans les deux sens** testé sur le vrai canal : `[True, False]`
+  reçus par la session PC.
+- **Non-régression** : un audio sans le drapeau ne relaie rien, et un
+  `chat` tapé ne traverse jamais le pont, même mode allumé.
+
+**Non vérifié, honnêtement** : rien n'a été testé depuis le vrai S25 Ultra
+ni depuis la fenêtre PySide6 réellement ouverte à l'écran — le pont a été
+exercé par son vrai code (`SensorBridge`), pas par l'application lancée.
+Restent à confirmer par Cyril : l'affichage dans la fenêtre, l'indicateur
+« 📡 Capteurs mobiles connectés », et la voix sortant réellement des
+enceintes du PC.
+
+Session log : `cowork_workspace/SESSION_LOG_PONT_CAPTEURS_2026-08-12.md`.
+
+## 5.94 🔴 Panne totale du cerveau local — un nom de variable emprunté à Ollama, 12/08/2026
+
+Trouvée en validant §5.93, sans aucun rapport avec ce chantier. **Le chat
+local de Luca's était entièrement en panne sur la machine de Cyril** :
+toute question locale répondait « [Erreur] Problème réseau avec Ollama :
+Invalid URL '0.0.0.0/api/chat': No scheme supplied ». Vérifié sur le
+serveur RÉEL (port 8000, celui du pont mobile), pas seulement en test.
+
+### Cause
+
+`config.py:33` lisait `OLLAMA_HOST` depuis l'environnement pour en faire
+l'URL d'appel. Ce nom **ne nous appartient pas** : c'est la variable
+standard d'Ollama, et elle répond à la question **inverse** de la nôtre —
+sur quelle interface le *serveur* ollama doit **écouter**. Cyril l'avait
+posée à `0.0.0.0` (persistante, niveau utilisateur), ce qui est
+exactement la valeur recommandée pour rendre Ollama joignable depuis le
+téléphone : un réglage correct, posé pour une bonne raison.
+
+La ligne en faisait alors une URL cliente `0.0.0.0/api/chat`, sans schéma
+ni port. `modules/rag_manager.py` lit la même constante : les embeddings
+RAG tombaient de la même façon.
+
+La surcharge par environnement avait été ajoutée le 05/08 (§5.42) pour
+pouvoir pointer la suite de tests vers un port mort. Personne n'avait vu
+que le nom choisi était déjà pris par un autre programme.
+
+### Correctif (choix de Cyril : variable dédiée, pas normalisation)
+
+`OLLAMA_HOST = os.getenv("LUCAS_OLLAMA_HOST", "http://127.0.0.1:11434")`.
+La constante Python garde son nom (lue par `rag_manager.py` et les tests),
+seule la source change. Écarté sciemment : « réparer » la valeur reçue
+(ajouter le schéma, remplacer 0.0.0.0 par 127.0.0.1) — `0.0.0.0` est
+valide pour « où écouter » et n'a aucun sens pour « où appeler » ; ce
+n'est pas une valeur à rattraper, c'est un nom à ne pas emprunter.
+
+**Vérifié** : avec `OLLAMA_HOST=0.0.0.0` toujours posée dans
+l'environnement, `OLLAMA_URL` redevient `http://127.0.0.1:11434/api/chat`,
+et le test réel de §5.93 obtient ensuite une vraie réponse d'Ollama. Le
+réglage `0.0.0.0` de Cyril continue de servir au serveur Ollama, intact.
+Nouveau fichier `test_config_env.py` (4 tests) pour que le nom ne soit
+plus jamais réemprunté.
+
+⚠️ **Le service en cours n'a pas été redémarré** : le correctif est dans le
+code, mais le serveur qui tourne (PID 9872, lancé avant) garde son
+environnement. Cyril doit redémarrer `LucasAPIServer` — ou le PC — pour
+que le chat local reparte.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

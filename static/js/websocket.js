@@ -171,6 +171,7 @@ window.Lucas = window.Lucas || {};
             // absent pour le micro push-to-talk classique (audio.js),
             // où dire "stop" doit rester un message normal.
             if (conversationMode) payload.conversation_mode = true;
+            this._tagPcSensor(payload);
             this._send(payload);
         }
 
@@ -178,7 +179,28 @@ window.Lucas = window.Lucas || {};
             const payload = { type: "image", image_base64: imageBase64 };
             if (text) payload.text = text;
             if (speak) payload.speak = true;
+            this._tagPcSensor(payload);
             this._send(payload);
+        }
+
+        // Posé ici plutôt que dans chaque appelant : audio.js, camera.js
+        // et conversation_mode.js envoient tous par ces deux méthodes, et
+        // aucun d'eux n'a à connaître le mode capteur. Volontairement
+        // ABSENT de sendChat() — le pont transporte les capteurs, pas le
+        // clavier (décision du 12/08, voir pc_sensor.js).
+        _tagPcSensor(payload) {
+            const sensor = window.Lucas.pcSensor;
+            if (sensor && sensor.isActive()) {
+                payload.pc_sensor = true;
+                payload.tts_target = sensor.ttsTarget();
+            }
+        }
+
+        // Bascule du mode côté téléphone — sert l'indicateur du desktop.
+        // N'est jamais une question : le serveur la traite avant tout
+        // traitement de conversation (api/server.py).
+        sendPcSensorMode(active) {
+            this._send({ type: "pc_sensor_mode", active: !!active });
         }
     }
 

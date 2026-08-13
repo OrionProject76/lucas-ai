@@ -1779,5 +1779,288 @@ def test_push_security_status_stops_on_a_broken_connection() -> None:
     asyncio.run(_push_security_status(_BrokenWebSocket()))  # type: ignore[arg-type]  # ne doit jamais lever ni boucler
 
 
+# ── Pont capteurs téléphone → session PC (12/08/2026) ──────────────────
+#
+# Le téléphone sert de micro et d'appareil photo au Luca's du PC, le temps
+# que le vrai matériel arrive (D-6). C'est le PREMIER mécanisme du projet
+# où un message d'un client atteint un AUTRE client : jusqu'ici chaque
+# WebSocket était totalement isolé. Ces tests figent les deux garanties
+# qui comptent — que le relais parte quand Cyril l'a demandé, et surtout
+# qu'il ne parte JAMAIS quand il ne l'a pas demandé.
+
+
+@pytest.fixture(autouse=True)
+def _clean_desktop_registry():
+    """
+    Le registre est un état de MODULE, pas de connexion : sans ce
+    nettoyage, une session PC d'un test survivrait aux suivants et
+    ferait passer des tests de non-relais pour de mauvaises raisons.
+    """
+    from api.server import _desktop_clients
+
+    _desktop_clients.clear()
+    yield
+    _desktop_clients.clear()
+
+
+def _collecte_sensor(ws_desktop, limit: int = 20) -> list[dict]:
+    """
+    Tout ce que la session PC reçoit du pont, en ignorant les pousseurs
+    de fond (`system` toutes les secondes, `security_status`) qui
+    noieraient l'assertion.
+    """
+    vus = []
+    for _ in range(limit):
+        message = ws_desktop.receive_json()
+        if message.get("type") in ("sensor_message", "sensor_status"):
+            vus.append(message)
+            if message.get("role") == "assistant":
+                break
+    return vus
+
+
+def test_audio_from_the_phone_reaches_the_desktop_session(
+    client, fake_core, fake_stt
+) -> None:
+    """
+    Le cas nominal du brief : Cyril parle dans le téléphone, la question
+    ET la réponse arrivent dans la session PC.
+    """
+    with client.websocket_connect("/ws") as pc:
+        pc.send_json({"type": "hello", "client": "lucas_desktop"})
+        _next_of_type(pc, "chat")  # accusé de connexion
+
+        with client.websocket_connect("/ws") as phone:
+            phone.send_json({"type": "hello", "client": "lucas_pwa"})
+            phone.send_json({
+                "type": "audio",
+                "audio_base64": "ZmF1eC1hdWRpbw==",
+                "pc_sensor": True,
+            })
+            relayes = _collecte_sensor(pc)
+
+    roles = [m["role"] for m in relayes if m["type"] == "sensor_message"]
+    assert roles == ["user", "assistant"], (
+        "la question doit précéder la réponse, et les deux doivent arriver"
+    )
+    # C'est la TRANSCRIPTION qui voyage, jamais le son.
+    assert relayes[0]["text"] == "audio transcrit"
+    assert "audio_base64" not in relayes[0]
+
+
+def test_a_photo_from_the_phone_reaches_the_desktop_session(client, fake_core) -> None:
+    """Second capteur du brief : l'appareil photo."""
+    import base64
+
+    pixel = base64.b64encode(b"\xff\xd8\xff\xe0 faux jpeg").decode()
+
+    with client.websocket_connect("/ws") as pc:
+        pc.send_json({"type": "hello", "client": "lucas_desktop"})
+        _next_of_type(pc, "chat")
+
+        with client.websocket_connect("/ws") as phone:
+            phone.send_json({"type": "hello", "client": "lucas_pwa"})
+            phone.send_json({
+                "type": "image",
+                "image_base64": pixel,
+                "text": "c'est quoi ?",
+                "pc_sensor": True,
+            })
+            relayes = _collecte_sensor(pc)
+
+    assert [m["role"] for m in relayes] == ["user", "assistant"]
+
+
+def test_nothing_reaches_the_desktop_without_the_flag(client, fake_core, fake_stt) -> None:
+    """
+    ⚠️ LA non-régression qui compte (brief §6) : le mode vocal mobile
+    doit se comporter EXACTEMENT comme avant quand le mode capteur est
+    éteint. Un relais par défaut trahirait la règle « jamais un
+    comportement par défaut silencieux ».
+    """
+    with client.websocket_connect("/ws") as pc:
+        pc.send_json({"type": "hello", "client": "lucas_desktop"})
+        _next_of_type(pc, "chat")
+
+        with client.websocket_connect("/ws") as phone:
+            phone.send_json({"type": "hello", "client": "lucas_pwa"})
+            phone.send_json({"type": "audio", "audio_base64": "ZmF1eC1hdWRpbw=="})
+            # Le téléphone, lui, reçoit bien sa réponse par le chemin normal.
+            assert _next_of_type(phone, "chat", limit=25)["text"]
+
+            recus = []
+            for _ in range(12):
+                recus.append(pc.receive_json().get("type"))
+
+    assert "sensor_message" not in recus
+
+
+def test_typed_text_never_crosses_the_bridge(client, fake_core) -> None:
+    """
+    Décision de Cyril du 12/08 : le pont transporte les CAPTEURS, pas le
+    clavier. Un « chat » tapé dans la PWA reste une conversation mobile,
+    même toggle allumé — sinon le téléphone cesserait d'être utilisable
+    seul dès que le mode est actif.
+    """
+    with client.websocket_connect("/ws") as pc:
+        pc.send_json({"type": "hello", "client": "lucas_desktop"})
+        _next_of_type(pc, "chat")
+
+        with client.websocket_connect("/ws") as phone:
+            phone.send_json({"type": "hello", "client": "lucas_pwa"})
+            phone.send_json({"type": "chat", "message": "bonjour", "pc_sensor": True})
+            assert _next_of_type(phone, "chat", limit=25)["text"]
+
+            recus = []
+            for _ in range(12):
+                recus.append(pc.receive_json().get("type"))
+
+    assert "sensor_message" not in recus
+
+
+def test_the_toggle_is_relayed_both_ways(client) -> None:
+    """
+    L'indicateur du PC doit s'éteindre aussi sûrement qu'il s'allume :
+    un indicateur resté allumé après que le téléphone a été rangé serait
+    pire que pas d'indicateur du tout.
+    """
+    with client.websocket_connect("/ws") as pc:
+        pc.send_json({"type": "hello", "client": "lucas_desktop"})
+        _next_of_type(pc, "chat")
+
+        with client.websocket_connect("/ws") as phone:
+            phone.send_json({"type": "pc_sensor_mode", "active": True})
+            allume = _next_of_type(pc, "sensor_status", limit=20)
+            phone.send_json({"type": "pc_sensor_mode", "active": False})
+            eteint = _next_of_type(pc, "sensor_status", limit=20)
+
+    assert allume["active"] is True
+    assert eteint["active"] is False
+
+
+def test_the_toggle_never_reaches_the_model(client, fake_core) -> None:
+    """
+    Une bascule d'interface n'est pas une question : elle ne doit jamais
+    devenir un tour de conversation ni coûter un appel au modèle — même
+    raisonnement que l'interception de la commande vocale « stop ».
+
+    Le double ne retient que le DERNIER message reçu par ask() : après
+    une bascule suivie d'une vraie question, y lire la question prouve
+    que la bascule n'a rien déclenché entre les deux.
+    """
+    with client.websocket_connect("/ws") as phone:
+        phone.send_json({"type": "pc_sensor_mode", "active": True})
+        phone.send_json({"type": "chat", "message": "bonjour"})
+        assert _next_of_type(phone, "chat", limit=25)["text"]
+
+    assert fake_core["asked"] == "bonjour"
+
+
+def test_pc_output_silences_the_phone_and_asks_the_desktop_to_speak(
+    client, fake_core, fake_stt, fake_voice
+) -> None:
+    """
+    Sortie « PC » : la réponse ne doit surgir que d'UN côté. Sans la
+    garde côté serveur, elle sortirait des deux à la fois — le vrai
+    risque de ce réglage.
+    """
+    with client.websocket_connect("/ws") as pc:
+        pc.send_json({"type": "hello", "client": "lucas_desktop"})
+        _next_of_type(pc, "chat")
+
+        with client.websocket_connect("/ws") as phone:
+            phone.send_json({"type": "hello", "client": "lucas_pwa"})
+            phone.send_json({
+                "type": "audio",
+                "audio_base64": "ZmF1eC1hdWRpbw==",
+                "pc_sensor": True,
+                "speak": True,
+                "tts_target": "pc",
+            })
+            relayes = _collecte_sensor(pc)
+
+            recus_phone = []
+            for _ in range(15):
+                message = phone.receive_json()
+                recus_phone.append(message.get("type"))
+                if message.get("type") == "avatar_state" and message.get("state") == "idle":
+                    break
+
+    reponse = next(m for m in relayes if m.get("role") == "assistant")
+    assert reponse["speak_here"] is True
+    assert "speech" not in recus_phone, "la voix ne doit pas sortir aussi du téléphone"
+    assert fake_voice.get("text") is None, "aucune synthèse serveur pour une sortie PC"
+
+
+def test_phone_output_keeps_the_existing_behaviour(
+    client, fake_core, fake_stt, fake_voice
+) -> None:
+    """Défaut « phone » : le pipeline TTS existant, strictement inchangé."""
+    with client.websocket_connect("/ws") as pc:
+        pc.send_json({"type": "hello", "client": "lucas_desktop"})
+        _next_of_type(pc, "chat")
+
+        with client.websocket_connect("/ws") as phone:
+            phone.send_json({"type": "hello", "client": "lucas_pwa"})
+            phone.send_json({
+                "type": "audio",
+                "audio_base64": "ZmF1eC1hdWRpbw==",
+                "pc_sensor": True,
+                "speak": True,
+            })
+            relayes = _collecte_sensor(pc)
+            assert _next_of_type(phone, "speech", limit=25)["audio_base64"]
+
+    reponse = next(m for m in relayes if m.get("role") == "assistant")
+    assert reponse["speak_here"] is False
+
+
+def test_a_disconnected_desktop_leaves_the_registry(client, fake_core, fake_stt) -> None:
+    """
+    Sans purge, une fenêtre PC fermée serait retentée à chaque message
+    jusqu'au redémarrage du serveur.
+    """
+    from api.server import _desktop_clients
+
+    with client.websocket_connect("/ws") as pc:
+        pc.send_json({"type": "hello", "client": "lucas_desktop"})
+        _next_of_type(pc, "chat")
+        assert len(_desktop_clients) == 1
+
+    # La fermeture du contexte déclenche le `finally` du handler.
+    with client.websocket_connect("/ws") as phone:
+        phone.send_json({"type": "hello", "client": "lucas_pwa"})
+        phone.send_json({
+            "type": "audio", "audio_base64": "ZmF1eC1hdWRpbw==", "pc_sensor": True,
+        })
+        assert _next_of_type(phone, "chat", limit=25)["text"]
+
+    assert _desktop_clients == set()
+
+
+def test_the_relay_survives_a_dead_desktop(client, fake_core, fake_stt) -> None:
+    """
+    Un desktop mort ne doit pas voler son tour de parole au téléphone :
+    Cyril doit obtenir sa réponse même si la fenêtre PC est tombée.
+    """
+    from api.server import _desktop_clients
+
+    class _MortAuPremierEnvoi:
+        async def send_json(self, data):
+            raise RuntimeError("fenêtre fermée sans handshake")
+
+    zombie = _MortAuPremierEnvoi()
+    _desktop_clients.add(zombie)  # type: ignore[arg-type]  # double volontaire
+
+    with client.websocket_connect("/ws") as phone:
+        phone.send_json({"type": "hello", "client": "lucas_pwa"})
+        phone.send_json({
+            "type": "audio", "audio_base64": "ZmF1eC1hdWRpbw==", "pc_sensor": True,
+        })
+        assert _next_of_type(phone, "chat", limit=25)["text"]
+
+    assert zombie not in _desktop_clients, "la connexion morte doit être retirée"
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

@@ -73,7 +73,7 @@
 // conversation_mode.js/app.js modifiés.
 // v20 (10/08/2026) : accueil mobile enrichi (compteurs demandes/économies/
 // sandbox) — home.js modifié, aucune nouvelle route.
-const CACHE_NAME = "lucas-shell-v21";
+const CACHE_NAME = "lucas-shell-v22";
 const SHELL_FILES = [
     "/app/",
     "/app/index.html",
@@ -91,6 +91,7 @@ const SHELL_FILES = [
     "/app/js/camera.js",
     "/app/js/vad.js",
     "/app/js/conversation_mode.js",
+    "/app/js/pc_sensor.js",
     "/app/js/home.js",
     "/app/js/app.js",
     "/app/icons/icon-192.png",

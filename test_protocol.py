@@ -140,6 +140,76 @@ def test_read_conversation_mode_flag(payload, expected: bool) -> None:
     assert protocol.read_conversation_mode_flag(payload) is expected
 
 
+# ── Pont capteurs téléphone → PC (12/08/2026) ─────────────────────────
+
+def test_sensor_message_carries_role_and_text() -> None:
+    assert protocol.sensor_message("user", "quelle heure est-il ?") == {
+        "type": "sensor_message",
+        "role": "user",
+        "text": "quelle heure est-il ?",
+        "speak_here": False,
+        "source_agent": "main",
+    }
+
+
+def test_sensor_message_can_ask_the_pc_to_speak() -> None:
+    """
+    Seul le texte voyage : `speak_here` demande au desktop de synthétiser
+    lui-même. Un champ audio ici signifierait qu'on transporte un son
+    entre deux processus de la même machine.
+    """
+    message = protocol.sensor_message("assistant", "il est midi", speak_here=True)
+    assert message["speak_here"] is True
+    assert "audio_base64" not in message
+
+
+def test_sensor_status_normalises_to_a_real_boolean() -> None:
+    """
+    L'indicateur du desktop lit ce champ tel quel — un 1 ou une chaîne
+    truthy s'afficherait aussi bien, mais figerait un type flottant dans
+    le protocole.
+    """
+    # int volontaire là où la signature annonce un bool : c'est
+    # exactement ce que le bool() de sensor_status() est là pour absorber.
+    # mypy a raison de le refuser en usage normal — d'où l'exception
+    # locale plutôt qu'une signature élargie qui l'autoriserait partout.
+    assert protocol.sensor_status(1)["active"] is True  # type: ignore[arg-type]
+    assert protocol.sensor_status(0)["active"] is False  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "payload, expected",
+    [
+        ({"pc_sensor": True}, True),
+        ({"pc_sensor": False}, False),
+        ({}, False),
+        ("pas un dict", False),
+    ],
+)
+def test_read_pc_sensor_flag(payload, expected: bool) -> None:
+    """Faux par défaut : le relais vers le PC ne s'active jamais tout seul."""
+    assert protocol.read_pc_sensor_flag(payload) is expected
+
+
+@pytest.mark.parametrize(
+    "payload, expected",
+    [
+        ({"tts_target": "pc"}, "pc"),
+        ({"tts_target": "phone"}, "phone"),
+        ({}, "phone"),
+        ({"tts_target": "enceinte"}, "phone"),  # inconnu -> comportement historique
+        ({"tts_target": 42}, "phone"),
+        ("pas un dict", "phone"),
+    ],
+)
+def test_read_tts_target(payload, expected: str) -> None:
+    """
+    Une valeur inconnue doit dégrader vers « phone », jamais lever : un
+    client mal à jour perd le choix de sortie, pas son tour de parole.
+    """
+    assert protocol.read_tts_target(payload) == expected
+
+
 def test_voice_command_carries_the_action() -> None:
     assert protocol.voice_command("stop") == {
         "type": "voice_command",

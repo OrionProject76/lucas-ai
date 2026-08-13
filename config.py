@@ -30,7 +30,22 @@ except ImportError:
 # poser `OLLAMA_HOST` dans l'environnement ne changeait rien, et la mesure
 # ne mesurait donc rien (ROADMAP.md §5.42). Le défaut est inchangé, seule
 # la possibilité de le surcharger est ajoutée.
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+#
+# ⚠️ RENOMMÉE en LUCAS_OLLAMA_HOST le 12/08/2026 — panne réelle, pas un
+# nettoyage (ROADMAP.md §5.94). `OLLAMA_HOST` n'est pas un nom libre :
+# c'est la variable STANDARD d'Ollama, qui dit au SERVEUR ollama sur
+# quelle interface ÉCOUTER. Cyril l'avait posée à « 0.0.0.0 » — la valeur
+# recommandée pour rendre Ollama joignable depuis le téléphone. La ligne
+# ci-dessous en faisait alors une URL CLIENTE : « 0.0.0.0/api/chat », sans
+# schéma ni port, donc invalide. Résultat mesuré sur la machine de Cyril :
+# TOUTE question locale répondait « [Erreur] Problème réseau avec Ollama »,
+# et les embeddings RAG (modules/rag_manager.py) tombaient pareil.
+#
+# Deux usages opposés du même nom : « où écouter » côté serveur, « où
+# appeler » côté client. 0.0.0.0 est valide pour le premier et n'a aucun
+# sens pour le second — ce n'est donc pas une valeur à réparer, c'est un
+# nom à ne pas emprunter.
+OLLAMA_HOST = os.getenv("LUCAS_OLLAMA_HOST", "http://127.0.0.1:11434")
 OLLAMA_URL = f"{OLLAMA_HOST}/api/chat"
 # ⚠️ Tag explicite obligatoire. « qwen2.5 » sans tag ne correspond à
 # aucun modèle exactement : Ollama devine « qwen2.5:latest », et cette

@@ -891,6 +891,16 @@ button.document-name:active {
     outline-offset: 2px;
 }
 
+/* Capteur PC actif (12/08/2026) — même vert que #conv-mode-toggle.active,
+   déjà employé pour « un mode est en cours », plutôt qu'une couleur de
+   plus : les deux réglages disent la même chose (le téléphone travaille
+   pour autre chose que lui-même). Le libellé change aussi — la couleur
+   seule ne dirait rien à qui la distingue mal. */
+.settings-action-on {
+    background: rgba(95, 214, 138, 0.14);
+    border-color: var(--success-green);
+}
+
 /* ── Volume TTS (ROADMAP.md §5.83 suite, 10/08/2026) ─────────────────── */
 
 .settings-volume-row {

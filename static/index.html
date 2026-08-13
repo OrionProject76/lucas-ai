@@ -151,6 +151,15 @@
                         <button type="button" id="volume-up" class="icon-btn-small" aria-label="Augmenter le volume">+</button>
                     </div>
                 </div>
+                <!-- Pont capteurs téléphone -> PC (12/08/2026, brief
+                     PONT_CAPTEURS). Activation EXPLICITE, jamais un défaut
+                     silencieux : tant que ce mode est éteint, le micro et
+                     l'appareil photo alimentent la conversation mobile
+                     exactement comme avant. La sortie voix n'apparaît que
+                     lorsque le mode est actif — un réglage sans effet
+                     visible serait un réglage trompeur. -->
+                <button type="button" class="settings-action" id="settings-pc-sensor">📡 Capteur pour le PC</button>
+                <button type="button" class="settings-action" id="settings-tts-target" hidden>🔈 Voix sur : téléphone</button>
                 <button type="button" class="settings-action" id="settings-security">🛡️ État de sécurité</button>
                 <button type="button" class="settings-action" id="settings-documents">📁 Mes documents</button>
                 <button type="button" class="settings-action" id="settings-finance">💰 Mes finances</button>
@@ -188,6 +197,7 @@
     <script src="/app/js/camera.js"></script>
     <script src="/app/js/vad.js"></script>
     <script src="/app/js/conversation_mode.js"></script>
+    <script src="/app/js/pc_sensor.js"></script>
     <script src="/app/js/home.js"></script>
     <script src="/app/js/app.js"></script>
 </body>

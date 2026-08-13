@@ -134,6 +134,17 @@
         });
         reflectVolume();
 
+        // Mode « capteur pour le PC » (BRIEF_PONT_CAPTEURS_TELEPHONE_PC.md).
+        // Exposé sur window.Lucas pour que websocket.js puisse taguer les
+        // envois des capteurs sans que audio.js/camera.js aient à le
+        // connaître — voir _tagPcSensor().
+        window.Lucas.pcSensor = new window.Lucas.PcSensor({
+            toggleEl: document.getElementById("settings-pc-sensor"),
+            targetEl: document.getElementById("settings-tts-target"),
+            socket,
+            onNotice: (text) => chat.addSystemNotice(text),
+        });
+
         // Mode conversation mains libres (BRIEF_MODE_VOCAL_CONTINU_MOBILE.md).
         conversationMode = new window.Lucas.ConversationMode({
             toggleEl: document.getElementById("conv-mode-toggle"),

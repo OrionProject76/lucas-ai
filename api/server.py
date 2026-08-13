@@ -79,6 +79,46 @@ _voice_manager = VoiceManager(log_event=save_event_from_any_thread)
 _AUDIO_MIME_TYPES = {".mp3": "audio/mpeg", ".wav": "audio/wav"}
 
 
+# ── Pont capteurs téléphone → session PC (12/08/2026) ──────────────────
+#
+# Le SEUL état partagé entre connexions WebSocket de tout ce fichier.
+# Jusqu'ici chaque handler était totalement isolé : un message de la PWA
+# ne pouvait structurellement pas atteindre un autre client. C'est
+# exactement ce qu'il fallait pour que le téléphone serve de micro et
+# d'appareil photo au Luca's du PC (brief PONT_CAPTEURS, D-6 en attente).
+#
+# ⚠️ Registre en MÉMOIRE DU PROCESSUS, pas en base : deux instances du
+# serveur (le cas aujourd'hui, voir ROADMAP.md §5.92) auraient deux
+# registres distincts. En pratique une seule détient le port 8000, donc
+# tous les clients atterrissent dans le même processus — mais si ce
+# symptôme est un jour corrigé par un vrai partage de charge, ce registre
+# devra devenir externe (Redis est déjà prévu au stack, CLAUDE.md §2).
+#
+# set() et pas list() : une connexion qui tombe est retirée par identité,
+# et l'ordre d'envoi entre plusieurs desktops n'a aucun sens à porter.
+_desktop_clients: set[WebSocket] = set()
+
+
+async def _fanout_to_desktops(payload: dict) -> None:
+    """
+    Envoie un message à toutes les sessions PC enregistrées.
+
+    ⚠️ Chaque envoi est protégé séparément : un desktop fermé brutalement
+    (fenêtre croisée sans handshake) ne doit pas faire échouer le tour de
+    parole en cours côté téléphone. La connexion morte est retirée du
+    registre au passage — sans quoi elle serait retentée à chaque message
+    jusqu'au redémarrage du serveur.
+
+    Itère sur une COPIE : on retire du set pendant la boucle.
+    """
+    for client in list(_desktop_clients):
+        try:
+            await client.send_json(payload)
+        except Exception:  # noqa: BLE001 — voir docstring : une session PC
+            # partie ne doit jamais interrompre le tour du téléphone.
+            _desktop_clients.discard(client)
+
+
 def _read_audio_b64(path: str) -> str:
     """Read an audio file and return its base64 payload.
 
@@ -650,8 +690,25 @@ async def websocket_endpoint(websocket: WebSocket):
             if message_type == "hello":
                 if data.get("client") == "lucas_pwa":
                     client_type = "mobile"
+                # Session PC (ui/sensor_bridge.py) : s'enregistre pour
+                # RECEVOIR ce que le téléphone capte. Elle ne pose jamais
+                # de question par ce canal — l'app desktop parle à
+                # LucasCore en direct, dans son propre processus.
+                elif data.get("client") == "lucas_desktop":
+                    client_type = "desktop"
+                    _desktop_clients.add(websocket)
                 await websocket.send_json(
                     protocol.chat("Luca's est connectée.", from_luca=True)
+                )
+                continue
+
+            # Bascule explicite du mode capteur côté téléphone — sert
+            # l'indicateur du desktop. Traité avant les messages de
+            # conversation : il n'en est pas un, il ne doit jamais
+            # atteindre LucasCore.
+            if message_type == "pc_sensor_mode":
+                await _fanout_to_desktops(
+                    protocol.sensor_status(bool(data.get("active")))
                 )
                 continue
 
@@ -831,6 +888,22 @@ async def websocket_endpoint(websocket: WebSocket):
             # la même valeur sert ensuite à décider de synthétiser ou non.
             speak_wanted = protocol.read_speak_flag(data)
 
+            # ── Pont capteurs téléphone → PC ──────────────────────────
+            # Strictement les CAPTEURS (micro, appareil photo), décision
+            # de Cyril du 12/08 : le texte tapé dans la PWA reste une
+            # conversation mobile ordinaire, exactement comme avant. Un
+            # "chat" ne traverse donc jamais ce pont, même toggle allumé.
+            relay_to_pc = protocol.read_pc_sensor_flag(data) and message_type in (
+                "audio",
+                "image",
+            )
+            # `speak_wanted` reste le maître : il dit S'IL faut parler,
+            # tts_target dit seulement OÙ. Voix mobile coupée = silence
+            # des deux côtés, pas un son qui surgit du PC.
+            speak_on_pc = relay_to_pc and speak_wanted and (
+                protocol.read_tts_target(data) == "pc"
+            )
+
             lucas = LucasCore()
             if image_path is not None:
                 # Photo du téléphone : le bouton caméra EST le signal, pas
@@ -856,6 +929,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     protocol.STATE_WATCHING if regarde else protocol.STATE_THINKING
                 )
             )
+
+            # La question part vers le PC AVANT la réponse : Cyril doit
+            # voir apparaître ce qu'il vient de dire pendant que Luca's
+            # réfléchit, pas les deux d'un bloc plusieurs secondes plus
+            # tard. Pour l'audio, `message` est déjà la transcription
+            # Whisper — c'est bien le texte, jamais le son, qui traverse.
+            if relay_to_pc:
+                await _fanout_to_desktops(protocol.sensor_message("user", message))
 
             # Console de flux (IDEAS.md #77). LucasCore.ask() est un appel
             # SYNCHRONE unique — impossible d'envoyer chaque événement au
@@ -901,6 +982,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 )
             )
 
+            if relay_to_pc:
+                await _fanout_to_desktops(
+                    protocol.sensor_message("assistant", answer, speak_here=speak_on_pc)
+                )
+
             # Voix (pont mobile TTS) : le texte part D'ABORD, la synthèse
             # ensuite — edge_tts prend plusieurs secondes (réseau), et
             # Cyril ne doit pas attendre l'audio pour lire la réponse.
@@ -908,7 +994,12 @@ async def websocket_endpoint(websocket: WebSocket):
             # (voir protocol.read_speak_flag) — même défaut que le toggle
             # TTS Auto de l'UI PySide6. Même valeur que celle déjà lue plus
             # haut pour adapter le prompt — pas de second appel.
-            if speak_wanted:
+            # `not speak_on_pc` : quand Cyril a choisi la sortie PC, la
+            # synthèse n'est pas seulement inutile ici, elle est nuisible —
+            # sans cette garde la réponse sortirait des DEUX côtés à la
+            # fois, avec le décalage d'edge_tts en prime. Le desktop
+            # synthétise de son côté, à partir du seul texte relayé.
+            if speak_wanted and not speak_on_pc:
                 try:
                     audio_path = await asyncio.to_thread(
                         _voice_manager.synthesize_routed, answer, message
@@ -962,6 +1053,10 @@ async def websocket_endpoint(websocket: WebSocket):
     finally:
         pusher.cancel()
         security_pusher.cancel()
+        # discard() et non remove() : la connexion n'y est que si elle
+        # s'est annoncée "lucas_desktop", et _fanout_to_desktops() a pu
+        # l'avoir déjà retirée en constatant sa mort.
+        _desktop_clients.discard(websocket)
 
 
 # ── PWA mobile (pont mobile, Phase 4) ──────────────────────────────────

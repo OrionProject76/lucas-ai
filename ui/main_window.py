@@ -30,6 +30,7 @@ from core.lucas_core import LucasCore
 from core.router import should_use_vision
 from memory.memory_manager import save_event_from_any_thread
 from modules.stt_engine import STTEngine, STTUnavailable
+from ui.sensor_bridge import SensorBridge
 
 # Instance unique, partagée entre toutes les transcriptions du bouton
 # micro — recharger Whisper à chaque fichier serait coûteux (même
@@ -365,6 +366,15 @@ class MainWindow(QWidget):
         self.status_label.setObjectName("status")
         self.status_label.setVisible(False)
 
+        # Indicateur du pont capteurs (brief PONT_CAPTEURS, 12/08/2026).
+        # Étiquette DISTINCTE de status_label, qui sert déjà à annoncer le
+        # traitement en cours et se masque tout seul (_on_token) : mêler
+        # les deux ferait disparaître l'indicateur à la première réponse.
+        self.sensor_label = QLabel("📡 Capteurs mobiles connectés")
+        self.sensor_label.setObjectName("status")
+        self.sensor_label.setProperty("variant", "watching")
+        self.sensor_label.setVisible(False)
+
         # Zone de saisie + boutons
         input_layout = QHBoxLayout()
 
@@ -409,6 +419,7 @@ class MainWindow(QWidget):
 
         # Assemblage droit
         right_layout.addWidget(title)
+        right_layout.addWidget(self.sensor_label)
         right_layout.addWidget(self.chat_history, stretch=1)
         right_layout.addWidget(self.status_label)
         right_layout.addLayout(input_layout)
@@ -423,6 +434,14 @@ class MainWindow(QWidget):
 
         self._load_history()
         self._set_avatar_state("IDLE")
+
+        # Pont capteurs téléphone → PC. Construit en DERNIER : il peut
+        # émettre dès la première réponse du serveur, et ses gestionnaires
+        # écrivent dans chat_history, qui doit donc déjà exister.
+        self.sensor_bridge = SensorBridge(self)
+        self.sensor_bridge.message_received.connect(self._on_sensor_message)
+        self.sensor_bridge.speak_requested.connect(self._on_sensor_speak)
+        self.sensor_bridge.sensor_mode_changed.connect(self.sensor_label.setVisible)
 
     # ── Avatar states ──
     def confirm_destructive(self, message: str) -> bool:
@@ -519,6 +538,40 @@ class MainWindow(QWidget):
         self.chat_history.append(
             f'<span style="color:{color};"><b>{speaker} :</b></span> {message}'
         )
+
+    # ── Pont capteurs téléphone → PC (brief PONT_CAPTEURS, 12/08/2026) ──
+
+    def _on_sensor_message(self, role: str, text: str):
+        """
+        Un tour capté par le téléphone, relayé par le serveur.
+
+        ⚠️ AFFICHAGE SEUL — jamais d'appel à LucasCore ici. Le serveur a
+        déjà traité ce tour de bout en bout (transcription, routage,
+        réponse) et l'a déjà écrit dans la mémoire partagée : le
+        retraiter produirait une deuxième réponse à la même question et
+        une deuxième ligne dans l'historique.
+        """
+        self._append(role, f"<i>[téléphone]</i> {text}" if role == "user" else text)
+        if role == "assistant":
+            # Mémorisé comme pour un échange local : le bouton « relire »
+            # et le routage TTS s'appuient dessus.
+            self.last_lucas_response = text
+
+    def _on_sensor_speak(self, text: str):
+        """
+        Cyril a choisi la sortie « PC » : c'est cette machine qui parle.
+
+        Le serveur n'a alors RIEN synthétisé (api/server.py saute la
+        synthèse dans ce cas) — sans quoi la réponse sortirait des deux
+        côtés à la fois. Seul le texte a voyagé ; la synthèse se fait ici,
+        avec le TTSWorker déjà utilisé par les réponses locales.
+        """
+        if self.tts_worker is not None and self.tts_worker.isRunning():
+            return
+        self.tts_worker = TTSWorker(text, "", log_event=save_event_from_any_thread)
+        self.tts_worker.error.connect(self._on_tts_error)
+        self.tts_worker.start()
+
 
     # ── Envoi message ──
     def send_message(self):
@@ -751,5 +804,8 @@ class MainWindow(QWidget):
             self.tts_worker.wait(2000)
         if self.stt_worker is not None and self.stt_worker.isRunning():
             self.stt_worker.wait(2000)
+        # Pont capteurs : sans cette fermeture, son timer de reconnexion
+        # relancerait un socket après la disparition de la fenêtre.
+        self.sensor_bridge.close()
         self.lucas.close()
         event.accept()

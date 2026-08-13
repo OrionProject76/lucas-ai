@@ -209,6 +209,98 @@ def voice_command(action: str) -> dict:
     return {"type": "voice_command", "action": action, "source_agent": DEFAULT_SOURCE_AGENT}
 
 
+# ── Pont capteurs téléphone → session PC (12/08/2026) ──────────────────
+#
+# Le téléphone sert de micro/appareil photo au Luca's du PC, le temps que
+# le vrai matériel arrive (D-6). Ces deux messages ne partent QUE vers les
+# clients desktop enregistrés (api/server.py, fan-out) — jamais vers le
+# mobile émetteur, qui a déjà sa propre réponse par le chemin normal.
+#
+# ⚠️ Type distinct de "chat" volontairement, plutôt qu'un champ de plus
+# sur un message existant : un client qui ne connaît pas "sensor_message"
+# l'ignore silencieusement (websocket.js a un `default: break`, le match
+# de Godot n'a pas de branche par défaut). Ajouter un champ à "chat"
+# aurait au contraire fait afficher deux fois la même réponse par tout
+# client déjà en place.
+
+
+def sensor_message(role: str, text: str, speak_here: bool = False) -> dict:
+    """
+    Un tour de conversation capté par le téléphone, relayé vers le PC.
+
+    `role` vaut "user" (la question, déjà transcrite par Whisper côté
+    serveur) ou "assistant" (la réponse de Luca's) — mêmes valeurs que la
+    colonne `role` de la table `conversations`, pour que le desktop les
+    affiche avec le code d'affichage qu'il utilise déjà pour son propre
+    historique.
+
+    `speak_here` : le PC doit prononcer cette réponse sur ses enceintes.
+    Seul le TEXTE voyage, jamais l'audio — le desktop a déjà son propre
+    VoiceManager/pygame (ui/main_window.py, TTSWorker), et refaire passer
+    un fichier son sur le WebSocket alors que les deux processus tournent
+    sur la même machine serait payer un transport pour rien.
+    """
+    return {
+        "type": "sensor_message",
+        "role": role,
+        "text": text,
+        "speak_here": speak_here,
+        "source_agent": DEFAULT_SOURCE_AGENT,
+    }
+
+
+def sensor_status(active: bool) -> dict:
+    """
+    Le mode « capteur pour le PC » vient d'être allumé ou éteint côté
+    téléphone — sert l'indicateur visible du desktop.
+
+    Envoyé sur bascule explicite de Cyril, jamais déduit d'un silence :
+    l'extinction doit être aussi certaine que l'allumage, sinon
+    l'indicateur resterait allumé après que le téléphone a été rangé.
+    """
+    return {
+        "type": "sensor_status",
+        "active": bool(active),
+        "source_agent": DEFAULT_SOURCE_AGENT,
+    }
+
+
+def read_pc_sensor_flag(data: dict) -> bool:
+    """
+    Ce message doit-il être traité comme une entrée de la session PC ?
+
+    Faux par défaut, comme read_speak_flag()/read_conversation_mode_flag() :
+    le relais vers le PC ne s'active que si le téléphone le demande
+    explicitement, jamais par défaut silencieux (brief §4).
+    """
+    if not isinstance(data, dict):
+        return False
+    return bool(data.get("pc_sensor"))
+
+
+# "phone" plutôt que "mobile" : c'est l'appareil qui parle, pas le type de
+# client — le desktop pourrait un jour être une tablette sans que ce
+# vocabulaire devienne faux.
+TTS_TARGETS = ("phone", "pc")
+DEFAULT_TTS_TARGET = "phone"
+
+
+def read_tts_target(data: dict) -> str:
+    """
+    De quel côté Luca's doit-elle parler : le téléphone ou le PC ?
+
+    Défaut "phone" — le comportement d'aujourd'hui. Une valeur inconnue
+    retombe sur le défaut plutôt que de lever : un client mal à jour doit
+    dégrader vers le comportement historique, pas casser le tour.
+    """
+    if not isinstance(data, dict):
+        return DEFAULT_TTS_TARGET
+    value = data.get("tts_target")
+    if isinstance(value, str) and value in TTS_TARGETS:
+        return value
+    return DEFAULT_TTS_TARGET
+
+
 # Émis pendant LucasCore.ask() (voir core/lucas_core.py, paramètre
 # on_activity) — pas une liste fermée à valider, juste ce que le serveur
 # émet aujourd'hui. Un « kind » inconnu ne casse rien côté client : la
