@@ -10151,6 +10151,142 @@ dans le même rapport. Tâche morte depuis toujours, déjà constatée et
 lancerait 1679 tests toutes les heures sur la machine de Cyril. Sa
 décision, pas un correctif à glisser en passant.
 
+## 5.96 🔴 Le mode conversation réentend Luca's parler — la garde anti-écho désarmée par la sortie voix PC, 13/08/2026
+
+Signalé par Cyril en usage réel : depuis le pont capteurs (§5.93), le mode
+conversation mains libres devient inutilisable dès que les toggles capteur
+PC sont actifs — transcription incohérente en parlant fort et clair,
+réponses déclenchées sans qu'il ait parlé, réponses sans rapport. Éteindre
+les toggles ramène tout à la normale.
+
+### L'hypothèse de départ était fausse, et il fallait le vérifier d'abord
+
+Cyril soupçonnait AudioRelay (micro/haut-parleurs virtuels
+téléphone↔PC), « présent et documenté en §5.93 », et une réinjection du
+TTS dans le micro du téléphone par le canal virtuel.
+
+**AudioRelay n'apparaît nulle part dans le projet** — ni §5.93, ni le
+session log cité, ni une seule ligne de code (recherche sur tout le dépôt).
+§5.93 dit l'inverse : « seul le TEXTE voyage, jamais l'audio ». L'appli
+tourne bien sur la machine de Cyril, mais c'est un logiciel tiers, sans
+rapport avec le pont.
+
+**Mesuré sur la machine** (pycaw, périphériques par défaut) :
+
+| Rôle | Périphérique par défaut |
+|---|---|
+| Sortie — ce que prend `pygame.mixer` | **LG TV SSCR2 (NVIDIA High Definition Audio)** |
+| Entrée | Virtual Mic for AudioRelay |
+
+`VoiceManager` appelle `pygame.mixer.init()` sans argument : SDL prend la
+sortie par défaut de Windows, donc la **TV en HDMI** — jamais les Virtual
+Speakers d'AudioRelay. L'hypothèse de réinjection par le canal virtuel est
+donc infirmée pour le chemin TTS. Au passage, ça explique l'autre symptôme
+rapporté le même soir (« pas de son sur les enceintes ») : le son sortait,
+mais sur la TV.
+
+À noter, sans rôle dans ce bug : le micro **par défaut du PC** est celui du
+téléphone, via AudioRelay.
+
+### Cause réelle : une garantie qui repose sur un signal que ce mode ne reçoit plus
+
+`conversation_mode.js` promet un tour-à-tour strict, et son en-tête le dit :
+« le VAD est en pause pendant qu'une réponse est traitée ou lue, pour ne
+jamais capter la propre voix de Luca's ». Cette promesse repose entièrement
+sur `notifyPlaybackEnded()`, déclenché par la fin de lecture de l'audio
+**sur le téléphone**.
+
+Or `api/server.py` contient, délibérément (§5.93, pour éviter que la réponse
+sorte des deux côtés) :
+
+```python
+if speak_wanted and not speak_on_pc:   # sortie PC ⇒ aucun `speech` envoyé au téléphone
+```
+
+Sortie sur PC ⇒ le téléphone ne reçoit jamais d'audio ⇒
+`notifyPlaybackEnded()` n'est **jamais** appelé. Il ne reste que le filet
+`SPEECH_GRACE_MS = 6000`, écrit pour un cas tout autre — « la voix est
+volontairement absente (contenu sensible, Piper indisponible) ». Ici la voix
+n'est pas absente : elle est ailleurs, et le téléphone l'ignore.
+
+**Mesuré en réel, tour audio en mode conversation, sortie PC** :
+
+```
+'speech' reçu par le téléphone : NON
+réponse : 240 caractères → durée de parole du PC : 12,7 s
+reprise du micro (SPEECH_GRACE_MS)          :  6,0 s
+>>> le micro se rouvre 6,7 s AVANT que le PC se taise
+```
+
+Structurel, pas un cas limite : toute réponse dépassant ~6 s de parole
+(≈110 caractères) rouvre le micro en pleine diction. C'est la même famille
+d'erreur que §5.92 et §5.95 — une garde qui se croit en place. Ici elle
+l'était vraiment… jusqu'à ce qu'un chantier ultérieur retire, pour une
+bonne raison, le signal dont elle dépendait.
+
+**Non prouvé, faute d'accès au téléphone** : que son micro capte
+effectivement la voix du PC. Cela dépend de si la TV LG diffuse à portée —
+Cyril seul peut le confirmer. La garde est cassée dans tous les cas ; c'est
+la source exacte du déclenchement qui reste à confirmer. Second facteur
+possible, non mesuré : AudioRelay tient le micro du téléphone en continu,
+et la contention avec Chrome sur Android pourrait dégrader le flux.
+
+### Correctif B appliqué — temporaire, assumé comme tel
+
+**Choix de Cyril** : rendre les deux réglages exclusifs. Mode conversation
+actif ⇒ la voix reste sur le téléphone, quel que soit le toggle « Voix
+sur : PC ».
+
+Trois lignes dans `static/js/websocket.js::_tagPcSensor()` —
+`if (payload.conversation_mode) payload.tts_target = "phone";`. Posé là
+parce que `sendAudio()` y a déjà mis `conversation_mode`, et que ni
+`audio.js` ni `conversation_mode.js` n'ont à connaître le mode capteur
+(même raison qui a fait naître `_tagPcSensor`).
+
+**Le relais du TEXTE vers le PC n'est pas touché** : `pc_sensor` reste posé,
+la session PC continue de tout recevoir. Seule la voix reste sur le
+téléphone. Le push-to-talk classique et l'envoi de photo gardent la sortie
+PC choisie — le bug ne les concerne pas, eux ne rouvrent pas de micro.
+
+`CACHE_NAME` v22 → **v23** (`static/sw.js`) : sans ce bump, le téléphone
+servirait l'ancien `websocket.js` depuis son cache et le correctif
+n'arriverait jamais (leçon §5.74, où l'oubli avait mordu son propre auteur).
+
+**Vérifié** en exécutant le vrai `websocket.js` dans Node avec un `window`
+simulé — 6 cas : forçage en mode conversation, non-régression du
+push-to-talk et de `sendImage`, relais PC préservé, capteur éteint inerte.
+**Contrôle inverse fait** : les trois lignes retirées, le cas du bug tombe
+seul ; remises, tout repasse. Ce contrôle n'est pas versionné — le projet
+n'a pas de lanceur JS, et un test que `just test` n'exécute jamais serait
+exactement le genre de filet qui se croit en place (§5.92, §5.95). À
+reprendre avec le correctif A si un lanceur est ajouté.
+
+### ⏳ Tâche ouverte — correctif A, en session dédiée (pas ce soir, décision de Cyril)
+
+Le correctif B interdit une combinaison qui devrait marcher. Le vrai
+correctif ferme la boucle : **le PC dit quand il a fini de parler**.
+
+Design déjà arrêté, à implémenter tel quel sauf meilleure idée à
+l'ouverture du chantier :
+
+1. **`api/protocol.py`** — un message dédié (`sensor_playback_ended`), type
+   distinct comme `sensor_message` l'est de `chat` : un client qui ne le
+   connaît pas l'ignore sans rien casser.
+2. **`ui/sensor_bridge.py`** — l'émettre quand la lecture PC se termine.
+   `VoiceManager` sait exactement quand `pygame.mixer.music.get_busy()`
+   retombe ; c'est le premier message que ce pont enverra au serveur
+   après son `hello`.
+3. **`api/server.py`** — le relayer au téléphone. Attention : le registre
+   actuel (`_desktop_clients`) va du téléphone VERS les desktops ; ce
+   chemin-ci est l'inverse et n'existe pas encore.
+4. **`static/js/app.js`** — le brancher sur
+   `conversationMode.notifyPlaybackEnded()`, exactement comme
+   `VoiceOutput.onPlaybackEnded` aujourd'hui.
+
+Une fois A en place, retirer les trois lignes de B et **remesurer avec une
+réponse longue** — le recouvrement de 6,7 s ci-dessus est le témoin à voir
+disparaître.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

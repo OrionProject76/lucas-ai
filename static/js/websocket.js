@@ -193,6 +193,29 @@ window.Lucas = window.Lucas || {};
             if (sensor && sensor.isActive()) {
                 payload.pc_sensor = true;
                 payload.tts_target = sensor.ttsTarget();
+                // ⚠️ CORRECTIF TEMPORAIRE du 13/08/2026 (ROADMAP.md §5.96).
+                // Le mode conversation impose la voix sur le téléphone,
+                // même si Cyril a choisi « Voix sur : PC ».
+                //
+                // Pourquoi : le tour-à-tour de conversation_mode.js repose
+                // sur notifyPlaybackEnded(), déclenché par la fin de
+                // lecture de l'audio SUR CE TÉLÉPHONE. Sortie sur PC = le
+                // serveur n'envoie aucun `speech` ici (api/server.py,
+                // `if speak_wanted and not speak_on_pc`), donc ce signal
+                // n'arrive jamais et il ne reste que la grâce de 6 s —
+                // écrite pour le cas « pas de voix du tout ». Mesuré : une
+                // réponse de 240 caractères fait parler le PC 12,7 s, le
+                // micro se rouvre 6,7 s trop tôt, et le VAD réentend
+                // Luca's parler.
+                //
+                // Le relais du TEXTE vers le PC n'est PAS touché :
+                // `pc_sensor` reste posé, la session PC continue de tout
+                // recevoir. Seule la voix reste ici, le temps que le vrai
+                // correctif (signal de fin de lecture PC → serveur →
+                // téléphone) soit construit.
+                if (payload.conversation_mode) {
+                    payload.tts_target = "phone";
+                }
             }
         }
 
