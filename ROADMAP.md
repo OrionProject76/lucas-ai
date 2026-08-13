@@ -10005,6 +10005,95 @@ code, mais le serveur qui tourne (PID 9872, lancé avant) garde son
 environnement. Cyril doit redémarrer `LucasAPIServer` — ou le PC — pour
 que le chat local reparte.
 
+✅ **Clos le 13/08/2026** : la machine a redémarré (PID 9872 disparu, le
+serveur qui écoute sur 8000 est le PID 18768, lancé à 18:00). Vérifié sur
+le serveur RÉEL, pas en test : `POST /chat` répond
+`{"response": "OK, je fonctionne.", "status": "ok", "destination": "local"}`.
+Le cerveau local est de nouveau opérationnel, avec `OLLAMA_HOST=0.0.0.0`
+toujours posée dans l'environnement de Cyril.
+
+## 5.95 Deux faux échecs du daemon — un emoji tue l'indexation RAG quand personne ne regarde, 13/08/2026
+
+Trouvé en reprenant le fil après §5.94 : le rapport du matin du 13/08
+affichait `rag_indexing: failed`, et `error` était **vide** en base. Sans
+rapport avec la panne Ollama, contrairement à ce qu'on pouvait croire.
+
+### Défaut 1 — sortie capturée ⇒ cp1252, et le script meurt
+
+`memory/index_documents.py` marche parfaitement lancé à la main. Lancé par
+le daemon avec `capture_output=True`, il meurt : stdout n'est plus une
+console mais un tube, et Python y écrit dans l'encodage ANSI du système
+(cp1252 sur Windows), pas en UTF-8. Le premier `print()` contenant « ⚠️ »
+lève `UnicodeEncodeError`.
+
+**Le plus trompeur : l'indexation avait réussi.** Le plantage tombait dans
+l'avertissement de dominance final (`index_directory`, l. 577), après que
+les documents aient été correctement traités. Le daemon enregistrait donc
+un échec sur un travail fait — un rapport du matin qui dit « ❌ » là où
+tout allait bien vaut à peine mieux qu'un rapport qui ment dans l'autre
+sens.
+
+Correctif à deux niveaux, délibérément :
+- **À la source** — `sys.stdout.reconfigure(encoding="utf-8")` dans le
+  `main()` d'`index_documents.py` (pas au niveau du module : reconfigurer
+  stdout à l'import serait un effet de bord pour tout importateur). Protège
+  aussi le cas `python index_documents.py > log.txt` lancé par Cyril.
+- **Chez l'appelant** — `child_env()` pose `PYTHONIOENCODING=utf-8` et les
+  trois `subprocess.run` du daemon lisent en `encoding="utf-8",
+  errors="replace"`. Vaut pour tout script appelé, pas seulement celui-ci.
+
+### Défaut 2 — la troncature jetait précisément l'information utile
+
+`error=result.stderr[:500]` gardait la **tête** du traceback — les frames
+d'appel et leurs chemins — et jetait la **queue**, seul endroit où figure le
+type de l'erreur. Sur l'échec du 10/08, la coupure tombait au milieu de
+`codecs.charmap_encode` : rien d'exploitable, alors que la ligne suivante
+disait `UnicodeEncodeError`. Et un échec sans stderr (returncode non nul
+seul) s'enregistrait entièrement vide — le cas du 13/08.
+
+`subprocess_failure_summary()` rend maintenant `returncode=1
+UnicodeEncodeError` : le code de retour **toujours**, et le type
+d'exception quand il est identifiable.
+
+**Ce qu'il ne rend jamais : la sortie elle-même.** La sortie de
+l'indexation contient les noms des documents personnels de Cyril, qui
+n'ont rien à faire dans une table de journal (CLAUDE.md, « jamais afficher
+le contenu d'un fichier de données personnelles »). Seul le nom du type
+d'exception est gardé — pas son message, qui peut embarquer un nom de
+fichier. Même méthode « empreinte ou forme, jamais contenu » que le reste
+du projet. Un test le vérifie explicitement sur un traceback contenant un
+faux `releve_bancaire.pdf`.
+
+### Vérification
+
+- `test_daemon_subprocess.py`, 7 tests — dont un vrai sous-processus qui
+  imprime un emoji sous capture, pas seulement des `CompletedProcess`
+  fabriqués.
+- **En réel, sur les vrais documents** : le même appel que fait le daemon
+  passe de `returncode=1` à `returncode=0`.
+- Suite complète : **1679 passés**, 0 échec. `ruff` : propre.
+
+### ⚠️ Incident de séance, signalé à Cyril
+
+En reproduisant l'échec, le script de diagnostic masquait les chemins mais
+pas les noms de fichiers en fin de ligne : **deux noms de documents
+personnels se sont affichés au terminal**. Rien écrit dans un fichier, rien
+committé, script supprimé immédiatement. Troisième occurrence du même
+motif après les deux du 04/08 — et la leçon est la même à chaque fois : un
+masquage écrit à la volée pour « juste voir » est systématiquement en
+retard d'un cas. La bonne méthode reste de ne demander au script que des
+faits structurels dès le départ (code de retour, longueurs, type), ce que
+fait maintenant `subprocess_failure_summary()` — c'est d'ailleurs
+exactement ce que ce chantier a fini par construire.
+
+### Ce qui n'a PAS été touché
+
+`auto_tests: skipped — Dossier tests/ non trouvé`, présent à chaque heure
+dans le même rapport. Tâche morte depuis toujours, déjà constatée et
+**volontairement** laissée en l'état (§5.59) : pointer pytest sur la racine
+lancerait 1679 tests toutes les heures sur la machine de Cyril. Sa
+décision, pas un correctif à glisser en passant.
+
 ## 6. Renommage Luca's — partie visible faite le 01/08/2026, technique fait le 02/08/2026
 
 **Fait le 01/08/2026** : tout ce que Cyril voit affiche désormais « Luca's » —

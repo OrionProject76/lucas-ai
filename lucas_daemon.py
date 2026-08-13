@@ -32,6 +32,8 @@ laquelle des deux conventions s'applique.
 # fois évite d'ajouter le même `noqa` à quinze endroits.
 # ruff: noqa: DTZ005, DTZ006
 
+import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -123,6 +125,76 @@ def db_log_task(task_name: str, status: str, details: str = "", error: str = "")
     conn.commit()
     conn.close()
 
+
+# ─── SOUS-PROCESSUS : ENCODAGE ET DIAGNOSTIC ───────────────
+#
+# Deux défauts trouvés le 13/08/2026 en reproduisant un
+# `rag_indexing: failed` du rapport du matin (ROADMAP.md §5.95).
+#
+# 1. Sortie capturée = encodage cp1252 sur Windows. Quand le daemon
+#    lance un script avec `capture_output=True`, stdout de l'enfant
+#    n'est plus une console mais un tube : Python y écrit alors dans
+#    l'encodage ANSI du système (cp1252), pas en UTF-8. Le premier
+#    `print()` contenant un emoji lève `UnicodeEncodeError` et le
+#    script meurt — alors que le même script marche parfaitement
+#    lancé à la main. C'est ce qui a fait échouer l'indexation RAG
+#    APRÈS avoir correctement indexé : seul l'avertissement final
+#    plantait (`memory/index_documents.py`, avertissement de
+#    dominance). Un faux échec, donc, sur un travail réussi.
+#
+# 2. `error=result.stderr[:500]` gardait la TÊTE du traceback — les
+#    frames d'appel, avec leurs chemins — et jetait la QUEUE, seul
+#    endroit où figure le type de l'erreur. Sur l'échec du 10/08, la
+#    troncature tombait au milieu de `codecs.charmap_encode` : rien
+#    d'exploitable. Et un échec sans stderr (returncode non nul seul)
+#    s'enregistrait entièrement vide — le cas du 13/08.
+#
+# Le résumé ci-dessous ne recopie JAMAIS stdout ni les frames : la
+# sortie de l'indexation contient les noms des documents personnels de
+# Cyril, qui n'ont rien à faire dans une table de journal
+# (CLAUDE.md, « jamais afficher le contenu d'un fichier de données
+# personnelles »). Il ne garde que des faits structurels — code de
+# retour, type d'exception — selon la même méthode « empreinte ou
+# forme, jamais contenu » que le reste du projet.
+
+def child_env() -> dict[str, str]:
+    """Environnement d'un sous-processus Python à sortie capturée.
+
+    `PYTHONIOENCODING` force l'enfant à ÉCRIRE en UTF-8 même quand sa
+    sortie est un tube. Sans ça, tout `print()` non-ASCII le tue.
+    """
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    return env
+
+
+# Une ligne finale de traceback ressemble à « ValueError: message » ou
+# « requests.exceptions.ConnectionError: message ». On ne garde que le
+# nom du type, jamais le message : celui-ci peut embarquer un nom de
+# fichier ou un extrait du document en cours d'indexation.
+EXC_TYPE_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception|Interrupt|Exit))\b")
+
+
+def subprocess_failure_summary(result: subprocess.CompletedProcess) -> str:
+    """Résume l'échec d'un sous-processus sans recopier sa sortie.
+
+    Ne rend que des faits structurels : code de retour, et le type de
+    l'exception finale s'il est identifiable. Jamais de chemin, de nom
+    de fichier ni de message d'erreur brut.
+    """
+    summary = f"returncode={result.returncode}"
+
+    lines = [ln.strip() for ln in (result.stderr or "").splitlines() if ln.strip()]
+    for line in reversed(lines):
+        match = EXC_TYPE_RE.match(line)
+        if match:
+            return f"{summary} {match.group(1)}"
+
+    if lines:
+        return f"{summary} (stderr {len(lines)} lignes, aucun type d'exception reconnu)"
+    return f"{summary} (aucune sortie d'erreur)"
+
+
 # ─── TÂCHES NOCTURNES ──────────────────────────────────────
 
 class LucasDaemon:
@@ -181,6 +253,7 @@ class LucasDaemon:
                 result = subprocess.run(
                     [sys.executable, str(training_script)],
                     capture_output=True, text=True, timeout=3600,
+                    encoding="utf-8", errors="replace", env=child_env(),
                     check=False,  # le code de retour est inspecté juste après
                 )
                 if result.returncode == 0:
@@ -188,8 +261,9 @@ class LucasDaemon:
                     log(f"✅ LoRA entraîné en {duration:.0f}s")
                     db_log_task("lora_training", "success", f"Durée: {duration:.0f}s")
                 else:
-                    log(f"❌ Erreur LoRA: {result.stderr[:500]}")
-                    db_log_task("lora_training", "failed", error=result.stderr[:500])
+                    resume = subprocess_failure_summary(result)
+                    log(f"❌ Erreur LoRA: {resume}")
+                    db_log_task("lora_training", "failed", error=resume)
             else:
                 log("⚠️ Script train_lora.py non trouvé. Skip.")
                 db_log_task("lora_training", "skipped", "Script non trouvé")
@@ -215,6 +289,7 @@ class LucasDaemon:
                 result = subprocess.run(
                     [sys.executable, str(index_script)],
                     capture_output=True, text=True, timeout=600,
+                    encoding="utf-8", errors="replace", env=child_env(),
                     check=False,  # le code de retour est inspecté juste après
                 )
                 duration = time.time() - start
@@ -222,7 +297,9 @@ class LucasDaemon:
                     log(f"✅ Indexation terminée en {duration:.0f}s")
                     db_log_task("rag_indexing", "success", f"Durée: {duration:.0f}s")
                 else:
-                    db_log_task("rag_indexing", "failed", error=result.stderr[:500])
+                    resume = subprocess_failure_summary(result)
+                    log(f"❌ Indexation en échec: {resume}")
+                    db_log_task("rag_indexing", "failed", error=resume)
             else:
                 log("⚠️ Script index_documents.py non trouvé. Skip.")
                 db_log_task("rag_indexing", "skipped", "Script non trouvé")
@@ -372,10 +449,16 @@ class LucasDaemon:
                 db_log_task("auto_tests", "skipped", "Dossier tests/ non trouvé")
                 return
 
+            # Même correctif d'encodage que les deux tâches ci-dessus : pytest
+            # imprime des caractères non-ASCII et mourrait pareil sur un tube.
+            # La journalisation, elle, garde `result.stdout` : sur un échec de
+            # tests, le résumé pytest EST l'information utile, et il porte sur
+            # du code, pas sur les documents de Cyril.
             result = subprocess.run(
                 [sys.executable, "-m", "pytest", str(tests_dir), "-v", "--tb=short"],
                 capture_output=True, text=True, timeout=300,
                 cwd=str(LUCAS_ROOT),
+                encoding="utf-8", errors="replace", env=child_env(),
                 check=False,  # le code de retour est inspecté juste après
             )
             if result.returncode == 0:

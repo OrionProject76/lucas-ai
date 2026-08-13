@@ -602,6 +602,18 @@ def index_directory(
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Sortie forcée en UTF-8 quand ce script est appelé par un autre
+    # programme. Lancé à la main, stdout est une console qui accepte les
+    # emoji ; redirigé ou capturé (le daemon fait `capture_output=True`),
+    # c'est un tube, et Python y écrit alors en cp1252 sur Windows — le
+    # premier « ⚠️ » lève UnicodeEncodeError et tue le script. Constaté en
+    # vrai : l'indexation du 13/08/2026 avait RÉUSSI, seul l'avertissement
+    # de dominance final plantait, et le daemon l'a enregistrée en échec
+    # (ROADMAP.md §5.95). Ici plutôt qu'au niveau du module : reconfigurer
+    # stdout à l'import serait un effet de bord pour tout importateur.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(
         description="Indexe les documents personnels pour le RAG (tout reste local).",
     )
