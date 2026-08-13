@@ -314,13 +314,39 @@ class LucasDaemon:
         db_log_task("cleanup", "started")
         try:
             # Supprimer screenshots de +7 jours
+            #
+            # ⚠️ `rglob`, pas `glob` — corrigé le 13/08/2026 (ROADMAP.md
+            # §5.92). `capture_screenshot` écrivait dans des sous-dossiers
+            # datés (`screenshots/2026-08-12/14-30-00.png`), que `glob`
+            # ne regarde pas : cette règle « +7 jours » n'a donc JAMAIS
+            # supprimé un seul fichier depuis sa création. 5 461 captures
+            # et 5,86 Go s'étaient accumulés, pendant que le journal
+            # affichait consciencieusement « 0 screenshots anciens
+            # supprimés » — un ménage qui se croyait fait.
             cutoff = datetime.now() - timedelta(days=7)
             deleted = 0
-            for f in SCREENSHOTS_DIR.glob("*.png"):
+            for f in SCREENSHOTS_DIR.rglob("*.png"):
                 if datetime.fromtimestamp(f.stat().st_mtime) < cutoff:
                     f.unlink()
                     deleted += 1
             log(f"🗑️ {deleted} screenshots anciens supprimés")
+
+            # Retirer les dossiers datés devenus vides. Sans ça, purger les
+            # fichiers laisse une coquille d'un dossier par jour qui
+            # s'allonge indéfiniment. Du plus profond au moins profond,
+            # pour qu'un parent vidé par ses enfants parte dans la même
+            # passe ; `rmdir` échoue — et ne fait rien — si le dossier
+            # n'est pas vide, ce qui rend l'opération sûre par
+            # construction : jamais de suppression récursive ici.
+            empty_dirs = 0
+            subdirs = [p for p in SCREENSHOTS_DIR.rglob("*") if p.is_dir()]
+            for d in sorted(subdirs, key=lambda p: -len(p.parts)):
+                try:
+                    d.rmdir()
+                    empty_dirs += 1
+                except OSError:
+                    pass  # pas vide : il reste des captures récentes
+            log(f"🗑️ {empty_dirs} dossiers de captures vides supprimés")
 
             # Vider cache Python
             cache_dirs = list(LUCAS_ROOT.rglob("__pycache__"))
@@ -335,7 +361,11 @@ class LucasDaemon:
             conn.close()
             log("✅ Base de données optimisée (VACUUM)")
 
-            db_log_task("cleanup", "success", f"Screenshots: {deleted}, Cache: {len(cache_dirs)}")
+            db_log_task(
+                "cleanup", "success",
+                f"Screenshots: {deleted}, Dossiers vides: {empty_dirs}, "
+                f"Cache: {len(cache_dirs)}",
+            )
         except Exception as e:  # noqa: BLE001 — voir « Pourquoi ces except Exception » en tete de LucasDaemon
             log(f"❌ Exception cleanup: {e}")
             db_log_task("cleanup", "failed", error=str(e))

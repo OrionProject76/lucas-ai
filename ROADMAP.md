@@ -9837,6 +9837,63 @@ le vrai téléphone avant de considérer ce point clos.
 
 Session log : `cowork_workspace/SESSION_LOG_RETRAIT_CAPTURE_ECRAN_MOBILE_2026-08-12.md`.
 
+### Suite du 13/08/2026 — purge des données accumulées, et le ménage qui ne nettoyait rien
+
+Désactiver les deux tâches (ci-dessus) arrêtait l'accumulation ; restait à
+traiter ce qui s'était déjà accumulé, et à comprendre pourquoi la règle de
+rétention n'y avait rien fait.
+
+**Bilan présenté à Cyril avant toute suppression** — 5 461 captures PNG,
+**5,86 Go**, du 29/07 au 13/08 00:42, réparties dans 6 sous-dossiers datés.
+En base : 5 461 lignes `screenshots` (dont `app_active`, le **titre de la
+fenêtre active** — la donnée que CLAUDE.md désigne comme sensible) et 529
+lignes `emotional_logs`.
+
+**Aucune image webcam n'existait.** `log_emotion` lit une frame en mémoire,
+en tire une luminosité moyenne et n'écrit qu'une ligne en base — rien sur
+le disque. Vérifié dans le code plutôt que supposé d'après le nom de la
+tâche.
+
+**Purge faite après accord explicite de Cyril, sur les trois périmètres** :
+5 461 PNG + 6 sous-dossiers, les deux tables vidées, `VACUUM`. Base passée
+de 0,96 Mo à **0,14 Mo**, `daemon_runs` intacte (1 703 lignes), dossier
+`data/screenshots/` conservé vide.
+
+#### Le vrai défaut : `glob` au lieu de `rglob`
+
+La règle « supprimer les captures de plus de 7 jours » existait depuis le
+début et **n'a jamais supprimé un seul fichier**. `nightly_cleanup`
+balayait `SCREENSHOTS_DIR.glob("*.png")` — la racine seulement — pendant
+que `capture_screenshot` écrivait dans `screenshots/AAAA-MM-JJ/HH-MM-SS.png`.
+Zéro fichier à la racine, donc zéro suppression, **et le journal affichait
+consciencieusement « 0 screenshots anciens supprimés »** à chaque passage.
+
+C'est la même famille de panne que le §5.95 découvert le même jour : pas
+une erreur qui crie, une tâche qui rend un compte-rendu satisfaisant sur un
+travail qu'elle n'a pas fait. Les 5,86 Go sont la mesure exacte de ce que
+coûte un ménage qui se croit fait.
+
+**Corrigé le 13/08/2026** :
+- `rglob("*.png")` — la rétention atteint enfin les sous-dossiers datés.
+- Ajout du retrait des dossiers datés **devenus vides** : sans ça, purger
+  les fichiers laisserait une coquille par jour, indéfiniment. Fait du plus
+  profond au moins profond, via `rmdir` — qui échoue sans rien faire si le
+  dossier n'est pas vide, donc jamais de suppression récursive ici.
+- Le détail journalisé mentionne désormais les deux compteurs.
+
+**Vérification** : `test_daemon_cleanup.py`, 6 tests, avec les fichiers
+placés là où ils allaient réellement (en sous-dossier) — un test à la
+racine serait passé au vert sur le code bogué. **Contrôle fait dans l'autre
+sens aussi** : `rglob` temporairement rebasculé en `glob`, 3 des 6 tests
+tombent. Un test de régression qui ne rougit pas sur le bug d'origine ne
+prouve rien.
+
+⚠️ **Ce correctif ne change rien tant que les tâches de capture restent
+désactivées** — il n'y a plus de nouvelles captures à faire expirer. Il
+vaut pour le jour où Cyril déciderait de les réactiver : la rétention
+fonctionnerait alors réellement, au lieu de laisser croire qu'elle
+fonctionne.
+
 ## 5.93 Pont capteurs téléphone → session PC — le téléphone devient les yeux et les oreilles du PC, 12/08/2026
 
 Brief : `cowork_workspace/BRIEF_PONT_CAPTEURS_TELEPHONE_PC.md`. Le PC n'a ni
