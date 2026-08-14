@@ -2075,6 +2075,34 @@ def test_a_turn_addressed_to_luca_goes_through(client, fake_core, fake_stt) -> N
     )
 
 
+def test_luca_is_heard_in_the_middle_of_a_sentence(client, fake_core, fake_stt) -> None:
+    """À l'oral, l'interpellation ne se place pas toujours en tête."""
+    _tour_mains_libres(client, fake_stt, "dis-moi Luca, il est quelle heure ?")
+
+    assert fake_core.get("asked") == "il est quelle heure ?"
+
+
+def test_luca_is_heard_at_the_end_of_a_sentence(client, fake_core, fake_stt) -> None:
+    _tour_mains_libres(client, fake_stt, "il est quelle heure Luca ?")
+
+    assert fake_core.get("asked") == "il est quelle heure ?"
+
+
+def test_cyrils_own_voice_is_rejected_without_the_name(
+    client, fake_core, fake_stt
+) -> None:
+    """
+    ⚠️ Le cœur du changement de comportement : même la vraie voix de
+    Cyril, en français, bien transcrite, est ignorée si elle n'appelle
+    pas Luca's. C'est voulu, et c'est ce qui rend le mode utilisable à
+    côté d'une télévision.
+    """
+    recus = _tour_mains_libres(client, fake_stt, "Quelle heure est-il ?", confiance=0.997)
+
+    assert [m for m in recus if m["type"] == "turn_ignored"]
+    assert fake_core.get("asked") is None
+
+
 def test_stop_is_heard_even_though_whisper_calls_it_english(
     client, fake_core, fake_stt
 ) -> None:

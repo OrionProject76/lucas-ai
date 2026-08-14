@@ -10431,16 +10431,39 @@ Cyril ? ».
 ### ⚠️ Changement de comportement — Luca's ne répond plus qu'à ce qui lui est adressé
 
 **Décision de Cyril, pas un correctif mineur.** En mode mains libres, un
-tour n'est retenu que s'il commence par le mot d'adressage. C'est le seul
-volet qui traite la cause : aucun score de Whisper ne distingue deux voix
+tour n'est retenu que si le mot d'adressage y figure. C'est le seul volet
+qui traite la cause : aucun score de Whisper ne distingue deux voix
 humaines. Ce qui sépare la TV de Cyril n'est pas la qualité du signal,
 c'est **à qui la phrase était destinée**.
 
 **Le mot parlé est « Luca », pas « Luca's »** — plus naturel à dire à voix
 haute. Le nom affiché du produit reste « Luca's » partout ailleurs ; les
 deux ne sont pas le même objet. Variantes acceptées (`luca`, `lucas`,
-`luka`, `lukas`, `lucass`) parce que c'est Whisper qui écrit : « Luca » lui
-revient souvent « Lucas », le français ajoutant volontiers le s.
+`luka`, `lukas`, `lucass`) parce que c'est Whisper qui écrit : mesuré,
+« Luca » lui revient effectivement **« Lucas »** dans les trois
+échantillons de test — le français ajoute le s.
+
+**N'importe où dans la phrase**, pas seulement en tête : à l'oral
+l'interpellation se place aussi bien au début (« Luca, quelle heure
+est-il ? ») qu'au milieu (« dis-moi Luca, il est quelle heure ? ») ou à la
+fin (« il est quelle heure Luca ? »). Exiger la tête aurait fait rejeter
+deux formulations sur trois. Comparaison sur des **mots entiers**, jamais
+une sous-chaîne : « lucarne » et « élucubration » n'interpellent personne.
+
+**Le nom est retiré avant d'atteindre le modèle**, avec les mots
+d'accompagnement qui lui sont COLLÉS (`dis`, `moi`, `hé`, `ok`, `alors`…) —
+sinon le prompt se verrait polluer d'un « Luca, » à chaque tour. Mesuré
+sur audio réel : « Dis-moi Lucas, il est quelle heure ? » arrive au modèle
+comme « il est quelle heure ? ». Uniquement accolés au nom : « dis » et
+« moi » portent du sens ailleurs (« ce que moi j'en pense » reste intact).
+
+⚠️ **Conséquence assumée de la détection n'importe où** : « je parlais de
+Lucas à mon frère » valide désormais un tour. Compromis voulu — en mains
+libres, manquer une vraie interpellation coûte plus cher que d'accepter
+une phrase où le nom est prononcé sans s'adresser à elle. Un mot
+d'adressage reste un filtre d'intention, pas une preuve. Deux tests
+existent uniquement pour que ce comportement, le jour où il surprend, soit
+trouvé écrit et daté plutôt que pris pour un bug.
 
 **Ne s'applique QU'AU mode mains libres.** Le micro push-to-talk est un
 geste délibéré : ce que Cyril enregistre en appuyant lui est attribué sans
@@ -10509,24 +10532,37 @@ bruit de fond              nn  0.403       1.000   0.00s  rejete  rejete  confia
 TV anglais                 en  0.977       0.012   2.00s   PASSE  rejete  langue
 TV anglais long            en  0.997       0.002   4.44s   PASSE  rejete  langue
 TV francais                fr  0.997       0.005   4.00s   PASSE  rejete  non adresse
-voix + 'Luca'              fr  0.983       0.006   2.00s   PASSE   PASSE  accepte
+voix + 'Luca' (debut)      fr  0.983       0.006   2.00s   PASSE   PASSE  accepte
+    -> transcrit 'Lucas, quelle heure est-il ?'
+    -> envoye au modele 'quelle heure est-il ?'
+voix + 'Luca' (milieu)     fr  0.976       0.010   2.00s   PASSE   PASSE  accepte
+    -> transcrit 'Dis-moi Lucas, il est quelle heure ?'
+    -> envoye au modele 'il est quelle heure ?'
+voix + 'Luca' (fin)        fr  0.890       0.068   2.00s   PASSE   PASSE  accepte
+    -> transcrit 'Il est quelle heure Lucas ?'
+    -> envoye au modele 'Il est quelle heure ?'
 voix sans adressage        fr  0.912       0.024   2.00s   PASSE  rejete  non adresse
 commande 'stop'            en  0.903       0.032   2.00s   PASSE   PASSE  commande d'arret
 ```
 
-Les trois cas « TV » passaient avant et sont maintenant écartés ; la voix
-adressée passe toujours ; « stop » passe **malgré** une langue détectée
-`en`, ce qui valide l'ordre des blocs sur mesure plutôt que sur intention.
+Les trois cas « TV » passaient avant et sont maintenant écartés ; les
+trois positions du mot d'adressage passent, nom retiré ; **la vraie voix
+en français SANS le nom est rejetée** — c'est le changement de
+comportement, pas un effet de bord ; « stop » passe **malgré** une langue
+détectée `en`, ce qui valide l'ordre des blocs sur mesure plutôt que sur
+intention.
 
-**39 tests ajoutés** (mot d'adressage, seuils STT, intégration WebSocket du
-mode mains libres). Suite complète : **1727 passed**, `ruff` propre. Volet
-PWA vérifié en exécutant le vrai `websocket.js` dans Node.
+**59 tests ajoutés** (mot d'adressage aux trois positions, retrait des
+mots d'accompagnement, seuils STT, intégration WebSocket du mode mains
+libres). Suite complète : **1747 passed**, `ruff` propre. Volet PWA
+vérifié en exécutant le vrai `websocket.js` dans Node.
 `CACHE_NAME` v24 → **v25**.
 
 ### ⏳ Ce qui reste vrai malgré tout
 
 Une **télévision française** dont un personnage dirait « Luca » passerait
-encore. Seule une reconnaissance du locuteur (empreinte vocale) fermerait
+encore — et depuis la détection n'importe où dans la phrase, une réplique
+qui mentionne ce prénom suffit, plus seulement une qui commence par lui. Seule une reconnaissance du locuteur (empreinte vocale) fermerait
 complètement la porte — lourde, hors périmètre v1, non ouverte. Le mot
 d'adressage ramène le risque d'une conversation fantôme complète à une
 coïncidence, au lieu d'un fonctionnement normal.

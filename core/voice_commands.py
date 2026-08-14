@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 
 from core.text_utils import normalize
@@ -89,47 +90,80 @@ def is_stop_command(text: str) -> bool:
 # « Lucas », tantôt « Luca », parfois « Lukas ».
 
 
-def _leading_words(text: str) -> list[str]:
-    """Mots normalisés du texte, ponctuation d'adressage absorbée."""
-    cleaned = normalize(text)
-    for sign in (",", ".", "!", "?", ":", ";", "'", "’"):
-        cleaned = cleaned.replace(sign, " ")
-    return cleaned.split()
+# Mots d'accompagnement retirés AVEC le nom, et seulement quand ils lui
+# sont collés : « dis-moi Luca, il est quelle heure ? » doit arriver au
+# modèle comme « il est quelle heure ? ».
+#
+# ⚠️ Uniquement adjacents au mot d'adressage, jamais partout dans la
+# phrase : « dis » et « moi » portent du sens ailleurs (« ce que moi j'en
+# pense »). Le « s » est là pour absorber la forme « Luca's » écrite par
+# Whisper, dont le découpage en mots isole le s.
+_WAKE_FILLERS = frozenset(
+    {"dis", "moi", "he", "eh", "hey", "ok", "okay", "bon", "alors", "s", "stp"}
+)
+
+# Mots du texte, positions comprises : le repérage se fait sur la forme
+# normalisée, la découpe sur le texte D'ORIGINE — ce qui part au modèle
+# doit garder ses accents et sa ponctuation.
+_WORD_RE = re.compile(r"\w+", re.UNICODE)
+
+
+def _words_with_spans(text: str) -> list[tuple[int, int, str]]:
+    return [(m.start(), m.end(), normalize(m.group())) for m in _WORD_RE.finditer(text)]
 
 
 def has_wake_word(text: str, wake_words: Sequence[str]) -> bool:
     """
-    Vrai si `text` COMMENCE par le mot d'adressage.
+    Vrai si le mot d'adressage apparaît QUELQUE PART dans `text`.
 
-    Uniquement en tête : « je parlais de Lucas à mon frère » ne doit pas
-    valider un tour. C'est la même exigence de position que
-    `is_stop_command`, pour la même raison — une recherche de
-    sous-chaîne transformerait toute mention du nom en interpellation.
+    ⚠️ N'importe où, pas seulement en tête — choix de Cyril du 13/08/2026
+    (ROADMAP.md §5.98). À l'oral, l'interpellation se place aussi bien au
+    début (« Luca, quelle heure est-il ? ») qu'au milieu (« dis-moi Luca,
+    il est quelle heure ? ») ou à la fin (« il est quelle heure Luca ? »).
+    Exiger la tête aurait fait rejeter deux formulations sur trois.
+
+    Comparaison sur des MOTS ENTIERS, jamais une sous-chaîne : « lucarne »
+    ou « élucubration » contiennent les mêmes lettres sans interpeller
+    personne.
+
+    ⚠️ Conséquence assumée de la détection n'importe où : « je parlais de
+    Lucas à mon frère » valide désormais un tour. Le compromis est voulu —
+    manquer une vraie interpellation coûte plus cher, en mains libres,
+    qu'accepter une phrase où Cyril prononce ce nom sans s'adresser à
+    elle. Un mot d'adressage reste un filtre d'intention, pas une preuve.
     """
-    words = _leading_words(text)
-    if not words:
-        return False
-    return words[0] in {normalize(w) for w in wake_words}
+    targets = {normalize(w) for w in wake_words}
+    return any(word in targets for _, _, word in _words_with_spans(text))
 
 
 def strip_wake_word(text: str, wake_words: Sequence[str]) -> str:
     """
-    Retire le mot d'adressage en tête, en gardant le texte D'ORIGINE.
+    Retire le mot d'adressage, où qu'il soit, et ce qui l'accompagne.
 
-    Travaille sur le texte brut plutôt que sur sa version normalisée : ce
-    qui part au modèle doit garder ses accents et sa ponctuation. Seul le
-    repérage se fait sur la forme normalisée.
+    Le nom a servi à décider qu'on écoutait ; il n'apporte rien à la
+    question elle-même, et le répéter à chaque tour polluerait le prompt.
 
-    Rendu vide si le tour ne contenait QUE le mot d'adressage — appeler
-    Luca's sans rien dire n'est pas une question, et l'appelant doit
-    pouvoir le voir.
+    Rendu vide si le tour ne contenait QUE l'appel — appeler Luca's sans
+    rien dire d'autre n'est pas une question, et l'appelant doit pouvoir
+    le voir.
     """
-    if not has_wake_word(text, wake_words):
+    words = _words_with_spans(text)
+    targets = {normalize(w) for w in wake_words}
+    index = next((i for i, (_, _, w) in enumerate(words) if w in targets), None)
+    if index is None:
         return text.strip()
-    # Le premier mot du texte brut correspond au mot d'adressage repéré :
-    # on le coupe là où il finit, puis on absorbe la ponctuation qui le
-    # sépare de la suite (« Luca's, quelle heure est-il ? »).
-    stripped = text.strip()
-    parts = stripped.split(maxsplit=1)
-    rest = parts[1] if len(parts) > 1 else ""
-    return rest.lstrip(" ,.!?:;'’")
+
+    # Étendu aux mots d'accompagnement COLLÉS au nom, des deux côtés.
+    first, last = index, index
+    while first > 0 and words[first - 1][2] in _WAKE_FILLERS:
+        first -= 1
+    while last + 1 < len(words) and words[last + 1][2] in _WAKE_FILLERS:
+        last += 1
+
+    cut = text[: words[first][0]] + " " + text[words[last][1] :]
+    # La ponctuation qui séparait l'appel du reste devient orpheline
+    # (« Luca, quelle heure ? » laisse une virgule en tête) — retirée
+    # seulement en début, jamais en fin : le « ? » final appartient à la
+    # question, pas à l'appel.
+    cleaned = " ".join(cut.split())
+    return cleaned.lstrip(" ,.!?:;'’-").strip()
